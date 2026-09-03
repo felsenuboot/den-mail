@@ -78,6 +78,7 @@ EMAIL_BODY_PROPERTIES = EMAIL_LIST_PROPERTIES + [
     "bodyValues",
     "header:Delivered-To:asText",
     "header:List-Unsubscribe:asRaw",  # Fastmail rejects :asText for this header
+    "header:List-Unsubscribe-Post:asRaw",
 ]
 
 MAX_BODY_VALUE_BYTES = 2_000_000

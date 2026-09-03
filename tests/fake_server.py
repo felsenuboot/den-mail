@@ -163,7 +163,7 @@ class FakeData:
             "messageId": [msg_id], "inReplyTo": [in_reply_to] if in_reply_to else None,
             "references": [in_reply_to] if in_reply_to else None,
             "from": [frm], "sender": None, "to": to, "cc": cc, "bcc": None, "replyTo": None, "subject": subject,
-            "preview": (text or re.sub(r"<[^>]+>", " ", html or "")).strip()[:200],
+            "preview": re.sub(r"\s+", " ", text or re.sub(r"<[^>]+>", " ", re.sub(r"<(style|script)[^>]*>.*?</\1>", " ", html or "", flags=re.S | re.I))).strip()[:200],
             "hasAttachment": any(a["disposition"] == "attachment" for a in atts),
             "textBody": text_body, "htmlBody": html_body, "attachments": atts, "bodyValues": values,
             "bodyStructure": {"partId": None, "type": "multipart/mixed", "subParts": text_body + html_body + atts},
@@ -245,7 +245,10 @@ class FakeData:
 <blockquote>Remember to read the news before upgrading.</blockquote>
 <ul><li>pacman 8 release candidate</li><li>Repository signing changes</li></ul>
 <script>alert('nope')</script></body></html>""",
-                       mailboxes=[inbox, newsletters], keywords={}, when=t - timedelta(hours=5))
+                       mailboxes=[inbox, newsletters], keywords={}, when=t - timedelta(hours=5),
+                       headers={"List-Unsubscribe": "<mailto:unsubscribe@archlinux.org?subject=unsubscribe%20news>, "
+                                                    "<{base}unsubscribe/arch-news>",
+                                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"})
         # Message with inline image and PDF attachment
         self.add_email(frm=people[5], to=[shop], subject="Your ticket: Berlin → München",
                        html='<p>Thanks for booking. Your ticket is attached.</p><p><img src="cid:logo@fake" alt="logo"></p>',
@@ -484,7 +487,8 @@ class FakeData:
         for p in props:
             if p.startswith("header:"):
                 parts = p.split(":")
-                out[p] = e["_headers"].get(parts[1])
+                value = e["_headers"].get(parts[1])
+                out[p] = value.replace("{base}", getattr(self, "base_url", "http://127.0.0.1/")) if value else value
             elif p == "bodyValues":
                 out[p] = e["bodyValues"] if want_values else {}
             elif p in e:
@@ -923,9 +927,15 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "not found"})
 
     def do_POST(self):
+        path = urlparse(self.path).path
+        if path.startswith("/unsubscribe/"):  # RFC 8058 endpoint: no JMAP auth, records the request
+            length = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(length).decode()
+            self.server.unsubscribes.append((path, body, self.headers.get("Content-Type")))
+            self._send(200, {"ok": True})
+            return
         if not self._authed():
             return
-        path = urlparse(self.path).path
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length)
         if path == "/api":
@@ -977,8 +987,10 @@ class FakeJMAPServer(ThreadingHTTPServer):
         self.token = token
         self.verbose = verbose
         self.data = FakeData()
+        self.data.base_url = f"{self.base_url}/"
         self.dispatcher = Dispatcher(self.data)
         self.requests: list[dict] = []
+        self.unsubscribes: list[tuple[str, str, str | None]] = []  # (path, body, content-type)
         self._thread: threading.Thread | None = None
         self.stopping = False
 

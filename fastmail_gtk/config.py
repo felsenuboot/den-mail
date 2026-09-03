@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 import logging
 import os
 from pathlib import Path
@@ -109,6 +110,19 @@ class Config:
         addr = email.strip().lower()
         senders = [s for s in self.trusted_senders() if s != addr]
         self.set("trusted_senders", senders)
+
+    # ------------------------------------------------------- unsubscribed
+
+    def unsubscribed(self) -> dict[str, str]:
+        """sender address -> ISO date of the last unsubscribe request."""
+        return dict(self._data.get("unsubscribed") or {})
+
+    def mark_unsubscribed(self, email: str) -> None:
+        addr = email.strip().lower()
+        if addr:
+            data = self.unsubscribed()
+            data[addr] = datetime.now(timezone.utc).date().isoformat()
+            self.set("unsubscribed", data)
 
     # ------------------------------------------------- favourite identities
 

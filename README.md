@@ -1,66 +1,92 @@
 # Fastmail GTK
 
-A native Fastmail client for GNOME, built on JMAP, GTK4 and libadwaita.
+A native Fastmail client for the GNOME desktop: GTK4, libadwaita and JMAP.
+Three panes, labels that nest, push updates, offline reading, and every alias
+you own in the From field.
 
-- Three-pane, adaptive layout (sidebar, conversation list, conversation view)
-- Labels the way Fastmail does them: a message can live in several mailboxes,
-  labels nest, and you can drag conversations onto them
-- Cache-first: everything you have looked at is in a local SQLite database, so
-  switching mailboxes is instant and the app works offline for reading
-- Push updates over Fastmail's EventSource stream, with polling as fallback
-- Optimistic actions with undo (archive, delete, spam, flag, read, labels, move)
-- HTML mail rendered by WebKitGTK with scripts stripped, remote content blocked
-  until you allow it, and inline images served locally
-- Compose, reply, reply-all, forward, drafts with autosave, attachments
-- Send from any identity, including wildcard `*@yourdomain` identities; star
-  your favourites so the From list stays short
-- **Links and attachments** open with the desktop's default handlers. Optionally the browser is started
-  with its new-window switch, so pages open next to the mail client instead of as a tab somewhere else
-- Masked Email management (create, block, restore, delete)
-- Search with `from:`, `to:`, `subject:`, `is:unread`, `is:flagged`,
-  `has:attachment`, `before:`/`after:` operators, scoped to a mailbox or all mail
-- Sorting per mailbox (newest, oldest, sender, subject, size, flagged or unread
-  on top), following Fastmail's own per-mailbox sort setting
-- Double-click or Enter opens a conversation in its own window
-- Sender logos from BIMI records or favicons, coloured labels, light/dark theme
-- Desktop notifications for new mail, `mailto:` handler, keyboard shortcuts
+![The inbox with a conversation open, dark theme](data/screenshots/inbox-dark.png)
 
-> **Status and disclaimer.** This is a personal project, written largely with
-> Claude Code and reviewed by a human, but not audited. It works on my machine
-> (Arch, Hyprland, a regular Fastmail account). Use at your own risk; there is
-> no warranty. Issues and pull requests are welcome. The project is not
-> affiliated with or endorsed by Fastmail.
+> [!WARNING]
+> **This app was written mostly by an AI.** Nearly all of the code was produced
+> by Claude Code (Anthropic's coding agent) under my direction. I read and test
+> what it writes and use the app daily, but nobody has audited it. It works on
+> my machine: Arch Linux, Hyprland, a regular Fastmail account. Use it at your
+> own risk; there is no warranty of any kind. Issues and pull requests are
+> welcome. This project is not affiliated with or endorsed by Fastmail.
 
-**Security notes.** The API token is stored in the system keyring (libsecret)
-and only ever sent to the JMAP session URL you sign in with. HTML mail is
-sanitised before it reaches WebKitGTK (scripts, frames and forms removed,
-JavaScript disabled), remote content stays blocked until you allow it or trust
-the sender, and attachments are downloaded on request only.
+## What it does
 
-## Requirements
+- **Mail the Fastmail way.** A message can carry several labels, labels nest,
+  and you drag conversations onto them. Inbox shows up as a chip you can remove
+  to archive.
+- **Fast and offline.** Everything you have looked at sits in a local SQLite
+  cache, so switching folders is instant and you can read without a connection.
+  Changes arrive over Fastmail's push stream.
+- **Actions with undo.** Archive, delete, spam, flag, read, label and move
+  happen immediately and can be undone from the toast.
+- **Safe HTML.** WebKitGTK renders mail with scripts stripped and remote content
+  blocked until you allow it, per message or for trusted senders. Dark mode
+  adapts light-coloured mail, with a per-message switch back to the original
+  colours.
+- **All your identities.** Send from any alias or wildcard address, star the
+  ones you use so the From list stays short, and manage Masked Email addresses.
+- **Unsubscribe in one click.** Newsletters get an Unsubscribe button that uses
+  the sender's one-click endpoint, their web page, or a mailto request.
+- **Search and sort.** `from:`, `to:`, `subject:`, `is:unread`, `is:flagged`,
+  `has:attachment`, `before:` and `after:`, scoped to a folder or all mail.
+  Sorting follows Fastmail's per-folder setting.
+- **Desktop integration.** Notifications, `mailto:` handler, sender logos from
+  BIMI or favicons, keyboard shortcuts, conversations in their own windows.
 
-Arch Linux package names; other distributions have equivalents.
+| Light theme | Compose |
+| --- | --- |
+| ![Inbox, light theme](data/screenshots/inbox-light.png) | ![New message window](data/screenshots/compose.png) |
+
+![A newsletter with the Unsubscribe button](data/screenshots/unsubscribe.png)
+
+## Installing
+
+You need Python 3.12 or newer with PyGObject, GTK 4, libadwaita 1.5+, libsecret
+and, for HTML mail, WebKitGTK 6.0. On Arch Linux:
 
 ```
 sudo pacman -S --needed python-gobject gtk4 libadwaita libsecret webkitgtk-6.0
 ```
 
-WebKitGTK is optional. Without it, HTML mail is converted to formatted text.
+Fedora: `python3-gobject gtk4 libadwaita libsecret webkitgtk6.0`.
+Debian and Ubuntu: `python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 gir1.2-webkit-6.0`.
 
-## Running
+Then:
 
 ```
-git clone git@github.com:felsenuboot/fastmail-gtk.git
+git clone https://github.com/felsenuboot/fastmail-gtk.git
 cd fastmail-gtk
-./bin/fastmail-gtk          # run from the checkout
-./install.sh                # launcher, desktop entry and icon for your user
+./install.sh
 ```
 
-On first start the app asks for a Fastmail API token. Create one under
-*Settings → Privacy & Security → API tokens* with the **Mail**, **Submission**
-and **Masked Email** scopes. The token is stored in your keyring via libsecret.
+This puts a launcher in `~/.local/bin`, a desktop entry and icons in your user
+profile, so the app shows up in your app grid and can be set as the `mailto:`
+handler. You can also just run `./bin/fastmail-gtk` from the checkout. Without
+WebKitGTK the app still works and shows HTML mail as formatted text.
 
-## Keyboard shortcuts
+## Getting started
+
+On first start the app asks for a Fastmail API token. Create one in the
+Fastmail web app under *Settings → Privacy & Security → API tokens* with the
+**Mail**, **Submission** and **Masked Email** scopes. The token goes into your
+keyring; the app never writes it anywhere else.
+
+Things worth knowing:
+
+- Right-click a folder or label for refresh, mark all as read, colours, rename,
+  new sub-label. Right-click a conversation for the full action menu.
+- Double-click or press Enter on a conversation to open it in its own window.
+- Preferences → Reading lets you choose how remote images are handled, whether
+  dark mode adapts HTML mail, and whether links open in a new browser window.
+- Preferences → Composing → Favourite identities opens the identities dialog,
+  where you star the aliases you actually send from.
+
+### Keyboard shortcuts
 
 | Keys | Action |
 | --- | --- |
@@ -80,64 +106,50 @@ and **Masked Email** scopes. The token is stored in your keyring via libsecret.
 | `Ctrl+S` | save draft (compose) |
 | `Ctrl+?` | shortcuts dialog |
 
-## Theming notes
+## Privacy and security
 
-Wallpaper theming tools (Matugen, pywal, ML4W) write `~/.config/gtk-4.0/colors.css`,
-which redefines libadwaita's named colours to a dark palette for every GTK app.
-Fastmail GTK keeps that palette while it is dark, and re-asserts libadwaita's
-light palette while it is light (Preferences → Appearance), so "Light" actually
-looks light. Accent colours always come from your desktop.
+The API token is stored in the system keyring (libsecret) and only ever sent
+to the JMAP session URL you sign in with. HTML mail is sanitised before it
+reaches WebKitGTK (scripts, frames and forms removed, JavaScript disabled),
+remote content stays blocked until you allow it or trust the sender, and
+attachments are downloaded on request only. Sender logos are fetched from the
+sender's domain (BIMI record or favicon), which reveals nothing about a
+specific message; turn them off in Preferences → Appearance if you prefer.
 
-Label colours are not available through Fastmail's JMAP API (the web client uses
-an internal API), so the app assigns stable colours per label; right-click a
-label → Colour to choose your own.
+## Troubleshooting
 
-### Links and browser focus
+- **The light theme looks half dark.** Wallpaper theming tools (Matugen, pywal,
+  ML4W) write `~/.config/gtk-4.0/colors.css`, which repaints every GTK app. The
+  app re-asserts libadwaita's light palette while it is light, so Light means
+  light; accent colours still come from your desktop.
+- **Label colours differ from the web app.** Fastmail does not expose label
+  colours through its public JMAP API, so the app assigns its own. Right-click
+  a label → Colour to pick one.
+- **Clicking a link does not bring the browser forward.** That is the
+  compositor's decision (xdg-activation). GNOME and KDE allow it; on Hyprland
+  enable `misc.focus_on_activate`. Or turn on "Open links in a new browser
+  window" in Preferences → Reading.
+- **HTML mail shows up blank.** The app already disables WebKit's DMA-BUF
+  renderer, which fixed this on an NVIDIA/Wayland setup. If it still happens,
+  please open an issue with your GPU and driver.
 
-The app hands links to the default browser through the desktop portal and passes along an
-xdg-activation token. Whether the browser may then take focus (and pull you to its workspace) is your
-compositor's policy: GNOME and KDE allow it by default, Hyprland only with `misc.focus_on_activate`
-enabled. "Open links in a new browser window" (Preferences → Reading) sidesteps the question by
-starting the browser with its new-window switch (Firefox, Zen, LibreWolf, Chromium, Chrome, Brave,
-Vivaldi, Edge, Epiphany, Falkon, qutebrowser); other apps are unaffected.
+## Contributing
 
-## Development
+Bug reports, ideas and pull requests are welcome on the
+[issue tracker](https://github.com/felsenuboot/fastmail-gtk/issues). The inbox
+cleanup roadmap (categories, cleanup views, optional local classifiers) is
+tracked in #15. Developer notes, including the fake JMAP server the tests run
+against and how screenshots are made, are in
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md); the design is described in
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
-Everything network-related is exercised against an in-process fake JMAP server
-(`tests/fake_server.py`) that implements the parts of RFC 8620/8621 and the
-Masked Email extension the client uses.
+Aliases cannot be created through Fastmail's public API (only Masked Email
+can), so the app links to the web settings for that.
 
-```
-python -m venv --system-site-packages .venv && .venv/bin/pip install pytest
-.venv/bin/python -m pytest -q
-
-# Run the UI against the fake server
-python -m tests.fake_server 18081 &
-FASTMAIL_GTK_SESSION_URL=http://127.0.0.1:18081/session FASTMAIL_GTK_TOKEN=fake-token \
-  XDG_DATA_HOME=/tmp/fm/data XDG_CONFIG_HOME=/tmp/fm/config ./bin/fastmail-gtk
-```
-
-`FASTMAIL_GTK_AUTOPILOT="sleep 3; select 0; action win.reply"` drives the UI
-from a script (see `fastmail_gtk/autopilot.py`), which is how the screenshots in
-development are taken inside a headless `cage` compositor.
-
-Useful environment variables:
-
-| Variable | Purpose |
-| --- | --- |
-| `FASTMAIL_GTK_TOKEN` | use this token instead of the keyring |
-| `FASTMAIL_GTK_SESSION_URL` | JMAP session URL (default `https://api.fastmail.com/jmap/session`) |
-| `FASTMAIL_GTK_DEBUG=1` | log every JMAP request |
-| `FASTMAIL_GTK_NO_WEBKIT=1` | force the text renderer for HTML mail |
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together, and the
-[issue tracker](https://github.com/felsenuboot/fastmail-gtk/issues) for ideas
-and open questions (for example, alias creation has no public JMAP API yet).
-
-## Credits
+## Credits and licence
 
 Some symbolic icons are copied from the
 [Adwaita icon theme](https://gitlab.gnome.org/GNOME/adwaita-icon-theme)
 (CC BY-SA 3.0 / LGPL) so the app renders correctly with any icon theme.
 
-MIT licensed.
+Licensed under the MIT licence, see [LICENSE](LICENSE).

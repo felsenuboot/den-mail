@@ -12,7 +12,8 @@ from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full
 from ..models.thread import ThreadObject, format_date_long
 from .message_body import MessageBody
 from .. import launch
-from .widgets import avatar, chip, human_size, open_uri, toast
+from ..unsubscribe import parse_list_unsubscribe
+from .widgets import avatar, chip, confirm, human_size, open_uri, toast
 
 
 class AttachmentChip(Gtk.Button):
@@ -135,6 +136,12 @@ class MessageCard(Gtk.Box):
         header.append(col)
         # per-message actions
         actions = Gtk.Box(spacing=0, valign=Gtk.Align.START)
+        self.unsubscribe_plan = None
+        self.unsubscribe_btn = Gtk.Button(label="Unsubscribe", valign=Gtk.Align.CENTER)
+        self.unsubscribe_btn.add_css_class("flat")
+        self.unsubscribe_btn.set_visible(False)
+        self.unsubscribe_btn.connect("clicked", lambda *_: self.view.unsubscribe(self.email_id))
+        actions.append(self.unsubscribe_btn)
         self.light_toggle = Gtk.ToggleButton(icon_name="fm-light-mode-symbolic",
                                              tooltip_text="Show this message with its original light colours")
         self.light_toggle.add_css_class("flat")
@@ -282,6 +289,9 @@ class MessageCard(Gtk.Box):
         trusted = self.view.config.is_trusted(self.sender_email)
         self.has_html = bool(html)
         self.light_toggle.set_visible(self.has_html and self.view.style_manager.get_dark())
+        self.unsubscribe_plan = parse_list_unsubscribe(full.get("header:List-Unsubscribe:asRaw"),
+                                                       full.get("header:List-Unsubscribe-Post:asRaw"))
+        self.refresh_unsubscribe()
         if html:
             allow = self.remote_allowed or policy == "always" or (trusted and policy != "never")
             self.body.show_html(html, self.email_id, allow_remote=allow, dark=self.wants_dark())
@@ -337,6 +347,22 @@ class MessageCard(Gtk.Box):
 
     def toggle_colours(self) -> None:
         self._set_original_colours(not self.force_original_colours)
+
+    def refresh_unsubscribe(self) -> None:
+        plan = self.unsubscribe_plan
+        self.unsubscribe_btn.set_visible(plan is not None)
+        if plan is None:
+            return
+        when = self.view.config.unsubscribed().get((self.sender_email or "").lower())
+        self.unsubscribe_btn.set_label("Unsubscribed" if when else "Unsubscribe")
+        if when:
+            self.unsubscribe_btn.add_css_class("dim-label")
+        else:
+            self.unsubscribe_btn.remove_css_class("dim-label")
+        how = {"one-click": f"Send an unsubscribe request to {plan.target}",
+               "browser": f"Open the unsubscribe page at {plan.target}",
+               "mailto": f"Send an unsubscribe message to {plan.target}"}[plan.kind]
+        self.unsubscribe_btn.set_tooltip_text((f"Unsubscribed on {when}. " if when else "") + how)
 
     def show_body_error(self, message: str) -> None:
         self.loading.set_visible(False)
@@ -481,6 +507,87 @@ class ConversationView(Adw.NavigationPage):
             action.connect("activate", lambda _a, param, fn=fn: fn(param.get_string()))
             group.add_action(action)
         self.insert_action_group("conv", group)
+
+    # ----------------------------------------------------------- unsubscribe
+
+    def unsubscribe(self, email_id: str) -> None:
+        card = self.cards.get(email_id)
+        if card is None or card.unsubscribe_plan is None:
+            return
+        plan = card.unsubscribe_plan
+        sender = address_display((card.email.get("from") or [{}])[0]) or card.sender_email or "this sender"
+        body = {"one-click": f"Sends an unsubscribe request to {plan.target}.",
+                "browser": f"Opens the sender's unsubscribe page at {plan.target} in your browser.",
+                "mailto": f"Sends an unsubscribe message to {plan.target}."}[plan.kind]
+        if plan.kind == "mailto":
+            ident = self.identity_for(card.email)
+            if ident:
+                body += f" It goes out from {ident.get('email')}."
+        confirm(self, f"Unsubscribe from {sender}?", body, "Unsubscribe", False,
+                lambda: self._run_unsubscribe(card, plan))
+
+    def _run_unsubscribe(self, card: MessageCard, plan) -> None:
+        sender_email = (card.sender_email or "").lower()
+        button = card.unsubscribe_btn
+
+        def done(*_) -> None:
+            button.set_sensitive(True)
+            self.config.mark_unsubscribed(sender_email)
+            for c in self.cards.values():
+                if (c.sender_email or "").lower() == sender_email:
+                    c.refresh_unsubscribe()
+            toast(self, {"one-click": f"Unsubscribe request sent to {plan.target}",
+                         "browser": f"Opened the unsubscribe page at {plan.target}",
+                         "mailto": f"Unsubscribe message sent to {plan.target}"}[plan.kind], 4)
+
+        if plan.kind == "one-click":
+            button.set_sensitive(False)
+
+            def failed(message: str) -> None:
+                button.set_sensitive(True)
+                toast(self, f"Request to {plan.target} failed ({message}); opening the page instead", 6)
+                open_uri(plan.url, self.get_root())
+
+            self.engine.unsubscribe_one_click(plan.url, done, failed)
+        elif plan.kind == "browser":
+            open_uri(plan.url, self.get_root())
+            done()
+        else:
+            ident = self.identity_for(card.email)
+            if ident is None:
+                toast(self, "No identity to send the unsubscribe message from", 6)
+                return
+            draft = {"from": [{"name": ident.get("name") or None, "email": ident["email"]}],
+                     "to": [{"name": None, "email": plan.to}],
+                     "subject": plan.subject or "unsubscribe",
+                     "textBody": [{"partId": "t", "type": "text/plain"}],
+                     "bodyValues": {"t": {"value": plan.body or "unsubscribe"}}}
+            button.set_sensitive(False)
+
+            def failed_send(message: str) -> None:
+                button.set_sensitive(True)
+                toast(self, f"Could not send the unsubscribe message: {message}", 6)
+
+            self.engine.send_email(draft, ident["id"], None, done, failed_send)
+
+    def identity_for(self, email: dict) -> dict | None:
+        """The identity a message was delivered to (Delivered-To, To, Cc), else the primary one."""
+        identities = self.db.get_identities()
+        if not identities:
+            return None
+        by_email = {(i.get("email") or "").lower(): i for i in identities}
+        wildcards = [i for i in identities if (i.get("email") or "").startswith("*@")]
+        candidates = [email.get("header:Delivered-To:asText") or ""] + [
+            a.get("email", "") for a in (email.get("to") or []) + (email.get("cc") or [])]
+        for addr in (c.strip().lower() for c in candidates if c):
+            if addr in by_email:
+                return by_email[addr]
+            for w in wildcards:
+                if addr.endswith(w["email"][1:].lower()):
+                    return {**w, "email": addr}
+        session = getattr(getattr(self.engine, "client", None), "session", None)
+        primary = (getattr(session, "username", "") or "").lower()
+        return by_email.get(primary) or identities[0]
 
     def _on_avatar_ready(self, _service, key: str) -> None:
         for card in self.cards.values():

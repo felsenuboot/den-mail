@@ -683,6 +683,22 @@ class SyncEngine(GObject.Object):
 
         self._pool.submit(work)
 
+    def unsubscribe_one_click(self, url: str, on_done: Callable[[], None],
+                              on_error: Callable[[str], None] | None = None) -> None:
+        """RFC 8058 POST to a List-Unsubscribe URL, off the UI thread."""
+        from ..unsubscribe import UnsubscribeError, one_click_request
+
+        def work() -> None:
+            try:
+                one_click_request(url)
+            except UnsubscribeError as e:
+                log.warning("one-click unsubscribe %s failed: %s", url, e)
+                self._callback(on_error, str(e))
+                return
+            self._callback(on_done)
+
+        self._pool.submit(work)
+
     def upload(self, data: bytes, content_type: str, on_done: Callable[[dict], None],
                on_error: Callable[[str], None] | None = None) -> None:
         def work() -> None:
