@@ -114,13 +114,19 @@
 }
 .chip {
   font-size: 0.82em;
-  padding: 2px 8px;
+  padding: 2px 10px;
   border-radius: 999px;
   background: alpha(@accent_bg_color, 0.14);
   color: @accent_color;
 }
 .chip.removable {
   padding-right: 4px;
+}
+.chip.removable button {
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+  margin-left: 2px;
 }
 .chip-neutral {
   font-size: 0.78em;
@@ -146,9 +152,8 @@ image.label-color-8 { color: #986a44; }  .chip.label-color-8 { background: alpha
 image.label-color-9 { color: #1c71d8; }  .chip.label-color-9 { background: alpha(#1c71d8, 0.18); color: #3584e4; }
 image.label-color-10 { color: #613583; } .chip.label-color-10 { background: alpha(#613583, 0.18); color: #9141ac; }
 image.label-color-11 { color: #a51d2d; } .chip.label-color-11 { background: alpha(#a51d2d, 0.18); color: #c01c28; }
-.chip.label-color-0, .chip.label-color-1, .chip.label-color-2, .chip.label-color-3, .chip.label-color-4,
-.chip.label-color-5, .chip.label-color-6, .chip.label-color-7, .chip.label-color-8, .chip.label-color-9,
-.chip.label-color-10, .chip.label-color-11 {
+/* Compact chip shape inside list rows only; conversation chips keep the pill shape. */
+.thread-row .chip, .thread-row .chip-neutral {
   font-size: 0.78em;
   padding: 0 6px;
   border-radius: 4px;
