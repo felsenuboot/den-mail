@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Fastmail GTK
+Comment=Fastmail client for GNOME
+Exec=fastmail-gtk
+Icon=io.github.felsenuboot.FastmailGtk
+Terminal=false
+Categories=Network;Email;GTK;
+Keywords=mail;email;fastmail;jmap;
+StartupNotify=true
+MimeType=x-scheme-handler/mailto;

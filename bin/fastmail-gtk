@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Launcher: runs the package from this checkout with the system Python.
+cd "$(dirname "$(readlink -f "$0")")/.." && exec python3 -m fastmail_gtk "$@"

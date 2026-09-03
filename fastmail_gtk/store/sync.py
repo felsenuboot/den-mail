@@ -1,0 +1,969 @@
+"""The sync engine: one worker thread that owns all network I/O and DB writes.
+
+The UI never talks to the server.  It asks the engine for things (load a
+query, fetch a body, perform an action) and listens to GObject signals that
+are always emitted on the main thread.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import queue
+import threading
+import time
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any
+
+from gi.repository import GLib, GObject
+
+from ..config import Config, attachments_dir
+from ..jmap.client import (
+    AuthError,
+    JMAPClient,
+    JMAPError,
+    MethodError,
+    RateLimited,
+    Request,
+    SetError,
+    TransportError,
+    check_set_response,
+)
+from ..jmap.push import PushListener
+from ..jmap.types import (
+    CAP_MASKED_EMAIL,
+    EMAIL_BODY_PROPERTIES,
+    EMAIL_LIST_PROPERTIES,
+    KW_DRAFT,
+    KW_SEEN,
+    MAX_BODY_VALUE_BYTES,
+    ROLE_ARCHIVE,
+    ROLE_DRAFTS,
+    ROLE_INBOX,
+    ROLE_JUNK,
+    ROLE_SENT,
+    ROLE_TRASH,
+)
+from .actions import EmailAction, RestoreAction, UndoRecord
+from .db import Database
+
+log = logging.getLogger(__name__)
+
+PRIO_ACTION = 0
+PRIO_LOAD = 1
+PRIO_SYNC = 2
+PRIO_BACKGROUND = 3
+
+SORT_NEWEST = [{"property": "receivedAt", "isAscending": False}]
+
+
+def query_key(spec: dict) -> str:
+    return hashlib.sha1(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def mailbox_query_spec(mailbox_id: str) -> dict:
+    return {"filter": {"inMailbox": mailbox_id}, "sort": SORT_NEWEST, "collapseThreads": True}
+
+
+def search_query_spec(text: str, mailbox_id: str | None, trash_junk: list[str]) -> dict:
+    """Turn a search box string into a JMAP filter (supports from:/to:/subject:/is:/has:/before:/after:)."""
+    conditions: list[dict] = []
+    words: list[str] = []
+    for token in text.split():
+        key, sep, value = token.partition(":")
+        key = key.lower()
+        if not sep or not value:
+            words.append(token)
+        elif key == "from":
+            conditions.append({"from": value})
+        elif key == "to":
+            conditions.append({"to": value})
+        elif key == "cc":
+            conditions.append({"cc": value})
+        elif key == "subject":
+            conditions.append({"subject": value})
+        elif key == "is" and value in ("unread", "read", "flagged", "starred", "unflagged"):
+            if value == "unread":
+                conditions.append({"notKeyword": KW_SEEN})
+            elif value == "read":
+                conditions.append({"hasKeyword": KW_SEEN})
+            elif value in ("flagged", "starred"):
+                conditions.append({"hasKeyword": "$flagged"})
+            else:
+                conditions.append({"notKeyword": "$flagged"})
+        elif key == "has" and value in ("attachment", "attachments"):
+            conditions.append({"hasAttachment": True})
+        elif key in ("before", "after") and len(value) >= 4:
+            iso = value if "T" in value else f"{value}T00:00:00Z"
+            conditions.append({key: iso})
+        elif key == "label" or key == "in":
+            words.append(token)  # resolved by caller if needed
+        else:
+            words.append(token)
+    if words:
+        conditions.append({"text": " ".join(words)})
+    if mailbox_id:
+        conditions.append({"inMailbox": mailbox_id})
+    elif trash_junk:
+        conditions.append({"inMailboxOtherThan": trash_junk})
+    if not conditions:
+        filt: dict = {}
+    elif len(conditions) == 1:
+        filt = conditions[0]
+    else:
+        filt = {"operator": "AND", "conditions": conditions}
+    return {"filter": filt, "sort": SORT_NEWEST, "collapseThreads": True}
+
+
+class _Job:
+    __slots__ = ("prio", "seq", "fn", "name")
+
+    def __init__(self, prio: int, seq: int, fn: Callable[[], None], name: str):
+        self.prio, self.seq, self.fn, self.name = prio, seq, fn, name
+
+    def __lt__(self, other: "_Job") -> bool:
+        return (self.prio, self.seq) < (other.prio, other.seq)
+
+
+class SyncEngine(GObject.Object):
+    __gsignals__ = {
+        "mailboxes-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
+        "emails-changed": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
+        "emails-destroyed": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
+        "query-updated": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+        "query-failed": (GObject.SignalFlags.RUN_FIRST, None, (str, str)),
+        "body-ready": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+        "body-failed": (GObject.SignalFlags.RUN_FIRST, None, (str, str)),
+        "identities-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
+        "masked-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
+        "sync-status": (GObject.SignalFlags.RUN_FIRST, None, (str, str)),
+        "push-status": (GObject.SignalFlags.RUN_FIRST, None, (bool,)),
+        "new-mail": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
+        "action-failed": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+        "auth-failed": (GObject.SignalFlags.RUN_FIRST, None, ()),
+        "cache-reset": (GObject.SignalFlags.RUN_FIRST, None, ()),
+    }
+
+    def __init__(self, client: JMAPClient, db: Database, config: Config):
+        super().__init__()
+        self.client = client
+        self.db = db
+        self.config = config
+        self._queue: queue.PriorityQueue[_Job] = queue.PriorityQueue()
+        self._seq = 0
+        self._seq_lock = threading.Lock()
+        self._worker = threading.Thread(target=self._run, name="sync-worker", daemon=True)
+        self._stop = threading.Event()
+        self._pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="blob")
+        self._push: PushListener | None = None
+        self._sync_queued = False
+        self._sync_lock = threading.Lock()
+        self._last_sync = 0.0
+        self._active_queries: dict[str, int] = {}  # key -> loaded count wanted
+        self.roles: dict[str, str] = {}
+        self.push_connected = False
+        self.online = True
+        self.page_size = int(config.get("thread_page_size", 50))
+        self._load_roles()
+
+    # ------------------------------------------------------------- lifecycle
+
+    def start(self) -> None:
+        self._worker.start()
+        self.enqueue(PRIO_SYNC, self._job_bootstrap, "bootstrap")
+        if self.client.session and self.client.session.event_source_url:
+            self._push = PushListener(self.client, self._on_push_change, self._on_push_status)
+            self._push.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._push:
+            self._push.stop()
+        self.enqueue(PRIO_ACTION, lambda: None, "wake")
+        self._pool.shutdown(wait=False, cancel_futures=True)
+
+    def enqueue(self, prio: int, fn: Callable[[], None], name: str = "") -> None:
+        with self._seq_lock:
+            self._seq += 1
+            seq = self._seq
+        self._queue.put(_Job(prio, seq, fn, name or getattr(fn, "__name__", "job")))
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            try:
+                job = self._queue.get(timeout=15)
+            except queue.Empty:
+                self._maybe_periodic_sync()
+                continue
+            if self._stop.is_set():
+                return
+            try:
+                job.fn()
+            except AuthError:
+                log.error("authentication failed during %s", job.name)
+                self._emit("auth-failed")
+            except RateLimited as e:
+                log.warning("rate limited during %s; sleeping %.0fs", job.name, e.retry_after)
+                self._emit("sync-status", "error", f"Rate limited by server, retrying in {e.retry_after:.0f}s")
+                self._stop.wait(min(e.retry_after, 120))
+                self.enqueue(job.prio, job.fn, job.name)
+            except TransportError as e:
+                log.warning("network error during %s: %s", job.name, e)
+                self._set_online(False, str(e))
+            except Exception as e:  # noqa: BLE001 - keep the worker alive whatever happens
+                log.exception("job %s failed", job.name)
+                self._emit("sync-status", "error", f"{job.name}: {e}")
+            finally:
+                self._queue.task_done()
+
+    def _maybe_periodic_sync(self) -> None:
+        interval = int(self.config.get("poll_interval_seconds", 300))
+        if not self.push_connected:
+            interval = min(interval, 60)
+        if not self.online:
+            interval = min(interval, 30)
+        if time.monotonic() - self._last_sync >= interval:
+            self.sync_now()
+
+    def _emit(self, signal: str, *args: Any) -> None:
+        GLib.idle_add(self._emit_main, signal, args)
+
+    def _emit_main(self, signal: str, args: tuple) -> bool:
+        self.emit(signal, *args)
+        return False
+
+    def _set_online(self, online: bool, message: str = "") -> None:
+        if online != self.online:
+            self.online = online
+            self._emit("sync-status", "idle" if online else "offline", message)
+
+    def _callback(self, cb: Callable | None, *args: Any) -> None:
+        if cb is not None:
+            GLib.idle_add(lambda: (cb(*args), False)[1])
+
+    # ------------------------------------------------------------------ push
+
+    def _on_push_change(self, changed: dict) -> None:
+        session = self.client.session
+        acc = changed.get(session.account_id if session else "", {}) or next(iter(changed.values()), {})
+        if not isinstance(acc, dict):
+            return
+        stale = False
+        for kind in ("Email", "Mailbox", "Thread"):
+            new_state = acc.get(kind)
+            if new_state and new_state != self.db.get_state(kind):
+                stale = True
+        if stale:
+            self.sync_now()
+
+    def _on_push_status(self, connected: bool) -> None:
+        self.push_connected = connected
+        self._emit("push-status", connected)
+
+    # ------------------------------------------------------------- bootstrap
+
+    def _load_roles(self) -> None:
+        self.roles = {m["role"]: m["id"] for m in self.db.get_mailboxes() if m.get("role")}
+
+    def trash_junk_ids(self) -> list[str]:
+        return [self.roles[r] for r in (ROLE_TRASH, ROLE_JUNK) if r in self.roles]
+
+    def _job_bootstrap(self) -> None:
+        self._emit("sync-status", "syncing", "Connecting")
+        session = self.client.session or self.client.fetch_session()
+        self.db.set_session(session.raw)
+        if self.db.get_state("Email") is None:
+            self._full_sync()
+        else:
+            self._incremental_sync()
+        self._set_online(True)
+        self._emit("sync-status", "idle", "")
+
+    def _full_sync(self) -> None:
+        session = self.client.session
+        req = Request()
+        c_mb = req.add("Mailbox/get", {"accountId": session.account_id, "ids": None})
+        c_id = req.add("Identity/get", {"accountId": session.submission_account_id, "ids": None})
+        c_em = req.add("Email/get", {"accountId": session.account_id, "ids": []})
+        c_th = req.add("Thread/get", {"accountId": session.account_id, "ids": []})
+        c_me = None
+        if session.has_masked_email:
+            c_me = req.add("MaskedEmail/get", {"accountId": session.masked_account_id, "ids": None})
+        resp = self.client.send(req)
+        mb = resp.get(c_mb)
+        self.db.upsert_mailboxes(mb["list"])
+        known = {m["id"] for m in mb["list"]}
+        self.db.delete_mailboxes([m["id"] for m in self.db.get_mailboxes() if m["id"] not in known])
+        self.db.set_state("Mailbox", mb["state"])
+        self._load_roles()
+        try:
+            ident = resp.get(c_id)
+            self.db.set_identities(ident["list"])
+        except MethodError as e:
+            log.warning("Identity/get failed: %s", e)
+        self.db.set_state("Email", resp.get(c_em)["state"])
+        self.db.set_state("Thread", resp.get(c_th)["state"])
+        if c_me:
+            try:
+                self.db.set_masked_emails(resp.get(c_me)["list"])
+            except MethodError as e:
+                log.warning("MaskedEmail/get failed: %s", e)
+        self._last_sync = time.monotonic()
+        self._emit("mailboxes-changed")
+        self._emit("identities-changed")
+        self._emit("masked-changed")
+
+    def reset_cache(self) -> None:
+        self.db.clear_all()
+        self.db.drop_queries()
+        self._emit("cache-reset")
+        self._full_sync()
+
+    # ----------------------------------------------------------- incremental
+
+    def sync_now(self) -> None:
+        with self._sync_lock:
+            if self._sync_queued:
+                return
+            self._sync_queued = True
+        self.enqueue(PRIO_SYNC, self._job_incremental, "sync")
+
+    def _job_incremental(self) -> None:
+        with self._sync_lock:
+            self._sync_queued = False
+        self._emit("sync-status", "syncing", "Syncing")
+        try:
+            self._incremental_sync()
+            self._set_online(True)
+        finally:
+            self._emit("sync-status", "idle", "")
+
+    def _incremental_sync(self) -> None:
+        session = self.client.session
+        if self.db.get_state("Email") is None:
+            self._full_sync()
+            return
+        acc = session.account_id
+        # --- mailboxes
+        req = Request()
+        c_ch = req.add("Mailbox/changes", {"accountId": acc, "sinceState": self.db.get_state("Mailbox")})
+        c_get = req.add("Mailbox/get", {"accountId": acc,
+                                        "#ids": Request.ref(c_ch, "Mailbox/changes", "/created")})
+        c_upd = req.add("Mailbox/get", {"accountId": acc,
+                                        "#ids": Request.ref(c_ch, "Mailbox/changes", "/updated")})
+        resp = self.client.send(req)
+        mailboxes_changed = False
+        try:
+            ch = resp.get(c_ch)
+            created = resp.get(c_get)["list"]
+            updated = resp.get(c_upd)["list"]
+            if created or updated:
+                self.db.upsert_mailboxes(created + updated)
+                mailboxes_changed = True
+            if ch.get("destroyed"):
+                self.db.delete_mailboxes(ch["destroyed"])
+                mailboxes_changed = True
+            self.db.set_state("Mailbox", ch["newState"])
+        except MethodError as e:
+            if e.type == "cannotCalculateChanges":
+                mb = self.client.call("Mailbox/get", {"accountId": acc, "ids": None})
+                self.db.upsert_mailboxes(mb["list"])
+                known = {m["id"] for m in mb["list"]}
+                self.db.delete_mailboxes([m["id"] for m in self.db.get_mailboxes() if m["id"] not in known])
+                self.db.set_state("Mailbox", mb["state"])
+                mailboxes_changed = True
+            else:
+                raise
+        if mailboxes_changed:
+            self._load_roles()
+            self._emit("mailboxes-changed")
+        # --- emails
+        changed_ids: list[str] = []
+        destroyed_ids: list[str] = []
+        new_mail: list[dict] = []
+        inbox = self.roles.get(ROLE_INBOX)
+        while True:
+            req = Request()
+            c_ch = req.add("Email/changes", {"accountId": acc, "sinceState": self.db.get_state("Email"),
+                                             "maxChanges": 500})
+            c_new = req.add("Email/get", {"accountId": acc, "properties": EMAIL_LIST_PROPERTIES,
+                                          "#ids": Request.ref(c_ch, "Email/changes", "/created")})
+            c_upd = req.add("Email/get", {"accountId": acc, "properties": EMAIL_LIST_PROPERTIES,
+                                          "#ids": Request.ref(c_ch, "Email/changes", "/updated")})
+            resp = self.client.send(req)
+            try:
+                ch = resp.get(c_ch)
+            except MethodError as e:
+                if e.type == "cannotCalculateChanges":
+                    log.warning("Email/changes cannot calculate; resetting cache")
+                    self.reset_cache()
+                    return
+                raise
+            created = resp.get(c_new)["list"]
+            updated = resp.get(c_upd)["list"]
+            if created:
+                self.db.upsert_emails(created)
+                changed_ids += [e["id"] for e in created]
+                for e in created:
+                    if inbox and (e.get("mailboxIds") or {}).get(inbox) and not (e.get("keywords") or {}).get(KW_SEEN):
+                        new_mail.append(e)
+            if updated:
+                # only refresh emails we already know; others are irrelevant until queried
+                known = self.db.get_emails([e["id"] for e in updated])
+                keep = [e for e in updated if e["id"] in known]
+                if keep:
+                    self.db.upsert_emails(keep)
+                    changed_ids += [e["id"] for e in keep]
+            if ch.get("destroyed"):
+                self.db.delete_emails(ch["destroyed"])
+                destroyed_ids += ch["destroyed"]
+            self.db.set_state("Email", ch["newState"])
+            if not ch.get("hasMoreChanges"):
+                break
+        # --- threads
+        req = Request()
+        c_ch = req.add("Thread/changes", {"accountId": acc, "sinceState": self.db.get_state("Thread"),
+                                          "maxChanges": 500})
+        c_get = req.add("Thread/get", {"accountId": acc, "#ids": Request.ref(c_ch, "Thread/changes", "/updated")})
+        c_new = req.add("Thread/get", {"accountId": acc, "#ids": Request.ref(c_ch, "Thread/changes", "/created")})
+        resp = self.client.send(req)
+        try:
+            ch = resp.get(c_ch)
+            threads = resp.get(c_get)["list"] + resp.get(c_new)["list"]
+            if threads:
+                self.db.upsert_threads(threads)
+                # fetch list props for thread members we do not have yet
+                missing = self.db.missing_email_ids([i for t in threads for i in t.get("emailIds", [])])
+                if missing:
+                    got = self.client.call("Email/get", {"accountId": acc, "ids": missing[:500],
+                                                         "properties": EMAIL_LIST_PROPERTIES})
+                    self.db.upsert_emails(got["list"])
+                    changed_ids += [e["id"] for e in got["list"]]
+            if ch.get("destroyed"):
+                self.db.delete_threads(ch["destroyed"])
+            self.db.set_state("Thread", ch["newState"])
+        except MethodError as e:
+            if e.type != "cannotCalculateChanges":
+                raise
+            self.db.set_state("Thread", self.client.call("Thread/get", {"accountId": acc, "ids": []})["state"])
+        # --- keep visible queries current
+        for key in list(self._active_queries):
+            q = self.db.get_query(key)
+            if q:
+                self._refresh_query(q)
+        self._last_sync = time.monotonic()
+        if changed_ids:
+            self._emit("emails-changed", sorted(set(changed_ids)))
+        if destroyed_ids:
+            self._emit("emails-destroyed", destroyed_ids)
+        if new_mail:
+            self._emit("new-mail", new_mail)
+
+    # --------------------------------------------------------------- queries
+
+    def load_query(self, spec: dict, want: int | None = None) -> str:
+        """Ensure the first page of a query is loaded; returns the query key."""
+        key = query_key(spec)
+        want = want or self.page_size
+        self._active_queries[key] = want
+        self.enqueue(PRIO_LOAD, lambda: self._job_load_query(spec, key, 0, want), "query")
+        return key
+
+    def load_more(self, key: str) -> None:
+        q = self.db.get_query(key)
+        if not q or q["complete"]:
+            return
+        position = len(q["ids"])
+        self._active_queries[key] = position + self.page_size
+        self.enqueue(PRIO_LOAD, lambda: self._job_load_query(q["spec"], key, position, self.page_size), "query-more")
+
+    def release_query(self, key: str) -> None:
+        self._active_queries.pop(key, None)
+
+    def _job_load_query(self, spec: dict, key: str, position: int, limit: int) -> None:
+        try:
+            self._fetch_query_page(spec, key, position, limit)
+        except MethodError as e:
+            self._emit("query-failed", key, e.description or e.type)
+            return
+        self._emit("query-updated", key)
+
+    def _fetch_query_page(self, spec: dict, key: str, position: int, limit: int) -> None:
+        session = self.client.session
+        acc = session.account_id
+        req = Request()
+        c_q = req.add("Email/query", {
+            "accountId": acc, "filter": spec["filter"], "sort": spec["sort"],
+            "collapseThreads": spec.get("collapseThreads", True), "position": position, "limit": limit,
+            "calculateTotal": True,
+        })
+        c_e = req.add("Email/get", {"accountId": acc, "properties": ["threadId"],
+                                    "#ids": Request.ref(c_q, "Email/query", "/ids")})
+        c_t = req.add("Thread/get", {"accountId": acc,
+                                     "#ids": Request.ref(c_e, "Email/get", "/list/*/threadId")})
+        c_all = req.add("Email/get", {"accountId": acc, "properties": EMAIL_LIST_PROPERTIES,
+                                      "#ids": Request.ref(c_t, "Thread/get", "/list/*/emailIds")})
+        resp = self.client.send(req)
+        qres = resp.get(c_q)
+        threads = resp.get(c_t)["list"]
+        emails = resp.get(c_all)["list"]
+        self.db.upsert_threads(threads)
+        self.db.upsert_emails(emails)
+        ids = qres["ids"]
+        existing = self.db.get_query(key)
+        if position == 0 or not existing:
+            all_ids = list(ids)
+        else:
+            seen = set(existing["ids"])
+            all_ids = existing["ids"] + [i for i in ids if i not in seen]
+        total = qres.get("total")
+        complete = len(ids) < limit or (total is not None and len(all_ids) >= total)
+        self.db.set_query(key, spec, all_ids, total, qres.get("queryState"),
+                          bool(qres.get("canCalculateChanges")), complete)
+
+    def _refresh_query(self, q: dict) -> None:
+        """Bring a cached query up to date after a sync (queryChanges when possible)."""
+        session = self.client.session
+        acc = session.account_id
+        spec = q["spec"]
+        key = q["key"]
+        if q["can_calculate_changes"] and q["query_state"] and q["ids"]:
+            req = Request()
+            c_qc = req.add("Email/queryChanges", {
+                "accountId": acc, "filter": spec["filter"], "sort": spec["sort"],
+                "collapseThreads": spec.get("collapseThreads", True), "sinceQueryState": q["query_state"],
+                "maxChanges": 500, "upToId": q["ids"][-1] if not q["complete"] else None,
+                "calculateTotal": True,
+            })
+            c_e = req.add("Email/get", {"accountId": acc, "properties": ["threadId"],
+                                        "#ids": Request.ref(c_qc, "Email/queryChanges", "/added/*/id")})
+            c_t = req.add("Thread/get", {"accountId": acc,
+                                         "#ids": Request.ref(c_e, "Email/get", "/list/*/threadId")})
+            c_all = req.add("Email/get", {"accountId": acc, "properties": EMAIL_LIST_PROPERTIES,
+                                          "#ids": Request.ref(c_t, "Thread/get", "/list/*/emailIds")})
+            try:
+                resp = self.client.send(req)
+                qc = resp.get(c_qc)
+                self.db.upsert_threads(resp.get(c_t)["list"])
+                self.db.upsert_emails(resp.get(c_all)["list"])
+                ids = [i for i in q["ids"] if i not in set(qc.get("removed") or [])]
+                for item in sorted(qc.get("added") or [], key=lambda a: a["index"]):
+                    idx = item["index"]
+                    if idx <= len(ids):
+                        ids.insert(idx, item["id"])
+                    elif q["complete"]:
+                        ids.append(item["id"])
+                total = qc.get("total", q["total"])
+                complete = q["complete"] or (total is not None and len(ids) >= total)
+                self.db.set_query(key, spec, ids, total, qc["newQueryState"], True, complete)
+                self._emit("query-updated", key)
+                return
+            except MethodError as e:
+                if e.type not in ("cannotCalculateChanges", "tooManyChanges"):
+                    raise
+        want = max(self._active_queries.get(key, self.page_size), len(q["ids"]))
+        self._fetch_query_page(spec, key, 0, min(want, 250))
+        self._emit("query-updated", key)
+
+    # ---------------------------------------------------------------- bodies
+
+    def fetch_body(self, email_id: str, force: bool = False) -> None:
+        if not force and self.db.get_email_body(email_id):
+            self._emit("body-ready", email_id)
+            return
+        self.enqueue(PRIO_LOAD, lambda: self._job_fetch_body(email_id), "body")
+
+    def _job_fetch_body(self, email_id: str) -> None:
+        acc = self.client.session.account_id
+        try:
+            res = self.client.call("Email/get", {
+                "accountId": acc, "ids": [email_id], "properties": EMAIL_BODY_PROPERTIES,
+                "fetchHTMLBodyValues": True, "fetchTextBodyValues": True, "maxBodyValueBytes": MAX_BODY_VALUE_BYTES,
+            })
+        except MethodError as e:
+            self._emit("body-failed", email_id, e.description or e.type)
+            return
+        if not res["list"]:
+            self._emit("body-failed", email_id, "Message no longer exists")
+            return
+        self.db.set_email_body(res["list"][0])
+        self._emit("body-ready", email_id)
+
+    # ----------------------------------------------------------------- blobs
+
+    def blob_path(self, blob_id: str, name: str) -> Path:
+        safe = "".join(c if c.isalnum() or c in "-_. ()" else "_" for c in (name or "attachment"))[:120]
+        d = attachments_dir() / blob_id
+        return d / (safe or "attachment")
+
+    def fetch_blob(self, blob_id: str, name: str, content_type: str | None,
+                   on_done: Callable[[Path], None], on_error: Callable[[str], None] | None = None) -> None:
+        path = self.blob_path(blob_id, name)
+        if path.exists():
+            self._callback(on_done, path)
+            return
+
+        def work() -> None:
+            try:
+                data = self.client.download(blob_id, name, content_type)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                tmp = path.with_suffix(path.suffix + ".part")
+                tmp.write_bytes(data)
+                tmp.replace(path)
+            except JMAPError as e:
+                log.warning("download %s failed: %s", blob_id, e)
+                self._callback(on_error, str(e))
+                return
+            self._callback(on_done, path)
+
+        self._pool.submit(work)
+
+    def upload(self, data: bytes, content_type: str, on_done: Callable[[dict], None],
+               on_error: Callable[[str], None] | None = None) -> None:
+        def work() -> None:
+            try:
+                res = self.client.upload(data, content_type)
+            except JMAPError as e:
+                self._callback(on_error, str(e))
+                return
+            self._callback(on_done, res)
+
+        self._pool.submit(work)
+
+    # --------------------------------------------------------------- actions
+
+    def perform(self, action: EmailAction | RestoreAction,
+                on_done: Callable[[UndoRecord | None], None] | None = None) -> None:
+        self.enqueue(PRIO_ACTION, lambda: self._job_perform(action, on_done), "action")
+
+    def _job_perform(self, action: EmailAction | RestoreAction, on_done) -> None:
+        acc = self.client.session.account_id
+        ids = list(action.email_ids)
+        emails = self.db.get_emails(ids)
+        originals: dict[str, tuple[dict, dict]] = {}
+        patches: dict[str, dict] = {}
+        deltas: dict[str, tuple[int, int]] = {}
+        fallback = self.roles.get(ROLE_ARCHIVE) or self.roles.get(ROLE_INBOX)
+
+        if isinstance(action, EmailAction) and action.destroy:
+            for eid in ids:
+                e = emails.get(eid)
+                if e:
+                    self._count_delta(deltas, e, {}, remove_only=True)
+            self.db.delete_emails(ids)
+            self.db.adjust_mailbox_counts(deltas)
+            self._emit("emails-destroyed", ids)
+            self._emit("mailboxes-changed")
+            try:
+                res = self.client.call("Email/set", {"accountId": acc, "destroy": ids})
+                check_set_response(res, "destroyed")
+            except (MethodError, SetError) as e:
+                self._emit("action-failed", f"Could not delete: {e.description or e}")
+                self.sync_now()
+            self._callback(on_done, None)
+            return
+
+        for eid in ids:
+            e = emails.get(eid)
+            if not e:
+                continue
+            old_kw = dict(e.get("keywords") or {})
+            old_mb = dict(e.get("mailboxIds") or {})
+            if isinstance(action, RestoreAction):
+                new_kw, new_mb = action.record.originals.get(eid, (old_kw, old_mb))
+            else:
+                new_kw, new_mb = action.apply_to(e, fallback)
+            if new_kw == old_kw and new_mb == old_mb:
+                continue
+            originals[eid] = (old_kw, old_mb)
+            patch: dict[str, Any] = {}
+            for kw in set(old_kw) | set(new_kw):
+                if bool(old_kw.get(kw)) != bool(new_kw.get(kw)):
+                    patch[f"keywords/{kw}"] = True if new_kw.get(kw) else None
+            if set(old_mb) != set(new_mb):
+                if len(new_mb) == 1 and len(old_mb) != 1:
+                    patch["mailboxIds"] = dict(new_mb)
+                else:
+                    for mb in set(old_mb) | set(new_mb):
+                        if bool(old_mb.get(mb)) != bool(new_mb.get(mb)):
+                            patch[f"mailboxIds/{mb}"] = True if new_mb.get(mb) else None
+            patches[eid] = patch
+            self._count_delta(deltas, e, {**e, "keywords": new_kw, "mailboxIds": new_mb})
+            self.db.patch_email(eid, keywords=new_kw, mailbox_ids=new_mb)
+        if not patches:
+            self._callback(on_done, None)
+            return
+        self.db.adjust_mailbox_counts(deltas)
+        self._emit("emails-changed", list(patches))
+        self._emit("mailboxes-changed")
+        try:
+            res = self.client.call("Email/set", {"accountId": acc, "update": patches})
+        except MethodError as e:
+            self._revert(originals)
+            self._emit("action-failed", f"{action.description} failed: {e.description or e.type}")
+            self._callback(on_done, None)
+            return
+        failed = res.get("notUpdated") or {}
+        if failed:
+            self._revert({k: v for k, v in originals.items() if k in failed})
+            first = next(iter(failed.values()))
+            self._emit("action-failed", f"{action.description} failed for {len(failed)} message(s): "
+                                        f"{first.get('description') or first.get('type')}")
+        if res.get("newState"):
+            # Our own change bumped the state; the next sync will notice it anyway.
+            pass
+        record = None
+        if isinstance(action, EmailAction) and action.undoable and originals:
+            record = UndoRecord(action.description, {k: v for k, v in originals.items() if k not in failed})
+        self._callback(on_done, record)
+        self.sync_now()
+
+    def _revert(self, originals: dict[str, tuple[dict, dict]]) -> None:
+        deltas: dict[str, tuple[int, int]] = {}
+        for eid, (kw, mb) in originals.items():
+            e = self.db.get_email(eid)
+            if e:
+                self._count_delta(deltas, e, {**e, "keywords": kw, "mailboxIds": mb})
+            self.db.patch_email(eid, keywords=kw, mailbox_ids=mb)
+        self.db.adjust_mailbox_counts(deltas)
+        self._emit("emails-changed", list(originals))
+        self._emit("mailboxes-changed")
+
+    @staticmethod
+    def _count_delta(deltas: dict[str, tuple[int, int]], old: dict, new: dict, remove_only: bool = False) -> None:
+        old_unread = 0 if (old.get("keywords") or {}).get(KW_SEEN) else 1
+        new_unread = 0 if (new.get("keywords") or {}).get(KW_SEEN) else 1
+        old_mb = {m for m, on in (old.get("mailboxIds") or {}).items() if on}
+        new_mb = set() if remove_only else {m for m, on in (new.get("mailboxIds") or {}).items() if on}
+        for m in old_mb - new_mb:
+            t, u = deltas.get(m, (0, 0))
+            deltas[m] = (t - 1, u - old_unread)
+        for m in new_mb - old_mb:
+            t, u = deltas.get(m, (0, 0))
+            deltas[m] = (t + 1, u + new_unread)
+        for m in old_mb & new_mb:
+            if old_unread != new_unread:
+                t, u = deltas.get(m, (0, 0))
+                deltas[m] = (t, u + (new_unread - old_unread))
+
+    # ------------------------------------------------------------ mailboxes
+
+    def mailbox_set(self, create: dict | None = None, update: dict | None = None, destroy: list[str] | None = None,
+                    on_done: Callable[[dict], None] | None = None,
+                    on_error: Callable[[str], None] | None = None) -> None:
+        def job() -> None:
+            acc = self.client.session.account_id
+            args: dict[str, Any] = {"accountId": acc}
+            if create:
+                args["create"] = create
+            if update:
+                args["update"] = update
+            if destroy:
+                args["destroy"] = destroy
+                args["onDestroyRemoveEmails"] = False
+            try:
+                res = self.client.call("Mailbox/set", args)
+                for kind in ("created", "updated", "destroyed"):
+                    check_set_response(res, kind)
+            except (MethodError, SetError) as e:
+                self._callback(on_error, e.description or getattr(e, "type", str(e)))
+                return
+            self._incremental_sync()
+            self._callback(on_done, res)
+
+        self.enqueue(PRIO_ACTION, job, "mailbox-set")
+
+    def mark_mailbox_read(self, mailbox_id: str) -> None:
+        def job() -> None:
+            acc = self.client.session.account_id
+            res = self.client.call("Email/query", {"accountId": acc, "limit": 5000,
+                                                   "filter": {"inMailbox": mailbox_id, "notKeyword": KW_SEEN}})
+            ids = res.get("ids") or []
+            if not ids:
+                return
+            from .actions import mark_read
+
+            # Emails not in cache: fetch list props first so the local patch works.
+            missing = self.db.missing_email_ids(ids)
+            if missing:
+                got = self.client.call("Email/get", {"accountId": acc, "ids": missing, "properties": EMAIL_LIST_PROPERTIES})
+                self.db.upsert_emails(got["list"])
+            self._job_perform(mark_read(ids, True), None)
+
+        self.enqueue(PRIO_ACTION, job, "mark-mailbox-read")
+
+    def empty_mailbox(self, mailbox_id: str, on_done: Callable[[], None] | None = None) -> None:
+        def job() -> None:
+            acc = self.client.session.account_id
+            res = self.client.call("Email/query", {"accountId": acc, "limit": 5000, "filter": {"inMailbox": mailbox_id}})
+            ids = res.get("ids") or []
+            if ids:
+                from .actions import destroy
+
+                self._job_perform(destroy(ids), None)
+            self._callback(on_done)
+
+        self.enqueue(PRIO_ACTION, job, "empty-mailbox")
+
+    # ------------------------------------------------------- drafts / sending
+
+    def _draft_object(self, draft: dict) -> dict:
+        obj = dict(draft)
+        obj["mailboxIds"] = {self.roles[ROLE_DRAFTS]: True}
+        obj["keywords"] = {KW_DRAFT: True, KW_SEEN: True}
+        return obj
+
+    def save_draft(self, draft: dict, replace_id: str | None,
+                   on_done: Callable[[str], None], on_error: Callable[[str], None] | None = None) -> None:
+        def job() -> None:
+            acc = self.client.session.account_id
+            args: dict[str, Any] = {"accountId": acc, "create": {"draft": self._draft_object(draft)}}
+            if replace_id:
+                args["destroy"] = [replace_id]
+            try:
+                res = self.client.call("Email/set", args)
+                check_set_response(res, "created")
+            except (MethodError, SetError) as e:
+                self._callback(on_error, e.description or getattr(e, "type", str(e)))
+                return
+            new_id = res["created"]["draft"]["id"]
+            if replace_id:
+                self.db.delete_emails([replace_id])
+                self._emit("emails-destroyed", [replace_id])
+            self._incremental_sync()
+            self._callback(on_done, new_id)
+
+        self.enqueue(PRIO_ACTION, job, "save-draft")
+
+    def send_email(self, draft: dict, identity_id: str, replace_id: str | None,
+                   on_done: Callable[[str], None], on_error: Callable[[str], None] | None = None,
+                   in_reply_to_id: str | None = None, forwarded_id: str | None = None) -> None:
+        def job() -> None:
+            session = self.client.session
+            acc = session.account_id
+            drafts = self.roles.get(ROLE_DRAFTS)
+            sent = self.roles.get(ROLE_SENT)
+            req = Request()
+            c_set = req.add("Email/set", {"accountId": acc, "create": {"draft": self._draft_object(draft)}})
+            on_success: dict[str, Any] = {f"keywords/{KW_DRAFT}": None}
+            if drafts:
+                on_success[f"mailboxIds/{drafts}"] = None
+            if sent:
+                on_success[f"mailboxIds/{sent}"] = True
+            c_sub = req.add("EmailSubmission/set", {
+                "accountId": session.submission_account_id,
+                "create": {"sub": {"identityId": identity_id, "emailId": "#draft"}},
+                "onSuccessUpdateEmail": {"#sub": on_success},
+            })
+            c_del = None
+            if replace_id:
+                c_del = req.add("Email/set", {"accountId": acc, "destroy": [replace_id]})
+            try:
+                resp = self.client.send(req)
+                check_set_response(resp.get(c_set), "created")
+                check_set_response(resp.get(c_sub), "created")
+            except (MethodError, SetError) as e:
+                self._callback(on_error, e.description or getattr(e, "type", str(e)))
+                return
+            new_id = resp.get(c_set)["created"]["draft"]["id"]
+            if c_del:
+                self.db.delete_emails([replace_id])
+                self._emit("emails-destroyed", [replace_id])
+            from .actions import EmailAction
+
+            if in_reply_to_id:
+                self._job_perform(EmailAction([in_reply_to_id], "Answered", keyword_changes={"$answered": True},
+                                              undoable=False), None)
+            if forwarded_id:
+                self._job_perform(EmailAction([forwarded_id], "Forwarded", keyword_changes={"$forwarded": True},
+                                              undoable=False), None)
+            self._incremental_sync()
+            self._callback(on_done, new_id)
+
+        self.enqueue(PRIO_ACTION, job, "send")
+
+    # ------------------------------------------------------------ identities
+
+    def refresh_identities(self) -> None:
+        def job() -> None:
+            res = self.client.call("Identity/get", {"accountId": self.client.session.submission_account_id, "ids": None})
+            self.db.set_identities(res["list"])
+            self._emit("identities-changed")
+
+        self.enqueue(PRIO_LOAD, job, "identities")
+
+    def identity_update(self, identity_id: str, patch: dict, on_done: Callable[[], None] | None = None,
+                        on_error: Callable[[str], None] | None = None) -> None:
+        def job() -> None:
+            try:
+                res = self.client.call("Identity/set", {"accountId": self.client.session.submission_account_id,
+                                                        "update": {identity_id: patch}})
+                check_set_response(res, "updated")
+            except (MethodError, SetError) as e:
+                self._callback(on_error, e.description or getattr(e, "type", str(e)))
+                return
+            res = self.client.call("Identity/get", {"accountId": self.client.session.submission_account_id, "ids": None})
+            self.db.set_identities(res["list"])
+            self._emit("identities-changed")
+            self._callback(on_done)
+
+        self.enqueue(PRIO_ACTION, job, "identity-update")
+
+    # ---------------------------------------------------------- masked email
+
+    def refresh_masked(self) -> None:
+        session = self.client.session
+        if not session.has_masked_email:
+            return
+
+        def job() -> None:
+            res = self.client.call("MaskedEmail/get", {"accountId": session.masked_account_id, "ids": None},
+                                   using=["urn:ietf:params:jmap:core", CAP_MASKED_EMAIL])
+            self.db.set_masked_emails(res["list"])
+            self._emit("masked-changed")
+
+        self.enqueue(PRIO_LOAD, job, "masked")
+
+    def masked_set(self, create: dict | None = None, update: dict | None = None,
+                   on_done: Callable[[dict], None] | None = None,
+                   on_error: Callable[[str], None] | None = None) -> None:
+        session = self.client.session
+
+        def job() -> None:
+            args: dict[str, Any] = {"accountId": session.masked_account_id}
+            if create:
+                args["create"] = {"new": create}
+            if update:
+                args["update"] = update
+            try:
+                res = self.client.call("MaskedEmail/set", args, using=["urn:ietf:params:jmap:core", CAP_MASKED_EMAIL])
+                check_set_response(res, "created")
+                check_set_response(res, "updated")
+            except (MethodError, SetError) as e:
+                self._callback(on_error, e.description or getattr(e, "type", str(e)))
+                return
+            got = self.client.call("MaskedEmail/get", {"accountId": session.masked_account_id, "ids": None},
+                                   using=["urn:ietf:params:jmap:core", CAP_MASKED_EMAIL])
+            self.db.set_masked_emails(got["list"])
+            self._emit("masked-changed")
+            created = (res.get("created") or {}).get("new") or {}
+            self._callback(on_done, created)
+
+        self.enqueue(PRIO_ACTION, job, "masked-set")
+
+    # ----------------------------------------------------------- generic run
+
+    def run(self, fn: Callable[[], Any], on_done: Callable[[Any], None] | None = None,
+            on_error: Callable[[str], None] | None = None, prio: int = PRIO_LOAD) -> None:
+        def job() -> None:
+            try:
+                result = fn()
+            except JMAPError as e:
+                self._callback(on_error, str(e))
+                return
+            self._callback(on_done, result)
+
+        self.enqueue(prio, job, getattr(fn, "__name__", "run"))
