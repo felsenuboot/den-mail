@@ -15,7 +15,7 @@ from collections.abc import Callable
 from urllib.parse import unquote
 
 import gi
-from gi.repository import Gio, GLib, Gtk
+from gi.repository import Gdk, Gio, GLib, Gtk
 
 from ..html.sanitize import sanitize_html
 from ..html.totext import html_to_markup, text_to_markup
@@ -25,6 +25,9 @@ log = logging.getLogger(__name__)
 
 HAVE_WEBKIT = False
 if not os.environ.get("FASTMAIL_GTK_NO_WEBKIT"):
+    # WebKitGTK's DMA-BUF renderer intermittently paints nothing on NVIDIA/Wayland
+    # setups; mail bodies are static, so the plain renderer costs us nothing.
+    os.environ.setdefault("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
     try:
         gi.require_version("WebKit", "6.0")
         from gi.repository import WebKit  # noqa: E402
@@ -213,13 +216,23 @@ class MessageBody(Gtk.Box):
         label.set_markup(text_to_markup(text))
         self.has_remote = False
 
-    def show_html(self, html: str, email_id: str, allow_remote: bool) -> None:
+    def show_html(self, html: str, email_id: str, allow_remote: bool, dark: bool = False) -> None:
         self._html = html
         self._email_id = email_id
+        self._allow_remote = allow_remote
+        self._dark = dark
         if HAVE_WEBKIT:
-            result = sanitize_html(html, allow_remote=allow_remote, cid_scheme=f"{CID_SCHEME}://{email_id}/")
+            result = sanitize_html(html, allow_remote=allow_remote, cid_scheme=f"{CID_SCHEME}://{email_id}/",
+                                   dark=dark)
             self.has_remote = result.has_remote_content
             web = self._ensure_web()
+            rgba = Gdk.RGBA()
+            rgba.parse("#1e1e1e" if dark else "#ffffff")
+            web.set_background_color(rgba)
+            if dark:
+                web.add_css_class("dark")
+            else:
+                web.remove_css_class("dark")
             web.load_html(result.html, f"{CID_SCHEME}://{email_id}/")
         else:
             label = self._ensure_label()
@@ -228,4 +241,9 @@ class MessageBody(Gtk.Box):
 
     def allow_remote(self) -> None:
         if self._html is not None and self._email_id is not None:
-            self.show_html(self._html, self._email_id, allow_remote=True)
+            self.show_html(self._html, self._email_id, allow_remote=True, dark=getattr(self, "_dark", False))
+
+    def set_dark(self, dark: bool) -> None:
+        """Re-render the current HTML for a theme change."""
+        if self._html is not None and self._email_id is not None and getattr(self, "_dark", None) != dark:
+            self.show_html(self._html, self._email_id, allow_remote=getattr(self, "_allow_remote", False), dark=dark)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from gi.repository import Adw, Gio, GLib, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 from ..avatars import sender_key
 from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full
@@ -15,14 +15,22 @@ from .widgets import avatar, chip, human_size, open_uri, toast
 
 
 class AttachmentChip(Gtk.Button):
-    def __init__(self, att: dict, on_open: Callable[[dict], None], on_save: Callable[[dict], None]):
+    """One attachment: click opens it, right-click offers Open / Save as / Show in folder."""
+
+    def __init__(self, att: dict, on_open: Callable[[dict, "AttachmentChip"], None],
+                 on_save: Callable[[dict], None], on_folder: Callable[[dict, "AttachmentChip"], None]):
         super().__init__()
+        self.att = att
         self.add_css_class("attachment-chip")
         self.add_css_class("flat")
         box = Gtk.Box(spacing=6)
         icon = "image-x-generic-symbolic" if (att.get("type") or "").startswith("image/") else \
             "fm-attachment-symbolic"
-        box.append(Gtk.Image(icon_name=icon))
+        self.icon = Gtk.Image(icon_name=icon)
+        box.append(self.icon)
+        self.spinner = Adw.Spinner()
+        self.spinner.set_visible(False)
+        box.append(self.spinner)
         name = Gtk.Label(label=att.get("name") or "attachment", ellipsize=3, max_width_chars=28)
         box.append(name)
         size = Gtk.Label(label=human_size(att.get("size")))
@@ -30,11 +38,50 @@ class AttachmentChip(Gtk.Button):
         size.add_css_class("caption")
         box.append(size)
         self.set_child(box)
-        self.set_tooltip_text(f"{att.get('name')} ({att.get('type')}) — click to open, right-click to save")
-        self.connect("clicked", lambda *_: on_open(att))
+        app = default_app_name(att)
+        self.set_tooltip_text(f"Open with {app}" if app else "No application registered for this file type")
+        self.connect("clicked", lambda *_: on_open(att, self))
+        menu = Gio.Menu()
+        menu.append(f"Open with {app}" if app else "Open", "att.open")
+        menu.append("Save as…", "att.save")
+        menu.append("Show in folder", "att.folder")
+        self.popover = Gtk.PopoverMenu.new_from_model(menu)
+        self.popover.set_parent(self)
+        self.popover.set_has_arrow(False)
+        group = Gio.SimpleActionGroup()
+        for name_, fn in (("open", lambda: on_open(att, self)), ("save", lambda: on_save(att)),
+                          ("folder", lambda: on_folder(att, self))):
+            a = Gio.SimpleAction.new(name_, None)
+            a.connect("activate", lambda *_a, fn=fn: fn())
+            group.add_action(a)
+        self.insert_action_group("att", group)
         click = Gtk.GestureClick(button=3)
-        click.connect("pressed", lambda *_: on_save(att))
+        click.connect("pressed", self._on_right_click)
         self.add_controller(click)
+        self.connect("unrealize", lambda *_: self.popover.unparent())
+
+    def _on_right_click(self, _g, _n, x, y) -> None:
+        rect = Gdk.Rectangle()
+        rect.x, rect.y, rect.width, rect.height = int(x), int(y), 1, 1
+        self.popover.set_pointing_to(rect)
+        self.popover.popup()
+
+    def set_busy(self, busy: bool) -> None:
+        self.spinner.set_visible(busy)
+        self.icon.set_visible(not busy)
+        self.set_sensitive(not busy)
+
+
+def default_app_name(att: dict) -> str | None:
+    ctype = att.get("type") or Gio.content_type_guess(att.get("name") or "", None)[0]
+    try:
+        info = Gio.AppInfo.get_default_for_type(ctype or "application/octet-stream", False)
+    except Exception:  # noqa: BLE001
+        info = None
+    if info is None and att.get("name"):
+        guessed = Gio.content_type_guess(att["name"], None)[0]
+        info = Gio.AppInfo.get_default_for_type(guessed, False) if guessed else None
+    return info.get_display_name() if info else None
 
 
 class MessageCard(Gtk.Box):
@@ -96,7 +143,9 @@ class MessageCard(Gtk.Box):
         menu = Gio.Menu()
         menu.append("Mark as unread", f"conv.unread::{self.email_id}")
         menu.append("Show details", f"conv.details::{self.email_id}")
+        menu.append("Toggle dark adaptation", f"conv.colours::{self.email_id}")
         menu.append("Delete this message", f"conv.trash::{self.email_id}")
+        self.force_original_colours = False
         more = Gtk.MenuButton(icon_name="view-more-symbolic", menu_model=menu)
         more.add_css_class("flat")
         actions.append(more)
@@ -107,8 +156,15 @@ class MessageCard(Gtk.Box):
         click.connect("released", self._on_header_click)
         header.add_controller(click)
 
-        # --- body area
+        # --- body area (attachments first, like a real attachment strip)
         self.body_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.attachments = Adw.WrapBox(child_spacing=6, line_spacing=6)
+        self.attachments_expander = Gtk.Expander(label="Attachments")
+        self.attachments_expander.add_css_class("attachments-expander")
+        self.attachments_holder = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.attachments_holder.add_css_class("attachments-row")
+        self.attachments_holder.set_visible(False)
+        self.body_box.append(self.attachments_holder)
         self.banner = Adw.Banner(title="This message loads content from remote servers", button_label="Load")
         self.banner.connect("button-clicked", self._on_allow_remote)
         self.banner.set_revealed(False)
@@ -119,13 +175,6 @@ class MessageCard(Gtk.Box):
         self.body_box.append(self.truncated)
         self.body = MessageBody()
         self.body_box.append(self.body)
-        self.attachments = Adw.WrapBox(child_spacing=6, line_spacing=6)
-        self.attachments.set_margin_start(12)
-        self.attachments.set_margin_end(12)
-        self.attachments.set_margin_top(8)
-        self.attachments.set_margin_bottom(10)
-        self.attachments.set_visible(False)
-        self.body_box.append(self.attachments)
         self.loading = Adw.Spinner()
         self.loading.set_margin_top(12)
         self.loading.set_margin_bottom(12)
@@ -219,7 +268,8 @@ class MessageCard(Gtk.Box):
                 break
         policy = self.view.config.get("load_remote_images", "ask")
         if html:
-            self.body.show_html(html, self.email_id, allow_remote=self.remote_allowed or policy == "always")
+            self.body.show_html(html, self.email_id, allow_remote=self.remote_allowed or policy == "always",
+                                dark=self.wants_dark())
             self.banner.set_revealed(bool(self.body.has_remote) and not self.remote_allowed and policy == "ask")
         elif text is not None:
             self.body.show_text(text)
@@ -229,11 +279,40 @@ class MessageCard(Gtk.Box):
         self.truncated.set_visible(truncated)
         atts = [a for a in full.get("attachments") or []
                 if a.get("disposition") == "attachment" or not a.get("cid")]
+        self._fill_attachments(atts)
+
+    def _fill_attachments(self, atts: list[dict]) -> None:
         while child := self.attachments.get_first_child():
             self.attachments.remove(child)
+        holder = self.attachments_holder
+        while child := holder.get_first_child():
+            holder.remove(child)
+        if self.attachments.get_parent() is not None:
+            self.attachments.get_parent().remove(self.attachments) if isinstance(self.attachments.get_parent(), Gtk.Box) \
+                else self.attachments_expander.set_child(None)
         for a in atts:
-            self.attachments.append(AttachmentChip(a, self.view.open_attachment, self.view.save_attachment))
-        self.attachments.set_visible(bool(atts))
+            self.attachments.append(AttachmentChip(a, self.view.open_attachment, self.view.save_attachment,
+                                                   self.view.show_attachment_folder))
+        if len(atts) > 4:
+            total = sum(int(a.get("size") or 0) for a in atts)
+            self.attachments_expander.set_label(f"{len(atts)} attachments · {human_size(total)}")
+            self.attachments_expander.set_child(self.attachments)
+            self.attachments_expander.set_expanded(False)
+            holder.append(self.attachments_expander)
+        elif atts:
+            holder.append(self.attachments)
+        holder.set_visible(bool(atts))
+
+    def wants_dark(self) -> bool:
+        return self.view.is_dark() and not self.force_original_colours
+
+    def set_dark(self, _dark: bool | None = None) -> None:
+        if self.body_loaded:
+            self.body.set_dark(self.wants_dark())
+
+    def toggle_colours(self) -> None:
+        self.force_original_colours = not self.force_original_colours
+        self.set_dark()
 
     def show_body_error(self, message: str) -> None:
         self.loading.set_visible(False)
@@ -254,7 +333,10 @@ class ConversationView(Adw.NavigationPage):
         self.tree = tree
         self.config = config
         self.avatars = avatars
+        self.style_manager = Adw.StyleManager.get_default()
         self._handlers: list[tuple[object, int]] = []
+        self._handlers.append((self.style_manager,
+                               self.style_manager.connect("notify::dark", lambda *_: self._on_theme_changed())))
         if avatars is not None:
             self._handlers.append((avatars, avatars.connect("avatar-ready", self._on_avatar_ready)))
         self._handlers.append((engine, engine.connect("body-ready", lambda _e, eid: self.on_body_ready(eid))))
@@ -328,6 +410,7 @@ class ConversationView(Adw.NavigationPage):
         group = Gio.SimpleActionGroup()
         for name, fn in (("unread", lambda eid: self.on_email_action("mark-unread", [eid])),
                          ("trash", lambda eid: self.on_email_action("trash", [eid])),
+                         ("colours", lambda eid: self.cards[eid].toggle_colours() if eid in self.cards else None),
                          ("details", lambda eid: self.cards[eid].toggle_details() if eid in self.cards else None)):
             action = Gio.SimpleAction.new(name, GLib.VariantType.new("s"))
             action.connect("activate", lambda _a, param, fn=fn: fn(param.get_string()))
@@ -338,6 +421,13 @@ class ConversationView(Adw.NavigationPage):
         for card in self.cards.values():
             if card.avatar_key == key:
                 card.refresh_avatar()
+
+    def is_dark(self) -> bool:
+        return bool(self.config.get("dark_html", True)) and self.style_manager.get_dark()
+
+    def _on_theme_changed(self) -> None:
+        for card in self.cards.values():
+            card.set_dark()
 
     def detach(self) -> None:
         """Disconnect from engine/avatar signals (for views living in closable windows)."""
@@ -457,12 +547,50 @@ class ConversationView(Adw.NavigationPage):
 
     # -------------------------------------------------------- attachments
 
-    def open_attachment(self, att: dict) -> None:
-        def opened(path: Path) -> None:
-            Gtk.FileLauncher(file=Gio.File.new_for_path(str(path))).launch(self.get_root(), None, None)
+    def open_attachment(self, att: dict, chip: AttachmentChip | None = None) -> None:
+        name = att.get("name") or "attachment"
+        app = default_app_name(att)
+        if chip:
+            chip.set_busy(True)
 
-        self.engine.fetch_blob(att["blobId"], att.get("name") or "attachment", att.get("type"), opened,
-                               lambda m: toast(self, f"Download failed: {m}"))
+        def finish_launch(launcher, res) -> None:
+            if chip:
+                chip.set_busy(False)
+            try:
+                launcher.launch_finish(res)
+            except GLib.Error as e:
+                toast(self, f"Could not open {name}: {e.message}", 6)
+                return
+            toast(self, f"Opened {name} in {app}" if app else f"Opened {name}", 4)
+
+        def opened(path: Path) -> None:
+            Gtk.FileLauncher(file=Gio.File.new_for_path(str(path))).launch(self.get_root(), None, finish_launch)
+
+        def failed(message: str) -> None:
+            if chip:
+                chip.set_busy(False)
+            toast(self, f"Download failed: {message}", 6)
+
+        self.engine.fetch_blob(att["blobId"], name, att.get("type"), opened, failed)
+
+    def show_attachment_folder(self, att: dict, chip: AttachmentChip | None = None) -> None:
+        name = att.get("name") or "attachment"
+        if chip:
+            chip.set_busy(True)
+
+        def done(launcher, res) -> None:
+            if chip:
+                chip.set_busy(False)
+            try:
+                launcher.open_containing_folder_finish(res)
+            except GLib.Error as e:
+                toast(self, f"Could not open folder: {e.message}", 6)
+
+        def fetched(path: Path) -> None:
+            Gtk.FileLauncher(file=Gio.File.new_for_path(str(path))).open_containing_folder(self.get_root(), None, done)
+
+        self.engine.fetch_blob(att["blobId"], name, att.get("type"), fetched,
+                               lambda m: (chip and chip.set_busy(False), toast(self, f"Download failed: {m}", 6)))
 
     def save_attachment(self, att: dict) -> None:
         dialog = Gtk.FileDialog(initial_name=att.get("name") or "attachment")

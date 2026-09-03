@@ -42,9 +42,10 @@ class MailboxObject(GObject.Object):
         elif data:
             self.update(data)
 
-    def update(self, data: dict) -> None:
+    def update(self, data: dict, color_override: int | None = None) -> None:
         self.data = data
         role = data.get("role") or ""
+        color = color_override if color_override is not None and color_override >= 0 else label_color_index(data["id"])
         for prop, value in (
             ("id", data["id"]),
             ("name", data.get("name") or ""),
@@ -53,7 +54,7 @@ class MailboxObject(GObject.Object):
             ("unread", int(data.get("unreadEmails") or 0)),
             ("total", int(data.get("totalEmails") or 0)),
             ("icon_name", ROLE_ICONS.get(role or None, "folder-symbolic") if role else "fm-tag-symbolic"),
-            ("color_index", label_color_index(data["id"])),
+            ("color_index", color),
         ):
             if self.get_property(prop) != value:
                 self.set_property(prop, value)
@@ -100,6 +101,7 @@ class MailboxTree:
         self.by_id: dict[str, MailboxObject] = {}
         self.labels_section = MailboxObject(section_title="Labels")
         self._all: list[dict] = []
+        self.color_overrides: dict[str, int] = {}  # mailbox id -> palette index chosen by the user
 
     def update(self, mailboxes: list[dict]) -> None:
         self._all = mailboxes
@@ -136,13 +138,16 @@ class MailboxTree:
     def _obj(self, data: dict, depth: int) -> MailboxObject:
         obj = self.by_id.get(data["id"])
         if obj is None:
-            obj = MailboxObject(data, depth)
+            obj = MailboxObject(None, depth)
             self.by_id[data["id"]] = obj
-        else:
-            obj.update(data)
-            if obj.depth != depth:
-                obj.depth = depth
+        obj.update(data, self.color_overrides.get(data["id"]))
+        if obj.depth != depth:
+            obj.depth = depth
         return obj
+
+    def refresh(self) -> None:
+        """Re-apply the cached mailbox list (e.g. after a colour override changed)."""
+        self.update(self._all)
 
     @staticmethod
     def _reconcile(store: Gio.ListStore, desired: list[MailboxObject]) -> None:

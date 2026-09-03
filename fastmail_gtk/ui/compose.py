@@ -8,6 +8,7 @@ from collections.abc import Callable
 from gi.repository import Adw, Gio, GLib, Gtk
 
 from ..html.compose import (
+    email_body_text,
     forward_body,
     forward_subject,
     format_address_list,
@@ -16,9 +17,8 @@ from ..html.compose import (
     reply_subject,
     text_to_html,
 )
-from ..html.compose import email_body_text
 from ..models.identity import IdentityObject
-from .widgets import AddressEntry, confirm, human_size, toast
+from .widgets import AddressCompletion, confirm, human_size, toast
 
 AUTOSAVE_SECONDS = 30
 
@@ -28,7 +28,7 @@ class ComposeWindow(Adw.Window):
                  source: dict | None = None, mailto: dict | None = None,
                  on_closed: Callable[["ComposeWindow"], None] | None = None,
                  preferred_identity_id: str | None = None, default_identity_email: str | None = None):
-        super().__init__(transient_for=None, default_width=760, default_height=640, title="New Message")
+        super().__init__(transient_for=None, default_width=820, default_height=680, title="New Message")
         self.parent_window = parent
         self.preferred_identity_id = preferred_identity_id
         self.engine = engine
@@ -42,7 +42,7 @@ class ComposeWindow(Adw.Window):
         self.source = source
         self.on_closed = on_closed
         self.draft_id: str | None = source["id"] if mode == "draft" and source else None
-        self.attachments: list[dict] = []  # {blobId, type, name, size, widget}
+        self.attachments: list[dict] = []  # {blobId, type, name, size}
         self.dirty = False
         self._sending = False
         self._autosave = GLib.timeout_add_seconds(AUTOSAVE_SECONDS, self._autosave_tick)
@@ -54,6 +54,7 @@ class ComposeWindow(Adw.Window):
         self.send_button = Gtk.Button()
         self.send_button.set_child(Adw.ButtonContent(icon_name="fm-send-symbolic", label="Send"))
         self.send_button.add_css_class("suggested-action")
+        self.send_button.set_tooltip_text("Send (Ctrl+Return)")
         self.send_button.connect("clicked", lambda *_: self.send())
         header.pack_end(self.send_button)
         attach = Gtk.Button(icon_name="fm-attachment-symbolic", tooltip_text="Attach files")
@@ -65,82 +66,76 @@ class ComposeWindow(Adw.Window):
         header.pack_end(Gtk.MenuButton(icon_name="view-more-symbolic", menu_model=menu))
         view.add_top_bar(header)
 
-        grid = Gtk.Grid(row_spacing=2, column_spacing=8)
-        grid.set_margin_start(12)
-        grid.set_margin_end(12)
-        grid.set_margin_top(6)
-        row = 0
+        # --- header fields as Adwaita rows
+        fields = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        fields.add_css_class("boxed-list")
+        fields.set_margin_start(12)
+        fields.set_margin_end(12)
+        fields.set_margin_top(6)
+        fields.set_margin_bottom(6)
 
-        # From
-        grid.attach(self._field_label("From"), 0, row, 1, 1)
-        from_box = Gtk.Box(spacing=6, hexpand=True)
         self.identity_list = Gtk.StringList.new([i.display for i in self.identities])
-        self.from_dropdown = Gtk.DropDown(model=self.identity_list, hexpand=True)
-        self.from_dropdown.add_css_class("flat")
-        self.from_dropdown.connect("notify::selected", lambda *_: self._on_identity_changed())
-        from_box.append(self.from_dropdown)
-        self.wildcard_entry = Gtk.Entry(placeholder_text="local-part", width_chars=16)
-        self.wildcard_entry.set_visible(False)
-        self.wildcard_entry.connect("changed", self._mark_dirty)
-        from_box.append(self.wildcard_entry)
-        self.wildcard_domain = Gtk.Label()
-        self.wildcard_domain.set_visible(False)
-        from_box.append(self.wildcard_domain)
-        cc_toggle = Gtk.Button(label="Cc")
-        cc_toggle.add_css_class("flat")
-        cc_toggle.connect("clicked", lambda *_: self._show_row(self.cc_row, self.cc))
-        bcc_toggle = Gtk.Button(label="Bcc")
-        bcc_toggle.add_css_class("flat")
-        bcc_toggle.connect("clicked", lambda *_: self._show_row(self.bcc_row, self.bcc))
-        from_box.append(cc_toggle)
-        from_box.append(bcc_toggle)
-        grid.attach(from_box, 1, row, 1, 1)
-        row += 1
+        self.from_row = Adw.ComboRow(title="From", model=self.identity_list)
+        self.from_row.connect("notify::selected", lambda *_: self._on_identity_changed())
+        fields.append(self.from_row)
+        self.wildcard_row = Adw.EntryRow(title="Address at this domain (local part)")
+        self.wildcard_row.set_visible(False)
+        self.wildcard_row.connect("changed", self._mark_dirty)
+        fields.append(self.wildcard_row)
 
         search = lambda prefix: db.search_addresses(prefix)  # noqa: E731
-        grid.attach(self._field_label("To"), 0, row, 1, 1)
-        self.to = AddressEntry(search, "Recipients")
-        self.to.entry.connect("changed", self._mark_dirty)
-        grid.attach(self.to, 1, row, 1, 1)
-        row += 1
-        self.cc_row = self._field_label("Cc")
-        self.cc = AddressEntry(search, "")
-        self.cc.entry.connect("changed", self._mark_dirty)
-        grid.attach(self.cc_row, 0, row, 1, 1)
-        grid.attach(self.cc, 1, row, 1, 1)
-        row += 1
-        self.bcc_row = self._field_label("Bcc")
-        self.bcc = AddressEntry(search, "")
-        self.bcc.entry.connect("changed", self._mark_dirty)
-        grid.attach(self.bcc_row, 0, row, 1, 1)
-        grid.attach(self.bcc, 1, row, 1, 1)
-        row += 1
-        for w in (self.cc_row, self.cc, self.bcc_row, self.bcc):
-            w.set_visible(False)
-        grid.attach(self._field_label("Subject"), 0, row, 1, 1)
-        self.subject = Gtk.Entry(hexpand=True, placeholder_text="Subject")
-        self.subject.add_css_class("flat")
+        self.to = Adw.EntryRow(title="To")
+        self.to.connect("changed", self._mark_dirty)
+        self._to_completion = AddressCompletion(self.to, search)
+        cc_toggle = Gtk.Button(label="Cc", valign=Gtk.Align.CENTER)
+        cc_toggle.add_css_class("flat")
+        cc_toggle.connect("clicked", lambda *_: self._show_row(self.cc))
+        bcc_toggle = Gtk.Button(label="Bcc", valign=Gtk.Align.CENTER)
+        bcc_toggle.add_css_class("flat")
+        bcc_toggle.connect("clicked", lambda *_: self._show_row(self.bcc))
+        self.to.add_suffix(cc_toggle)
+        self.to.add_suffix(bcc_toggle)
+        fields.append(self.to)
+        self.cc = Adw.EntryRow(title="Cc")
+        self.cc.connect("changed", self._mark_dirty)
+        self._cc_completion = AddressCompletion(self.cc, search)
+        self.cc.set_visible(False)
+        fields.append(self.cc)
+        self.bcc = Adw.EntryRow(title="Bcc")
+        self.bcc.connect("changed", self._mark_dirty)
+        self._bcc_completion = AddressCompletion(self.bcc, search)
+        self.bcc.set_visible(False)
+        fields.append(self.bcc)
+        self.subject = Adw.EntryRow(title="Subject")
         self.subject.connect("changed", self._mark_dirty)
         self.subject.connect("changed", lambda e: self.title_widget.set_title(e.get_text() or "New Message"))
-        grid.attach(self.subject, 1, row, 1, 1)
+        fields.append(self.subject)
 
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        content.append(grid)
-        content.append(Gtk.Separator())
-        self.textview = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, vexpand=True, top_margin=10, bottom_margin=20,
-                                     left_margin=14, right_margin=14)
+        content.append(fields)
+        self.textview = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, vexpand=True, top_margin=12,
+                                     bottom_margin=24, left_margin=18, right_margin=18)
         self.textview.add_css_class("compose-body")
         self.buffer = self.textview.get_buffer()
         self.buffer.connect("changed", self._mark_dirty)
         scrolled = Gtk.ScrolledWindow(child=self.textview, vexpand=True)
-        content.append(scrolled)
+        scrolled.add_css_class("compose-scroller")
+        frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        frame.add_css_class("card")
+        frame.add_css_class("compose-card")
+        frame.set_margin_start(12)
+        frame.set_margin_end(12)
+        frame.set_margin_bottom(12)
+        frame.set_vexpand(True)
+        frame.append(scrolled)
         self.attach_box = Adw.WrapBox(child_spacing=6, line_spacing=6)
         self.attach_box.set_margin_start(12)
         self.attach_box.set_margin_end(12)
-        self.attach_box.set_margin_top(6)
-        self.attach_box.set_margin_bottom(8)
+        self.attach_box.set_margin_top(8)
+        self.attach_box.set_margin_bottom(10)
         self.attach_box.set_visible(False)
-        content.append(self.attach_box)
+        frame.append(self.attach_box)
+        content.append(frame)
         view.set_content(content)
         self.toast_overlay = Adw.ToastOverlay(child=view)
         self.set_content(self.toast_overlay)
@@ -158,16 +153,9 @@ class ComposeWindow(Adw.Window):
         # grab_focus() returns True, which GLib would read as "call me again forever".
         GLib.idle_add(lambda: (widget.grab_focus(), False)[1])
 
-    @staticmethod
-    def _field_label(text: str) -> Gtk.Label:
-        lbl = Gtk.Label(label=text, xalign=0)
-        lbl.add_css_class("compose-field-label")
-        return lbl
-
-    def _show_row(self, label: Gtk.Widget, entry: AddressEntry) -> None:
-        label.set_visible(True)
-        entry.set_visible(True)
-        entry.grab_focus()
+    def _show_row(self, row: Adw.EntryRow) -> None:
+        row.set_visible(True)
+        row.grab_focus()
 
     def _install_actions(self) -> None:
         group = Gio.SimpleActionGroup()
@@ -182,27 +170,26 @@ class ComposeWindow(Adw.Window):
                                            Gtk.NamedAction.new("compose.send")))
         ctrl.add_shortcut(Gtk.Shortcut.new(Gtk.ShortcutTrigger.parse_string("<Control>s"),
                                            Gtk.NamedAction.new("compose.save")))
-        ctrl.add_shortcut(Gtk.Shortcut.new(Gtk.ShortcutTrigger.parse_string("Escape"),
+        ctrl.add_shortcut(Gtk.Shortcut.new(Gtk.ShortcutTrigger.parse_string("<Control>w"),
                                            Gtk.CallbackAction.new(lambda *_: (self.close(), True)[1])))
         self.add_controller(ctrl)
 
     def _identity(self) -> IdentityObject:
-        return self.identities[self.from_dropdown.get_selected()]
+        return self.identities[self.from_row.get_selected()]
 
     def _on_identity_changed(self) -> None:
         ident = self._identity()
-        self.wildcard_entry.set_visible(ident.is_wildcard)
-        self.wildcard_domain.set_visible(ident.is_wildcard)
-        self.wildcard_domain.set_label("@" + ident.domain)
+        self.wildcard_row.set_visible(ident.is_wildcard)
+        self.wildcard_row.set_title(f"Address at @{ident.domain} (local part)" if ident.is_wildcard else "")
         self._mark_dirty()
 
     def _select_identity_for(self, addresses: list[str]) -> None:
         for addr in addresses:
             for i, ident in enumerate(self.identities):
                 if ident.matches(addr):
-                    self.from_dropdown.set_selected(i)
+                    self.from_row.set_selected(i)
                     if ident.is_wildcard:
-                        self.wildcard_entry.set_text(addr.split("@", 1)[0])
+                        self.wildcard_row.set_text(addr.split("@", 1)[0])
                     return
 
     def _own_addresses(self) -> set[str]:
@@ -228,7 +215,7 @@ class ComposeWindow(Adw.Window):
                     seen |= {a.get("email", "").lower() for a in extra}
                 cc = [a for a in (src.get("cc") or []) if a.get("email", "").lower() not in own | seen]
                 if cc:
-                    self._show_row(self.cc_row, self.cc)
+                    self.cc.set_visible(True)
                     self.cc.set_text(format_address_list(cc))
             self.subject.set_text(reply_subject(src.get("subject")))
             self.buffer.set_text(reply_body(src, signature))
@@ -249,10 +236,10 @@ class ComposeWindow(Adw.Window):
             self._select_identity_for([a.get("email", "") for a in src.get("from") or []])
             self.to.set_text(format_address_list(src.get("to")))
             if src.get("cc"):
-                self._show_row(self.cc_row, self.cc)
+                self.cc.set_visible(True)
                 self.cc.set_text(format_address_list(src.get("cc")))
             if src.get("bcc"):
-                self._show_row(self.bcc_row, self.bcc)
+                self.bcc.set_visible(True)
                 self.bcc.set_text(format_address_list(src.get("bcc")))
             self.subject.set_text(src.get("subject") or "")
             self.buffer.set_text(email_body_text(src))
@@ -265,13 +252,13 @@ class ComposeWindow(Adw.Window):
             if self.preferred_identity_id:
                 for i, ident in enumerate(self.identities):
                     if ident.id == self.preferred_identity_id:
-                        self.from_dropdown.set_selected(i)
+                        self.from_row.set_selected(i)
                         signature = ident.text_signature
                         break
             if mailto:
                 self.to.set_text(mailto.get("to", ""))
                 if mailto.get("cc"):
-                    self._show_row(self.cc_row, self.cc)
+                    self.cc.set_visible(True)
                     self.cc.set_text(mailto["cc"])
                 self.subject.set_text(mailto.get("subject", ""))
                 body = mailto.get("body", "")
@@ -318,7 +305,8 @@ class ComposeWindow(Adw.Window):
         name = gfile.get_basename()
         ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
         try:
-            data = open(path, "rb").read()
+            with open(path, "rb") as f:
+                data = f.read()
         except OSError as e:
             toast(self, f"Cannot read {name}: {e}")
             return
@@ -375,7 +363,7 @@ class ComposeWindow(Adw.Window):
     def _from_address(self) -> dict:
         ident = self._identity()
         if ident.is_wildcard:
-            local = self.wildcard_entry.get_text().strip() or "mail"
+            local = self.wildcard_row.get_text().strip() or "mail"
             return {"name": ident.name or None, "email": f"{local}@{ident.domain}"}
         return {"name": ident.name or None, "email": ident.email}
 

@@ -11,6 +11,8 @@ from ..jmap.types import ROLE_JUNK, ROLE_TRASH
 from ..models.mailbox import MailboxObject, MailboxTree
 
 DRAG_PREFIX = "fastmail-gtk-emails:"
+COLOR_NAMES = ["Blue", "Green", "Yellow", "Orange", "Red", "Purple", "Pink", "Teal", "Brown", "Navy", "Violet",
+               "Crimson"]
 
 
 class MailboxRow(Gtk.Box):
@@ -143,6 +145,15 @@ class Sidebar(Adw.NavigationPage):
         section.append("New label", "sidebar.new-label")
         section.append("New sub-label", "sidebar.new-sublabel")
         section.append("Rename…", "sidebar.rename")
+        colours = Gio.Menu()
+        for idx, name in enumerate(COLOR_NAMES):
+            item = Gio.MenuItem.new(name, None)
+            item.set_action_and_target_value("sidebar.color", GLib.Variant("i", idx))
+            colours.append_item(item)
+        auto = Gio.MenuItem.new("Automatic", None)
+        auto.set_action_and_target_value("sidebar.color", GLib.Variant("i", -1))
+        colours.append_item(auto)
+        section.append_submenu("Colour", colours)
         section.append("Delete label", "sidebar.delete")
         self.menu.append_section(None, section)
         section2 = Gio.Menu()
@@ -151,6 +162,16 @@ class Sidebar(Adw.NavigationPage):
         self.popover = Gtk.PopoverMenu.new_from_model(self.menu)
         self.popover.set_parent(self.listview)
         self.popover.set_has_arrow(False)
+        # The list view claims button presses on rows before child gestures see them,
+        # so the context-menu gesture lives on the list itself, in the capture phase.
+        right = Gtk.GestureClick(button=3)
+        right.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        right.connect("pressed", self._on_list_right_click)
+        self.listview.add_controller(right)
+        press = Gtk.GestureLongPress()
+        press.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        press.connect("pressed", lambda g, x, y: self._on_list_right_click(g, 1, x, y))
+        self.listview.add_controller(press)
 
     # ------------------------------------------------------------ actions
 
@@ -167,8 +188,13 @@ class Sidebar(Adw.NavigationPage):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", lambda _a, _p, cb=cb: cb())
             group.add_action(action)
+        color = Gio.SimpleAction.new("color", GLib.VariantType.new("i"))
+        color.connect("activate", lambda _a, p: self._context_mailbox and self.on_color(self._context_mailbox, p.get_int32()))
+        group.add_action(color)
         self.actions = group
         self.insert_action_group("sidebar", group)
+
+    on_color: Callable[[MailboxObject, int], None] = lambda self, mb, idx: None
 
     def _set_action_enabled(self, name: str, enabled: bool) -> None:
         self.actions.lookup_action(name).set_enabled(enabled)
@@ -216,13 +242,6 @@ class Sidebar(Adw.NavigationPage):
         row = MailboxRow()
         expander.set_child(row)
         list_item.set_child(expander)
-        # right-click / long-press context menu
-        click = Gtk.GestureClick(button=3)
-        click.connect("pressed", self._on_right_click, list_item)
-        expander.add_controller(click)
-        press = Gtk.GestureLongPress()
-        press.connect("pressed", lambda g, x, y: self._on_right_click(g, 1, x, y, list_item))
-        expander.add_controller(press)
         # drop target for conversations
         drop = Gtk.DropTarget.new(GObject.TYPE_STRING, Gdk.DragAction.MOVE | Gdk.DragAction.COPY)
         drop.connect("accept", lambda _t, d: True)
@@ -317,20 +336,26 @@ class Sidebar(Adw.NavigationPage):
 
     # ------------------------------------------------------ context menu
 
-    def _on_right_click(self, gesture, _n, x, y, list_item: Gtk.ListItem) -> None:
-        obj = self._mailbox_of(list_item)
+    def _on_list_right_click(self, gesture, _n, x, y) -> None:
+        widget = self.listview.pick(x, y, Gtk.PickFlags.DEFAULT)
+        while widget is not None and not isinstance(widget, MailboxRow):
+            widget = widget.get_parent()
+        obj = widget.obj if widget is not None else None
         if obj is None or obj.is_section:
             return
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+        self.show_context_menu(obj, int(x), int(y))
+
+    def show_context_menu(self, obj: MailboxObject, x: int, y: int) -> None:
         self._context_mailbox = obj
         self._set_action_enabled("rename", not obj.is_system and obj.may("mayRename"))
         self._set_action_enabled("delete", not obj.is_system and obj.may("mayDelete"))
         self._set_action_enabled("new-sublabel", obj.may("mayCreateChild"))
         self._set_action_enabled("mark-read", obj.unread > 0)
         self._set_action_enabled("empty", obj.role in (ROLE_TRASH, ROLE_JUNK) and obj.total > 0)
-        widget = gesture.get_widget()
-        ok, px, py = widget.translate_coordinates(self.listview, x, y)
+        self._set_action_enabled("color", not obj.is_system)
         rect = Gdk.Rectangle()
-        rect.x, rect.y, rect.width, rect.height = int(px), int(py), 1, 1
+        rect.x, rect.y, rect.width, rect.height = x, y, 1, 1
         self.popover.set_pointing_to(rect)
         self.popover.popup()
 

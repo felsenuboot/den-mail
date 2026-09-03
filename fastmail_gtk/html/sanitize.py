@@ -14,6 +14,8 @@ from html import escape
 from html.parser import HTMLParser
 from urllib.parse import quote
 
+from .darkmode import COLOR_ATTRS, declares_dark_support, flip_attr, flip_css
+
 DROP_WITH_CONTENT = {"script", "style_", "iframe", "object", "embed", "applet", "noscript", "template", "head_", "title"}
 DROP_TAG_KEEP_CONTENT = {"form", "html", "body", "head", "meta", "link", "base", "input", "button", "select", "textarea",
                          "svg", "math", "video", "audio", "source", "track", "picture", "canvas", "frame", "frameset"}
@@ -36,6 +38,13 @@ blockquote { margin: 0.5em 0 0.5em 0; padding-left: 0.8em; border-left: 3px soli
 a { color: #1c71d8; }
 """
 
+DARK_CSS = """
+:root { color-scheme: dark; }
+html, body { background: #1e1e1e; color: #e6e6e6; }
+blockquote { border-left-color: #555; color: #bbb; }
+a { color: #78aeed; }
+"""
+
 
 @dataclass
 class SanitizedHtml:
@@ -45,10 +54,11 @@ class SanitizedHtml:
 
 
 class _Sanitizer(HTMLParser):
-    def __init__(self, allow_remote: bool, cid_scheme: str):
+    def __init__(self, allow_remote: bool, cid_scheme: str, dark: bool = False):
         super().__init__(convert_charrefs=False)
         self.allow_remote = allow_remote
         self.cid_scheme = cid_scheme
+        self.dark = dark
         self.out: list[str] = []
         self.skip_depth = 0
         self.skip_tag: str | None = None
@@ -77,12 +87,14 @@ class _Sanitizer(HTMLParser):
         return v
 
     def _fix_style(self, value: str) -> str:
-        if self.allow_remote:
-            return value
-        if CSS_URL_RE.search(value) or CSS_IMPORT_RE.search(value):
-            self.has_remote = True
-        value = CSS_IMPORT_RE.sub("", value)
-        return CSS_URL_RE.sub("none", value)
+        if not self.allow_remote:
+            if CSS_URL_RE.search(value) or CSS_IMPORT_RE.search(value):
+                self.has_remote = True
+            value = CSS_IMPORT_RE.sub("", value)
+            value = CSS_URL_RE.sub("none", value)
+        if self.dark:
+            value = flip_css(value)
+        return value
 
     def _attrs(self, tag: str, attrs) -> str:
         parts = []
@@ -108,6 +120,8 @@ class _Sanitizer(HTMLParser):
                     continue
             elif n == "style":
                 value = self._fix_style(value)
+            elif n in COLOR_ATTRS and self.dark:
+                value = flip_attr(value)
             elif n == "target":
                 continue
             parts.append(f' {escape(n)}="{escape(value, quote=True)}"')
@@ -197,27 +211,33 @@ class _Sanitizer(HTMLParser):
         return "".join(self.out)
 
 
-def sanitize_html(html: str, allow_remote: bool = False, cid_scheme: str = "cid:") -> SanitizedHtml:
+def sanitize_html(html: str, allow_remote: bool = False, cid_scheme: str = "cid:",
+                  dark: bool = False) -> SanitizedHtml:
     """Return a full document safe to load in a JS-less WebKit view.
 
     `cid_scheme` is prefixed to each (URL-quoted) Content-ID, e.g. "fmcid://M123/".
+    With `dark`, colours the message specifies are lightness-flipped (images untouched)
+    unless the message declares its own dark-mode support, in which case WebKit's
+    native `color-scheme: dark` handling is used.
     """
-    parser = _Sanitizer(allow_remote, cid_scheme)
+    native_dark = dark and declares_dark_support(html)
+    parser = _Sanitizer(allow_remote, cid_scheme, dark=dark and not native_dark)
     try:
         parser.feed(html)
         parser.close()
     except Exception:  # noqa: BLE001 - never let a malformed mail break the viewer
         body = f"<pre>{escape(html)}</pre>"
-        return SanitizedHtml(_wrap(body), False, [])
-    return SanitizedHtml(_wrap(parser.finish()), parser.has_remote, parser.cids)
+        return SanitizedHtml(_wrap(body, dark), False, [])
+    return SanitizedHtml(_wrap(parser.finish(), dark), parser.has_remote, parser.cids)
 
 
-def _wrap(body: str) -> str:
-    return f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>{BASE_CSS}</style></head><body>{body}</body></html>'
+def _wrap(body: str, dark: bool = False) -> str:
+    css = BASE_CSS + (DARK_CSS if dark else "")
+    return f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}</style></head><body>{body}</body></html>'
 
 
-def plain_text_to_html_document(text: str) -> str:
+def plain_text_to_html_document(text: str, dark: bool = False) -> str:
     """Render text/plain mail as HTML with quotes styled and links clickable."""
     from .compose import text_to_html  # local import: compose depends on nothing here
 
-    return _wrap(f'<div class="plain">{text_to_html(text)}</div>')
+    return _wrap(f'<div class="plain">{text_to_html(text)}</div>', dark)

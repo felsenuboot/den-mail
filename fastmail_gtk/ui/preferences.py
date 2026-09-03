@@ -52,6 +52,11 @@ class PreferencesDialog(Adw.PreferencesDialog):
         mark = Adw.SwitchRow(title="Mark conversations as read when opened", active=config.get("mark_read_on_open", True))
         mark.connect("notify::active", lambda r, _p: config.set("mark_read_on_open", r.get_active()))
         reading.add(mark)
+        dark_html = Adw.SwitchRow(title="Adapt HTML mail to the dark theme",
+                                  subtitle="Flips the message's own colours; images stay as they are",
+                                  active=config.get("dark_html", True))
+        dark_html.connect("notify::active", lambda r, _p: config.set("dark_html", r.get_active()))
+        reading.add(dark_html)
         page.add(reading)
 
         sync = Adw.PreferencesGroup(title="Sync & notifications")

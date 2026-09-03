@@ -68,6 +68,16 @@ def _run(app, steps: list[str]) -> bool:
             win.set_default_size(int(w), int(h))
         elif cmd == "fullscreen" and win:
             win.fullscreen()
+        elif cmd == "theme" and win:
+            from .ui.preferences import apply_color_scheme
+
+            app.config.set("color_scheme", arg.strip() or "system")
+            apply_color_scheme(app.config)
+        elif cmd == "context-menu" and win:
+            for mb in win.tree.all():
+                if mb.name.lower() == arg.lower():
+                    win.sidebar.show_context_menu(mb, 100, 200)
+                    break
         elif cmd == "maximize" and win:
             win.maximize()
         elif cmd == "quit":

@@ -45,3 +45,27 @@ def test_compose_helpers():
     addrs = parse_address_list("Anna <anna@example.net>, ben@example.net; Chiara Rossi <c@example.net>")
     assert addrs == [{"name": "Anna", "email": "anna@example.net"}, {"name": None, "email": "ben@example.net"},
                      {"name": "Chiara Rossi", "email": "c@example.net"}]
+
+
+def test_dark_mode_flips_colours_but_not_images():
+    from fastmail_gtk.html.darkmode import flip_color_value, flip_css
+    from fastmail_gtk.html.sanitize import sanitize_html
+
+    assert flip_color_value("#ffffff") != "#ffffff"
+    dark_bg = flip_color_value("#ffffff")
+    assert int(dark_bg[1:3], 16) < 0x40  # white became dark
+    light_text = flip_color_value("rgb(0, 0, 0)")
+    assert int(light_text[4:].split(",")[0]) > 0xc0  # black became light
+    orange = flip_color_value("#ff7800")
+    assert orange.startswith("#")  # mid-lightness colours keep their hue (r > g > b)
+    r, g, b = (int(orange[i:i + 2], 16) for i in (1, 3, 5))
+    assert r > g > b
+    css = flip_css("color: black; background: url(https://x/y.png) white; font-family: Arial Black; width: 10px")
+    assert "url(https://x/y.png)" in css and "Arial Black" in css and "width: 10px" in css
+    assert "black;" not in css.split("font-family")[0]
+    html = '<body bgcolor="#FFFFFF"><p style="color:#111">Hi</p><style>td{background:#fff}</style></body>'
+    res = sanitize_html(html, dark=True)
+    assert "color-scheme: dark" in res.html and "#111" not in res.html and "#fff}" not in res.html.lower()
+    native = sanitize_html('<meta name="color-scheme" content="light dark"><p style="color:#111">x</p>', dark=True)
+    assert "#111" in native.html  # message handles dark mode itself
+    assert "color-scheme: dark" in native.html

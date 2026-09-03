@@ -54,6 +54,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.identities: list[dict] = []
         self._pending_select_position: int | None = None
         self.avatars = AvatarService(config)
+        self.tree.color_overrides = {k: int(v) for k, v in (config.get("label_colors", {}) or {}).items()}
         self.sort = dict(config.get("sort", {"key": "newest", "flagged_first": False, "unread_first": False}))
 
         self.toast_overlay = Adw.ToastOverlay()
@@ -194,6 +195,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.sidebar.on_delete = self.delete_label
         self.sidebar.on_mark_read = lambda mb: self.engine.mark_mailbox_read(mb.id)
         self.sidebar.on_empty = self.empty_mailbox
+        self.sidebar.on_color = self.set_label_color
+        self.tree.color_overrides = {k: int(v) for k, v in (self.config.get("label_colors", {}) or {}).items()}
 
         self.model = ThreadListModel(self.db)
         self.model.label_namer = self._label_names
@@ -662,6 +665,21 @@ class MainWindow(Adw.ApplicationWindow):
                 "Delete", True,
                 lambda: self.engine.mailbox_set(destroy=[mb.id],
                                                 on_error=lambda m: self._toast(f"Delete failed: {m}")))
+
+    def set_label_color(self, mb: MailboxObject, index: int) -> None:
+        overrides = dict(self.config.get("label_colors", {}) or {})
+        if index < 0:
+            overrides.pop(mb.id, None)
+        else:
+            overrides[mb.id] = index
+        self.config.set("label_colors", overrides)
+        self.tree.color_overrides = {k: int(v) for k, v in overrides.items()}
+        self.tree.refresh()
+        if self.query_key:
+            self._on_query_updated(self.engine, self.query_key)
+        for t in self.selected:
+            if t.thread_id == self.conversation.thread_id:
+                self.conversation.refresh_thread(t)
 
     def empty_mailbox(self, mb: MailboxObject) -> None:
         confirm(self, f"Empty {mb.name}?", f"All {mb.total} messages will be deleted permanently.", "Empty", True,
