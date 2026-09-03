@@ -17,7 +17,7 @@ build-backend = "setuptools.build_meta"
 packages = ["fastmail_gtk", "fastmail_gtk.jmap", "fastmail_gtk.store", "fastmail_gtk.models", "fastmail_gtk.ui", "fastmail_gtk.html"]
 
 [tool.setuptools.package-data]
-fastmail_gtk = ["style.css"]
+fastmail_gtk = ["style.css", "icons/**/*.svg"]
 
 [tool.ruff]
 line-length = 110

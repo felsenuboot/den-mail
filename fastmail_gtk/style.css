@@ -1,0 +1,138 @@
+/* Sidebar */
+.unread-badge {
+  font-size: 0.8em;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: alpha(@accent_bg_color, 0.18);
+  color: @accent_color;
+}
+.section-row {
+  margin-top: 10px;
+}
+.section-row label.heading {
+  font-size: 0.8em;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.navigation-sidebar row .drop-target,
+.drop-target {
+  background: alpha(@accent_bg_color, 0.2);
+  border-radius: 6px;
+}
+
+/* Thread list */
+.thread-list row {
+  padding: 2px 6px;
+}
+.thread-row .participants {
+  font-weight: 500;
+}
+.thread-row .participants.unread,
+.thread-row .subject.unread {
+  font-weight: 700;
+}
+.thread-row .subject {
+  font-size: 0.95em;
+}
+.thread-row .preview {
+  font-size: 0.9em;
+}
+.thread-row .unread-dot {
+  color: @accent_color;
+}
+.thread-row .flag-icon {
+  color: @warning_color;
+}
+.thread-row .count-chip {
+  font-size: 0.75em;
+  font-weight: 600;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: alpha(currentColor, 0.12);
+}
+.thread-row .label-chips {
+  font-size: 0.78em;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: alpha(@accent_bg_color, 0.14);
+  color: @accent_color;
+}
+
+/* Conversation view */
+.conversation-subject {
+  font-size: 1.35em;
+  font-weight: 700;
+}
+.message-card {
+  border-radius: 12px;
+  background: @card_bg_color;
+  box-shadow: 0 0 0 1px alpha(@card_shade_color, 0.4);
+  margin-bottom: 12px;
+}
+.message-card.collapsed {
+  opacity: 0.85;
+}
+.message-card.unread .from-name {
+  font-weight: 700;
+}
+.message-header {
+  padding: 10px 14px;
+}
+.message-header .from-name {
+  font-weight: 600;
+}
+.message-header .from-email,
+.message-header .date {
+  font-size: 0.88em;
+}
+.message-body {
+  border-top: 1px solid alpha(@card_shade_color, 0.4);
+}
+.message-body .html-body {
+  background: #ffffff;
+  border-radius: 0 0 12px 12px;
+}
+.message-body .message-text {
+  padding: 10px 12px;
+}
+.attachment-chip {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: alpha(currentColor, 0.07);
+}
+.chip {
+  font-size: 0.82em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: alpha(@accent_bg_color, 0.14);
+  color: @accent_color;
+}
+.chip.removable {
+  padding-right: 4px;
+}
+
+/* Compose */
+.compose-header-entry {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+.compose-field-label {
+  min-width: 56px;
+  font-weight: 500;
+  color: alpha(currentColor, 0.65);
+}
+.compose-body {
+  font-size: 1.02em;
+  padding: 8px 12px;
+}
+
+/* Masked email */
+.masked-email-address {
+  font-family: monospace;
+}
+.state-enabled { color: @success_color; }
+.state-disabled { color: @warning_color; }
+.state-deleted { color: @error_color; }
+.state-pending { color: alpha(currentColor, 0.6); }

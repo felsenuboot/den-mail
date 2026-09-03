@@ -178,7 +178,8 @@ class Database:
         with self._write_lock:
             c = self.conn()
             for e in emails:
-                existing = c.execute("SELECT json, body_json FROM emails WHERE id=?", (e["id"],)).fetchone()
+                existing = c.execute("SELECT json, body_json, body_fetched_at FROM emails WHERE id=?",
+                                     (e["id"],)).fetchone()
                 merged = e
                 body_json = None
                 if existing:

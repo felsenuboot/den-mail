@@ -18,6 +18,21 @@ from .client import AuthError, JMAPClient, JMAPError
 log = logging.getLogger(__name__)
 
 
+def _abort_response(resp) -> None:
+    """Interrupt a blocking readline() in another thread.
+
+    Closing the response would block on the buffered reader's lock, so shut
+    the socket down instead; the reader then sees EOF and exits.
+    """
+    import socket
+
+    try:
+        sock = resp.fp.raw._sock  # http.client wraps the socket in a BufferedReader
+        sock.shutdown(socket.SHUT_RDWR)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 class PushListener(threading.Thread):
     def __init__(
         self,
@@ -41,10 +56,7 @@ class PushListener(threading.Thread):
         with self._lock:
             resp = self._resp
         if resp is not None:
-            try:
-                resp.close()
-            except Exception:  # noqa: BLE001
-                pass
+            _abort_response(resp)
 
     def _set_status(self, connected: bool) -> None:
         if connected != self.connected:
@@ -79,6 +91,7 @@ class PushListener(threading.Thread):
             finally:
                 with self._lock:
                     self._resp = None
+                _abort_response(resp)
                 try:
                     resp.close()
                 except Exception:  # noqa: BLE001

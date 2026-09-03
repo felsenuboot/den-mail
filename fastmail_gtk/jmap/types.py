@@ -20,11 +20,11 @@ ROLE_JUNK = "junk"
 ROLE_TRASH = "trash"
 ROLE_ORDER = [ROLE_INBOX, ROLE_DRAFTS, ROLE_SENT, ROLE_ARCHIVE, ROLE_JUNK, ROLE_TRASH]
 ROLE_ICONS = {
-    ROLE_INBOX: "mail-inbox-symbolic",
-    ROLE_ARCHIVE: "mail-archive-symbolic",
-    ROLE_DRAFTS: "mail-drafts-symbolic",
-    ROLE_SENT: "mail-sent-symbolic",
-    ROLE_JUNK: "mail-mark-junk-symbolic",
+    ROLE_INBOX: "fm-inbox-symbolic",
+    ROLE_ARCHIVE: "fm-archive-symbolic",
+    ROLE_DRAFTS: "fm-drafts-symbolic",
+    ROLE_SENT: "fm-sent-symbolic",
+    ROLE_JUNK: "fm-junk-symbolic",
     ROLE_TRASH: "user-trash-symbolic",
     None: "folder-symbolic",
 }

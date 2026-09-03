@@ -1,0 +1,103 @@
+# Fastmail GTK
+
+A native Fastmail client for GNOME, built on JMAP, GTK4 and libadwaita.
+
+- Three-pane, adaptive layout (sidebar, conversation list, conversation view)
+- Labels the way Fastmail does them: a message can live in several mailboxes,
+  labels nest, and you can drag conversations onto them
+- Cache-first: everything you have looked at is in a local SQLite database, so
+  switching mailboxes is instant and the app works offline for reading
+- Push updates over Fastmail's EventSource stream, with polling as fallback
+- Optimistic actions with undo (archive, delete, spam, flag, read, labels, move)
+- HTML mail rendered by WebKitGTK with scripts stripped, remote content blocked
+  until you allow it, and inline images served locally
+- Compose, reply, reply-all, forward, drafts with autosave, attachments
+- Send from any identity, including wildcard `*@yourdomain` identities
+- Masked Email management (create, block, restore, delete)
+- Search with `from:`, `to:`, `subject:`, `is:unread`, `is:flagged`,
+  `has:attachment`, `before:`/`after:` operators, scoped to a mailbox or all mail
+- Desktop notifications for new mail, `mailto:` handler, keyboard shortcuts
+
+## Requirements
+
+Arch Linux package names; other distributions have equivalents.
+
+```
+sudo pacman -S --needed python-gobject gtk4 libadwaita libsecret webkitgtk-6.0
+```
+
+WebKitGTK is optional. Without it, HTML mail is converted to formatted text.
+
+## Running
+
+```
+git clone git@github.com:felsenuboot/fastmail-gtk.git
+cd fastmail-gtk
+./bin/fastmail-gtk          # run from the checkout
+./install.sh                # launcher, desktop entry and icon for your user
+```
+
+On first start the app asks for a Fastmail API token. Create one under
+*Settings → Privacy & Security → API tokens* with the **Mail**, **Submission**
+and **Masked Email** scopes. The token is stored in your keyring via libsecret.
+
+## Keyboard shortcuts
+
+| Keys | Action |
+| --- | --- |
+| `j` / `k`, arrows | next / previous conversation |
+| `Return` / `o` | open conversation (narrow layout) |
+| `c`, `Ctrl+N` | new message |
+| `r` / `a` / `f` | reply / reply all / forward |
+| `e` | archive |
+| `#`, `Delete` | delete |
+| `!` | mark as spam |
+| `s` | flag / unflag |
+| `Shift+U` / `Shift+I` | mark unread / read |
+| `l` / `v` | labels / move to |
+| `/`, `Ctrl+F` | search |
+| `F5`, `Ctrl+R` | refresh |
+| `Ctrl+Return` | send (compose) |
+| `Ctrl+S` | save draft (compose) |
+| `Ctrl+?` | shortcuts dialog |
+
+## Development
+
+Everything network-related is exercised against an in-process fake JMAP server
+(`tests/fake_server.py`) that implements the parts of RFC 8620/8621 and the
+Masked Email extension the client uses.
+
+```
+python -m venv --system-site-packages .venv && .venv/bin/pip install pytest
+.venv/bin/python -m pytest -q
+
+# Run the UI against the fake server
+python -m tests.fake_server 18081 &
+FASTMAIL_GTK_SESSION_URL=http://127.0.0.1:18081/session FASTMAIL_GTK_TOKEN=fake-token \
+  XDG_DATA_HOME=/tmp/fm/data XDG_CONFIG_HOME=/tmp/fm/config ./bin/fastmail-gtk
+```
+
+`FASTMAIL_GTK_AUTOPILOT="sleep 3; select 0; action win.reply"` drives the UI
+from a script (see `fastmail_gtk/autopilot.py`), which is how the screenshots in
+development are taken inside a headless `cage` compositor.
+
+Useful environment variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `FASTMAIL_GTK_TOKEN` | use this token instead of the keyring |
+| `FASTMAIL_GTK_SESSION_URL` | JMAP session URL (default `https://api.fastmail.com/jmap/session`) |
+| `FASTMAIL_GTK_DEBUG=1` | log every JMAP request |
+| `FASTMAIL_GTK_NO_WEBKIT=1` | force the text renderer for HTML mail |
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together, and the
+[issue tracker](https://github.com/felsenuboot/fastmail-gtk/issues) for ideas
+and open questions (for example, alias creation has no public JMAP API yet).
+
+## Credits
+
+Some symbolic icons are copied from the
+[Adwaita icon theme](https://gitlab.gnome.org/GNOME/adwaita-icon-theme)
+(CC BY-SA 3.0 / LGPL) so the app renders correctly with any icon theme.
+
+MIT licensed.

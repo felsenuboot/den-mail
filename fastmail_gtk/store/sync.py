@@ -927,7 +927,7 @@ class SyncEngine(GObject.Object):
 
         self.enqueue(PRIO_LOAD, job, "masked")
 
-    def masked_set(self, create: dict | None = None, update: dict | None = None,
+    def masked_set(self, create: dict | None = None, update: dict | None = None, destroy: list[str] | None = None,
                    on_done: Callable[[dict], None] | None = None,
                    on_error: Callable[[str], None] | None = None) -> None:
         session = self.client.session
@@ -938,10 +938,13 @@ class SyncEngine(GObject.Object):
                 args["create"] = {"new": create}
             if update:
                 args["update"] = update
+            if destroy:
+                args["destroy"] = destroy
             try:
                 res = self.client.call("MaskedEmail/set", args, using=["urn:ietf:params:jmap:core", CAP_MASKED_EMAIL])
                 check_set_response(res, "created")
                 check_set_response(res, "updated")
+                check_set_response(res, "destroyed")
             except (MethodError, SetError) as e:
                 self._callback(on_error, e.description or getattr(e, "type", str(e)))
                 return

@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass, field
 from html import escape
 from html.parser import HTMLParser
+from urllib.parse import quote
 
 DROP_WITH_CONTENT = {"script", "style_", "iframe", "object", "embed", "applet", "noscript", "template", "head_", "title"}
 DROP_TAG_KEEP_CONTENT = {"form", "html", "body", "head", "meta", "link", "base", "input", "button", "select", "textarea",
@@ -65,7 +66,7 @@ class _Sanitizer(HTMLParser):
         if low.startswith("cid:"):
             cid = v[4:].strip("<>")
             self.cids.append(cid)
-            return f"{self.cid_scheme}:{cid}"
+            return f"{self.cid_scheme}{quote(cid, safe='')}"
         if low.startswith("data:"):
             return v
         if REMOTE_RE.match(v):
@@ -196,8 +197,11 @@ class _Sanitizer(HTMLParser):
         return "".join(self.out)
 
 
-def sanitize_html(html: str, allow_remote: bool = False, cid_scheme: str = "cid") -> SanitizedHtml:
-    """Return a full document safe to load in a JS-less WebKit view."""
+def sanitize_html(html: str, allow_remote: bool = False, cid_scheme: str = "cid:") -> SanitizedHtml:
+    """Return a full document safe to load in a JS-less WebKit view.
+
+    `cid_scheme` is prefixed to each (URL-quoted) Content-ID, e.g. "fmcid://M123/".
+    """
     parser = _Sanitizer(allow_remote, cid_scheme)
     try:
         parser.feed(html)
