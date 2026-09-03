@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk
 
 from ..jmap.types import ROLE_JUNK, ROLE_TRASH
 from ..models.mailbox import MailboxObject, MailboxTree
@@ -141,7 +141,7 @@ class Sidebar(Adw.NavigationPage):
 
         self._install_actions()
         self.popover = Gtk.PopoverMenu.new_from_model(Gio.Menu())
-        self.popover.set_parent(self.listview)
+        self.popover.set_parent(self)
         self.popover.set_has_arrow(False)
         # The list view claims button presses on rows before child gestures see them,
         # so the context-menu gesture lives on the list itself, in the capture phase.
@@ -363,15 +363,22 @@ class Sidebar(Adw.NavigationPage):
         return menu
 
     def show_context_menu(self, obj: MailboxObject, x: int, y: int) -> None:
+        """x, y in list view coordinates.  The popover is parented to the page, not the
+        list view inside its scrolled window, so it can use the whole pane's height
+        instead of being shrunk into a scrolled box near the bottom (#29)."""
         self._context_mailbox = obj
         # A fresh popover per menu: swapping the model on a realised PopoverMenu keeps its old size.
         old = self.popover
         self.popover = Gtk.PopoverMenu.new_from_model(self._build_context_menu(obj))
-        self.popover.set_parent(self.listview)
+        self.popover.set_parent(self)
         self.popover.set_has_arrow(False)
+        # to the right of the pointer: a tall menu then slides up to fit instead of shrinking
+        self.popover.set_position(Gtk.PositionType.RIGHT)
         self.popover.connect("closed", lambda p: GLib.idle_add(lambda: (p.unparent(), False)[1]))
+        ok, point = self.listview.compute_point(self, Graphene.Point().init(x, y))
         rect = Gdk.Rectangle()
-        rect.x, rect.y, rect.width, rect.height = x, y, 1, 1
+        rect.x, rect.y = (int(point.x), int(point.y)) if ok else (x, y)
+        rect.width = rect.height = 1
         self.popover.set_pointing_to(rect)
         self.popover.popup()
         if old is not None and old.get_parent() is not None and not old.get_visible():

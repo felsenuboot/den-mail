@@ -105,9 +105,11 @@ def _run(app, steps: list[str]) -> bool:
             app.config.set("color_scheme", arg.strip() or "system")
             apply_color_scheme(app.config)
         elif cmd == "context-menu" and win:
+            name, *coords = arg.rsplit(" ", 2) if arg.count(" ") >= 2 else [arg]
+            x, y = (int(coords[0]), int(coords[1])) if coords else (100, 200)
             for mb in win.tree.all():
-                if mb.name.lower() == arg.lower():
-                    win.sidebar.show_context_menu(mb, 100, 200)
+                if mb.name.lower() == name.lower():
+                    win.sidebar.show_context_menu(mb, x, y)
                     break
         elif cmd == "thread-menu" and win:
             idx = int(arg)
