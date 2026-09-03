@@ -228,10 +228,19 @@ class MainWindow(Adw.ApplicationWindow):
         self.main = Adw.NavigationSplitView(sidebar=self.sidebar, content=inner_page, min_sidebar_width=200,
                                             max_sidebar_width=300, sidebar_width_fraction=0.2)
         self.stack.add_named(self.main, "main")
-        bp1 = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 1100sp"))
+        # The panes' minimum widths are sidebar 200, thread list 300 and conversation
+        # ~412 (its header bar), measured with the autopilot "measure" command.  Three
+        # panes therefore need 912sp, so the sidebar folds away below 920sp and a
+        # half-screen tile on a 1920px display still shows all three; below 720sp the
+        # thread list and the conversation share one pane too (#27).
+        # When the sidebar folds away, show the mail, not the sidebar: a mailbox is
+        # always selected and the back button leads to the sidebar.
+        bp1 = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 920sp"))
         bp1.add_setter(self.main, "collapsed", True)
+        bp1.add_setter(self.main, "show-content", True)
         bp2 = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 720sp"))
         bp2.add_setter(self.main, "collapsed", True)
+        bp2.add_setter(self.main, "show-content", True)
         bp2.add_setter(self.inner, "collapsed", True)
         self.add_breakpoint(bp1)
         self.add_breakpoint(bp2)

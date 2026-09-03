@@ -36,6 +36,22 @@ WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 \
 
 `wtype` works inside the cage session for key presses.
 
+Cage fullscreens every window to its 1280x720 headless output, so to test a
+particular window size (breakpoints, narrow layouts) run a rootful Xwayland
+inside cage and let the app pick its own size on X11, where nothing maximises it:
+
+```
+WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 cage -- sh -c '
+  Xwayland :97 -geometry 1020x700 & sleep 2
+  GDK_BACKEND=x11 DISPLAY=:97 DEN_MAIL_AUTOPILOT="sleep 1; resize 1020 700; sleep 3; select 1; sleep 3; measure" ./bin/den-mail &
+  sleep 9; grim shot.png; kill %2 %1'
+```
+
+The autopilot `measure [threshold]` step logs the window's real size, which split
+views are collapsed, the minimum width of each pane and every descendant wider
+than the threshold, which is how to find the widget that keeps a pane from
+shrinking below a breakpoint.
+
 ## Environment variables
 
 | Variable | Purpose |

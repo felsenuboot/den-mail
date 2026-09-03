@@ -364,17 +364,21 @@ class ThreadList(Adw.NavigationPage):
     def _build_action_bar(self) -> Gtk.ActionBar:
         bar = Gtk.ActionBar(revealed=False)
         bar.add_css_class("selection-bar")
-        self.selection_count = Gtk.Label(label="0 selected")
+        # Kept narrow on purpose: a hidden action bar still reserves its width, and the
+        # list must be able to shrink to the split view's 300sp minimum (#27).
+        self.selection_count = Gtk.Label(label="0 selected", ellipsize=3)
         self.selection_count.add_css_class("dim-label")
         bar.pack_start(self.selection_count)
         all_btn = Gtk.Button(label="All", action_name="win.select-all", tooltip_text="Select all (Ctrl+A)")
         bar.pack_start(all_btn)
+        more = Gio.Menu()
+        more.append("Mark as read", "win.mark-read")
+        more.append("Mark as unread", "win.mark-unread")
+        more.append("Flag", "win.flag")
+        more.append("Mark as spam", "win.junk")
+        bar.pack_end(Gtk.MenuButton(icon_name="view-more-symbolic", menu_model=more, tooltip_text="More"))
         for icon, action, tip in (("fm-archive-symbolic", "win.archive", "Archive (e)"),
                                   ("user-trash-symbolic", "win.trash", "Delete (#)"),
-                                  ("fm-junk-symbolic", "win.junk", "Spam (!)"),
-                                  ("fm-mail-read-symbolic", "win.mark-read", "Mark as read (Shift+I)"),
-                                  ("fm-mail-unread-symbolic", "win.mark-unread", "Mark as unread (Shift+U)"),
-                                  ("fm-star-symbolic", "win.flag", "Flag (s)"),
                                   ("fm-tag-symbolic", "win.labels", "Labels (l)"),
                                   ("folder-symbolic", "win.move", "Move to (v)")):
             bar.pack_end(Gtk.Button(icon_name=icon, action_name=action, tooltip_text=tip))

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import ClassVar
 
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
 from .. import launch
 from ..avatars import sender_key
@@ -123,7 +123,7 @@ class MessageCard(Gtk.Box):
         self.from_email.add_css_class("from-email")
         self.from_email.add_css_class("dim-label")
         line1.append(self.from_email)
-        self.date = Gtk.Label(label=format_date_long(email.get("receivedAt") or ""), xalign=1)
+        self.date = Gtk.Label(label=format_date_long(email.get("receivedAt") or ""), xalign=1, ellipsize=3)
         self.date.add_css_class("date")
         self.date.add_css_class("dim-label")
         line1.append(self.date)
@@ -150,6 +150,7 @@ class MessageCard(Gtk.Box):
         self.light_toggle.set_visible(False)
         self.light_toggle.connect("toggled", lambda b: self._set_original_colours(b.get_active()))
         actions.append(self.light_toggle)
+        self.wide_only: list[Gtk.Widget] = [self.from_email]  # hidden when the pane is narrow
         for icon, tip, mode in (("fm-reply-symbolic", "Reply", "reply"),
                                 ("fm-reply-all-symbolic", "Reply all", "reply-all"),
                                 ("fm-forward-symbolic", "Forward", "forward")):
@@ -157,7 +158,11 @@ class MessageCard(Gtk.Box):
             b.add_css_class("flat")
             b.connect("clicked", lambda _b, m=mode: self.view.on_compose(m, self.email_id))
             actions.append(b)
+            if mode != "reply":
+                self.wide_only.append(b)
         menu = Gio.Menu()
+        menu.append("Reply all", f"conv.reply-all::{self.email_id}")
+        menu.append("Forward", f"conv.forward::{self.email_id}")
         menu.append("Mark as unread", f"conv.unread::{self.email_id}")
         menu.append("Show details", f"conv.details::{self.email_id}")
         menu.append("Toggle dark adaptation", f"conv.colours::{self.email_id}")
@@ -175,6 +180,7 @@ class MessageCard(Gtk.Box):
         header.append(actions)
         self.header = header
         self.append(header)
+        self.set_compact(view.compact)
         click = Gtk.GestureClick(button=1)
         click.connect("released", self._on_header_click)
         header.add_controller(click)
@@ -204,6 +210,12 @@ class MessageCard(Gtk.Box):
         self._fill_summary()
         self._fill_details()
         self.set_expanded(expanded, initial=True)
+
+    def set_compact(self, compact: bool) -> None:
+        """Narrow pane: hide the sender address and the per-message Reply all / Forward buttons
+        (both stay reachable from the message menu)."""
+        for w in self.wide_only:
+            w.set_visible(not compact)
 
     def refresh_avatar(self) -> None:
         avatars = getattr(self.view, "avatars", None)
@@ -383,7 +395,8 @@ class RemoteContentBar(Gtk.Revealer):
         self.label = Gtk.Label(label="This message loads content from remote servers", xalign=0, hexpand=True,
                                ellipsize=3)
         box.append(self.label)
-        self.trust_button = Gtk.Button(label="Always from sender")
+        self.trust_label = Gtk.Label(label="Always from sender", ellipsize=3)
+        self.trust_button = Gtk.Button(child=self.trust_label)
         self.trust_button.add_css_class("flat")
         self.trust_button.connect("clicked", on_trust)
         box.append(self.trust_button)
@@ -394,7 +407,7 @@ class RemoteContentBar(Gtk.Revealer):
         self.set_child(box)
 
     def set_sender(self, name: str) -> None:
-        self.trust_button.set_label(f"Always from {name}" if name else "Always from sender")
+        self.trust_label.set_label(f"Always from {name}" if name else "Always from sender")
         self.trust_button.set_tooltip_text("Remember this sender and load remote content automatically")
 
     def set_revealed(self, revealed: bool) -> None:
@@ -402,6 +415,10 @@ class RemoteContentBar(Gtk.Revealer):
 
 
 class ConversationView(Adw.NavigationPage):
+    # Set by the breakpoint bin around the content when the pane is narrow; message cards
+    # then drop their secondary buttons so the pane can shrink to the header bar's width.
+    compact = GObject.Property(type=bool, default=False)
+
     def __init__(self, db, engine, tree, config, on_compose: Callable[[str, str], None],
                  on_email_action: Callable[[str, list[str]], None], avatars=None):
         super().__init__(title="Conversation", tag="conversation")
@@ -479,13 +496,23 @@ class ConversationView(Adw.NavigationPage):
         clamp = Adw.Clamp(maximum_size=980, tightening_threshold=800, child=self.content)
         self.scrolled.set_child(clamp)
         self.stack.add_named(self.scrolled, "thread")
-        view.set_content(self.stack)
+        # The bin decouples the pane's minimum width from the cards' natural layout: below
+        # the breakpoint the cards switch to their compact form, which fits the bin's request.
+        content_bin = Adw.BreakpointBin(width_request=360, height_request=240)
+        content_bin.set_child(self.stack)
+        compact_bp = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 580sp"))
+        compact_bp.add_setter(self, "compact", True)
+        content_bin.add_breakpoint(compact_bp)
+        view.set_content(content_bin)
+        self.connect("notify::compact", lambda *_: [c.set_compact(self.compact) for c in self.cards.values()])
         self.set_child(view)
         self._install_actions()
 
     def _install_actions(self) -> None:
         group = Gio.SimpleActionGroup()
         for name, fn in (("unread", lambda eid: self.on_email_action("mark-unread", [eid])),
+                         ("reply-all", lambda eid: self.on_compose("reply-all", eid)),
+                         ("forward", lambda eid: self.on_compose("forward", eid)),
                          ("trash", lambda eid: self.on_email_action("trash", [eid])),
                          ("colours", lambda eid: self.cards[eid].toggle_colours() if eid in self.cards else None),
                          ("trust", lambda eid: self.cards[eid]._on_trust_sender() if eid in self.cards else None),

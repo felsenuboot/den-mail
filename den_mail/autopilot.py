@@ -119,6 +119,8 @@ def _run(app, steps: list[str]) -> bool:
                 win._on_thread_context_menu(item, 200, 80 + idx * 73)
         elif cmd == "maximize" and win:
             win.maximize()
+        elif cmd == "measure" and win:
+            _log_min_widths(win, int(arg) if arg.strip() else 250)
         elif cmd == "quit":
             app.quit()
             return False
@@ -128,3 +130,33 @@ def _run(app, steps: list[str]) -> bool:
         log.exception("autopilot step %r failed", step)
     GLib.timeout_add(delay, _run, app, steps)
     return False
+
+
+def _log_min_widths(win, threshold: int) -> None:
+    """Log the minimum width of each pane and of every descendant wider than `threshold`.
+
+    Used to find which widget keeps a pane from shrinking below a breakpoint."""
+    from gi.repository import Gtk
+
+    def min_w(widget) -> int:
+        return widget.measure(Gtk.Orientation.HORIZONTAL, -1)[0]
+
+    log.info("measure: window %dx%d (scale %d, collapsed main=%s inner=%s); min widths: window %d, main %d, "
+             "inner %d, sidebar %d, threadlist %d, conversation %d",
+             win.get_width(), win.get_height(), win.get_scale_factor(), win.main.get_collapsed(),
+             win.inner.get_collapsed(), min_w(win), min_w(win.main), min_w(win.inner), min_w(win.sidebar),
+             min_w(win.threadlist), min_w(win.conversation))
+
+    def walk(widget, depth: int) -> None:
+        w = min_w(widget)
+        if w >= threshold:
+            name = type(widget).__name__
+            css = " ".join(c for c in widget.get_css_classes() if c) or "-"
+            log.info("measure: %s%s min=%d css=%s", "  " * depth, name, w, css)
+        child = widget.get_first_child()
+        while child is not None:
+            walk(child, depth + 1)
+            child = child.get_next_sibling()
+
+    for pane in (win.sidebar, win.threadlist, win.conversation):
+        walk(pane, 0)
