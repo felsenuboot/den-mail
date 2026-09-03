@@ -625,6 +625,7 @@ class ConversationView(Adw.NavigationPage):
     def _on_theme_changed(self) -> None:
         for card in self.cards.values():
             card.set_dark()
+            card.refresh_avatar()   # dark logos get a light plate only on the dark theme
 
     def detach(self) -> None:
         """Disconnect from engine/avatar signals (for views living in closable windows)."""

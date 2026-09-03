@@ -20,7 +20,8 @@ from time import time
 import gi
 
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import Gdk, GdkPixbuf, Gio, GLib, GObject  # noqa: E402
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject  # noqa: E402
 
 from .config import cache_dir  # noqa: E402
 
@@ -30,6 +31,7 @@ NEGATIVE_TTL = 7 * 24 * 3600
 MAX_BYTES = 1_000_000
 MIN_SIZE = 16
 TARGET_SIZE = 128
+DARK_LOGO_LUMA = 0.35   # mean luminance below which a logo gets a light plate on the dark theme
 USER_AGENT = "Mozilla/5.0 (X11; Linux) den-mail avatar fetcher"
 BIMI_URL_RE = re.compile(r"\bl=([^;\s]+)")
 # second-level public suffixes where the registrable domain has three labels
@@ -60,7 +62,8 @@ class AvatarService(GObject.Object):
         self.config = config
         self.dir: Path = cache_dir() / "avatars"
         self.dir.mkdir(parents=True, exist_ok=True)
-        self._mem: dict[str, Gdk.Texture | None] = {}
+        # key -> (texture, plated texture for dark themes or None)
+        self._mem: dict[str, tuple[Gdk.Texture, Gdk.Texture | None] | None] = {}
         self._pending: set[str] = set()
         self._lock = threading.Lock()
         self._pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="avatar")
@@ -82,13 +85,22 @@ class AvatarService(GObject.Object):
         if key is None:
             return None
         if key in self._mem:
-            return self._mem[key]
+            return self._pick(self._mem[key])
         with self._lock:
             if key in self._pending:
                 return None
             self._pending.add(key)
         self._pool.submit(self._fetch, key)
         return None
+
+    @staticmethod
+    def _pick(entry):
+        if entry is None:
+            return None
+        plain, plated = entry
+        if plated is not None and Adw.StyleManager.get_default().get_dark():
+            return plated
+        return plain
 
     def cached_path(self, email: str | None) -> Path | None:
         """Path of the cached logo file for the sender's domain, if any."""
@@ -131,7 +143,7 @@ class AvatarService(GObject.Object):
     # ------------------------------------------------------------ worker
 
     def _fetch(self, key: str) -> None:
-        texture = None
+        entry = None
         try:
             pixbuf = self._load_cached(key)
             if pixbuf is None and not self._negative_cached(key):
@@ -141,13 +153,16 @@ class AvatarService(GObject.Object):
                 else:
                     (self.dir / f"{key}.none").touch()
             if pixbuf is not None:
-                texture = Gdk.Texture.new_for_pixbuf(self._plate(pixbuf))
+                plated = None
+                if self._luminance(pixbuf) < DARK_LOGO_LUMA:
+                    plated = Gdk.Texture.new_for_pixbuf(self._plate(pixbuf))
+                entry = (Gdk.Texture.new_for_pixbuf(pixbuf), plated)
         except Exception as e:  # noqa: BLE001 - never let a logo break the list
             log.debug("avatar %s failed: %s", key, e)
-        GLib.idle_add(self._done, key, texture)
+        GLib.idle_add(self._done, key, entry)
 
-    def _done(self, key: str, texture) -> bool:
-        self._mem[key] = texture
+    def _done(self, key: str, entry) -> bool:
+        self._mem[key] = entry
         with self._lock:
             self._pending.discard(key)
         self.emit("avatar-ready", key)
@@ -212,10 +227,27 @@ class AvatarService(GObject.Object):
         return None
 
     @staticmethod
+    def _luminance(pixbuf) -> float:
+        """Mean relative luminance (0..1) of the logo's opaque pixels."""
+        small = pixbuf.scale_simple(24, 24, GdkPixbuf.InterpType.BILINEAR)
+        data, stride = small.get_pixels(), small.get_rowstride()
+        channels, has_alpha = small.get_n_channels(), small.get_has_alpha()
+        total = weight = 0.0
+        for y in range(24):
+            row = y * stride
+            for x in range(24):
+                o = row + x * channels
+                a = data[o + 3] / 255 if has_alpha else 1.0
+                if a < 0.5:
+                    continue
+                total += (0.2126 * data[o] + 0.7152 * data[o + 1] + 0.0722 * data[o + 2]) / 255 * a
+                weight += a
+        return total / weight if weight else 1.0
+
+    @staticmethod
     def _plate(pixbuf, size: int = TARGET_SIZE, inset: float = 0.14):
-        """Centre the logo on a white disc-sized plate.  Many brand logos are
-        dark on dark (Lufthansa, banks...), so without a light plate they
-        disappear on a dark theme."""
+        """Centre the logo on a white plate.  Used only for dark logos on the
+        dark theme (Lufthansa, banks...), which otherwise disappear."""
         plate = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, size, size)
         plate.fill(0xFFFFFFFF)
         inner = size * (1 - 2 * inset)

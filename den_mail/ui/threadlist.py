@@ -138,6 +138,9 @@ class ThreadList(Adw.NavigationPage):
         self._rows: set[ThreadRow] = set()
         if avatars is not None:
             avatars.connect("avatar-ready", self._on_avatar_ready)
+            # dark logos get a light plate only on the dark theme
+            Adw.StyleManager.get_default().connect(
+                "notify::dark", lambda *_: [row.refresh_avatar() for row in self._rows])
         self.on_selection = on_selection
         self.on_activate = on_activate
         self.on_search = on_search

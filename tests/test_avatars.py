@@ -65,6 +65,18 @@ def test_when_ready_disabled(service):
     assert sender_key("x") is None
 
 
+def test_luminance_tells_dark_from_light_logos(service):
+    dark = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 20, 20)
+    dark.fill(0x102040FF)
+    light = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 20, 20)
+    light.fill(0xF0F0F0FF)
+    assert service._luminance(dark) < 0.35 < service._luminance(light)
+    # transparent pixels do not count
+    ghost = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 20, 20)
+    ghost.fill(0x00000000)
+    assert service._luminance(ghost) == 1.0
+
+
 def test_plate_puts_logo_on_white_background(service):
     logo = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 20, 10)
     logo.fill(0x102040FF)  # dark blue, the kind that vanishes on a dark theme
