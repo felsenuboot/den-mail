@@ -60,11 +60,14 @@ def _run(app, steps: list[str]) -> bool:
             else:
                 action.activate(None)
         elif cmd == "group" and win:
-            win.threadlist._group_action.change_state(GLib.Variant("b", arg.strip() in ("on", "1", "true")))
+            mode = {"on": "sender", "off": "off"}.get(arg.strip(), arg.strip())
+            win.threadlist._group_action.change_state(GLib.Variant("s", mode))
         elif cmd == "select-mode" and win:
             win.threadlist.set_selection_mode(arg.strip() in ("on", "1", "true"))
         elif cmd == "toggle" and win:
             win.threadlist._toggle_position(int(arg))
+        elif cmd == "fold-all" and win:
+            win.threadlist.fold_all(arg.strip() != "off")
         elif cmd == "fold" and win:
             from .models.thread import SenderGroup
 
@@ -108,6 +111,8 @@ def _run(app, steps: list[str]) -> bool:
             idx = int(arg)
             win.threadlist.select_position(idx)
             item = win.model.get_item(idx)
+            if item is not None and not hasattr(item, "thread_id"):
+                item = item.threads[0]   # a sender row: use its first thread
             if item is not None:
                 win._on_thread_context_menu(item, 200, 80 + idx * 73)
         elif cmd == "maximize" and win:

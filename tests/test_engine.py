@@ -288,7 +288,7 @@ def test_sender_grouping_rows(engine):
     model.set_email_ids(q["ids"], q["total"], q["complete"])
     n = len(model.threads)
     assert model.get_n_items() == n                       # ungrouped: threads only
-    model.set_grouped(True)
+    model.set_grouped("sender")
     groups = [i for i in model.items if isinstance(i, SenderGroup)]
     assert len(groups) > 1 and model.get_n_items() == n + len(groups)
     assert len(groups) == len({o.sender_key for o in model.threads})   # one group per sender
@@ -311,8 +311,15 @@ def test_sender_grouping_rows(engine):
     model.collapsed.add(g.key)
     model.set_email_ids(q["ids"], q["total"], q["complete"])
     assert model.groups[g.key] is g and g.collapsed
-    model.set_grouped(False)
+    model.set_grouped("off")
     assert model.get_n_items() == n
+    # by organisation: everyone at example.net lands in one group named after the busiest sender
+    model.set_grouped("domain")
+    dgroups = [i for i in model.items if isinstance(i, SenderGroup)]
+    assert len(dgroups) < len(groups)
+    org = next(g for g in dgroups if g.key == "example.net")
+    assert org.count == sum(1 for t in model.threads if t.domain_key == "example.net")
+    assert "senders" in org.detail and org.name == "Anna Berger"
     # an empty all-mail search lists everything outside trash/junk
     spec = search_query_spec("", None, ["t", "j"])
     assert spec["filter"] == {"inMailboxOtherThan": ["t", "j"]}

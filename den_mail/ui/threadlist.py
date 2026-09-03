@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
+import gi
+
+gi.require_version("Graphene", "1.0")
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk  # noqa: E402
 
 from ..avatars import sender_key
 from ..models.thread import SenderGroup, ThreadListModel, ThreadObject
@@ -50,6 +53,11 @@ class ThreadRow(Gtk.Box):
         col.append(line1)
 
         line2 = Gtk.Box(spacing=6)
+        # in a sender group line 1 is dropped, so the dot, count and date move here
+        self.dot2 = Gtk.Image(icon_name="media-record-symbolic", pixel_size=8, visible=False)
+        self.dot2.add_css_class("unread-dot")
+        self.dot2.set_valign(Gtk.Align.CENTER)
+        line2.append(self.dot2)
         self.subject = Gtk.Label(xalign=0, ellipsize=3, hexpand=True)
         self.subject.add_css_class("subject")
         line2.append(self.subject)
@@ -59,7 +67,16 @@ class ThreadRow(Gtk.Box):
         self.flag = Gtk.Image(icon_name="fm-star-symbolic", pixel_size=14)
         self.flag.add_css_class("flag-icon")
         line2.append(self.flag)
+        self.count2 = Gtk.Label(visible=False)
+        self.count2.add_css_class("count-chip")
+        line2.append(self.count2)
+        self.date2 = Gtk.Label(xalign=1, visible=False)
+        self.date2.add_css_class("caption")
+        self.date2.add_css_class("dim-label")
+        line2.append(self.date2)
         col.append(line2)
+        self.line1 = line1
+        self.compact = False
 
         line3 = Gtk.Box(spacing=6)
         self.preview = Gtk.Label(xalign=0, ellipsize=3, hexpand=True, single_line_mode=True)
@@ -73,6 +90,21 @@ class ThreadRow(Gtk.Box):
 
         self.obj: ThreadObject | None = None
         self._handlers: list[int] = []
+
+    def set_compact(self, compact: bool) -> None:
+        """Inside a sender group the sender is already in the header: drop the
+        avatar and sender line, indent, keep only what is specific to the thread."""
+        if compact == self.compact:
+            return
+        self.compact = compact
+        self.avatar.set_visible(not compact)
+        for w in (self.dot2, self.count2, self.date2):
+            w.set_visible(compact)
+        if compact:
+            self.add_css_class("in-group")
+        else:
+            self.remove_css_class("in-group")
+        self._sync()
 
     def bind(self, obj: ThreadObject) -> None:
         self.obj = obj
@@ -105,6 +137,20 @@ class ThreadRow(Gtk.Box):
         self.attachment.set_visible(o.has_attachment)
         self.flag.set_visible(o.flagged)
         self.dot.set_opacity(1.0 if o.unread else 0.0)
+        if self.compact:
+            self.date2.set_label(o.date_text)
+            self.count2.set_label(str(o.count))
+            self.count2.set_visible(o.count > 1)
+            self.dot2.set_opacity(1.0 if o.unread else 0.0)
+            # the sender line only stays when the thread has other participants
+            self.line1.set_visible(o.is_draft or o.participants != o.sender_name)
+            self.dot.set_visible(False)
+            self.date.set_visible(False)
+            self.count.set_visible(False)
+        else:
+            self.line1.set_visible(True)
+            for w in (self.dot, self.date):
+                w.set_visible(True)
         if o.labels_text != self._labels_text:
             self._labels_text = o.labels_text
             while child := self.labels.get_first_child():
@@ -150,12 +196,12 @@ class SenderHeader(Gtk.Box):
         self.expander.set_valign(Gtk.Align.CENTER)
         self.expander.connect("clicked", lambda *_: self.group is not None and self.on_toggle(self.group))
         self.append(self.expander)
-        self.avatar = avatar("?", 24)
+        self.avatar = avatar("?", 28)
         self.append(self.avatar)
         self.name = Gtk.Label(xalign=0, ellipsize=3, hexpand=True)
         self.name.add_css_class("heading")
         self.append(self.name)
-        self.address = Gtk.Label(xalign=0, ellipsize=3)
+        self.address = Gtk.Label(xalign=1, ellipsize=3)
         self.address.add_css_class("dim-label")
         self.address.add_css_class("caption")
         self.append(self.address)
@@ -166,7 +212,7 @@ class SenderHeader(Gtk.Box):
     def bind(self, group: SenderGroup) -> None:
         self.unbind()
         self.group = group
-        for prop in ("name", "email", "count", "unread", "collapsed"):
+        for prop in ("name", "email", "detail", "count", "unread", "collapsed"):
             self._handlers.append(group.connect(f"notify::{prop}", lambda *_: self._sync()))
         self._sync()
 
@@ -185,8 +231,8 @@ class SenderHeader(Gtk.Box):
         self.avatar_key = sender_key(self.email)
         self.avatar.set_text(g.name or "?")
         self.name.set_label(g.name)
-        self.address.set_label(self.email or "")
-        self.address.set_visible(bool(self.email) and self.email.lower() != g.name.lower())
+        self.address.set_label(g.detail or "")
+        self.address.set_visible(bool(g.detail) and g.detail.lower() != g.name.lower())
         self.count.set_label(f"{g.unread} / {g.count}" if g.unread else str(g.count))
         if g.unread:
             self.name.add_css_class("unread")
@@ -235,6 +281,9 @@ class ThreadList(Adw.NavigationPage):
         self.select_button = Gtk.ToggleButton(icon_name="fm-select-symbolic", tooltip_text="Select conversations")
         self.select_button.connect("toggled", lambda b: self.set_selection_mode(b.get_active()))
         header.pack_start(self.select_button)
+        self.fold_button = Gtk.Button(icon_name="fm-fold-symbolic", tooltip_text="Fold all groups", visible=False)
+        self.fold_button.connect("clicked", lambda *_: self.fold_all(not self._all_folded()))
+        header.pack_start(self.fold_button)
         self.sort_button = Gtk.MenuButton(icon_name="fm-sort-symbolic", tooltip_text="Sort",
                                           menu_model=self._build_sort_menu())
         header.pack_end(self.sort_button)
@@ -306,6 +355,7 @@ class ThreadList(Adw.NavigationPage):
         self.listview.add_controller(click)
         self.set_child(view)
         self._want_top = False
+        self._sync_fold_button()
         model.connect("items-changed", self._on_items_changed)
         model.connect("notify::loading", lambda *_: self._update_empty())
 
@@ -394,19 +444,36 @@ class ThreadList(Adw.NavigationPage):
 
     # ------------------------------------------------------------ grouping
 
-    def set_grouped(self, grouped: bool) -> None:
-        """Show a row per sender above its threads, in the order of the active sort."""
-        self.model.set_grouped(grouped)
+    def set_grouped(self, mode) -> None:
+        """Show a row per sender ("sender") or organisation ("domain") above its
+        threads, in the order of the active sort; "off" for a flat list."""
+        self.model.set_grouped(mode)
+        for row in self._rows:
+            row.set_compact(self.model.grouped)
+        self._sync_fold_button()
 
     def _toggle_group(self, group: SenderGroup) -> None:
         self.model.toggle_collapsed(group.key)
+        self._sync_fold_button()
+
+    def _all_folded(self) -> bool:
+        groups = self.model.groups.values()
+        return bool(groups) and all(g.collapsed for g in groups)
 
     def fold_all(self, collapsed: bool) -> None:
         self.model.set_all_collapsed(collapsed)
+        self._sync_fold_button()
+        self.scroll_to_top()
+
+    def _sync_fold_button(self) -> None:
+        self.fold_button.set_visible(self.model.grouped)
+        folded = self._all_folded()
+        self.fold_button.set_icon_name("fm-unfold-symbolic" if folded else "fm-fold-symbolic")
+        self.fold_button.set_tooltip_text("Unfold all groups" if folded else "Fold all groups")
 
     # ------------------------------------------------------------ sort
 
-    on_sort_changed: Callable[[str, bool, bool, bool], None] = lambda self, key, flagged, unread, group: None
+    on_sort_changed: Callable[[str, bool, bool, str], None] = lambda self, key, flagged, unread, group: None
 
     def _build_sort_menu(self) -> Gio.Menu:
         group = Gio.SimpleActionGroup()
@@ -419,9 +486,13 @@ class ThreadList(Adw.NavigationPage):
         self._unread_action = Gio.SimpleAction.new_stateful("unread-first", None, GLib.Variant("b", False))
         self._unread_action.connect("change-state", self._on_sort_state)
         group.add_action(self._unread_action)
-        self._group_action = Gio.SimpleAction.new_stateful("group-by-sender", None, GLib.Variant("b", False))
+        self._group_action = Gio.SimpleAction.new_stateful("group", GLib.VariantType.new("s"), GLib.Variant("s", "off"))
         self._group_action.connect("change-state", self._on_sort_state)
         group.add_action(self._group_action)
+        for name, collapsed in (("fold-all", True), ("unfold-all", False)):
+            a = Gio.SimpleAction.new(name, None)
+            a.connect("activate", lambda *_, c=collapsed: self.fold_all(c))
+            group.add_action(a)
         self.insert_action_group("sort", group)
         menu = Gio.Menu()
         section = Gio.Menu()
@@ -436,15 +507,22 @@ class ThreadList(Adw.NavigationPage):
         section.append("Unread on top", "sort.unread-first")
         menu.append_section(None, section)
         section = Gio.Menu()
-        section.append("Group by sender", "sort.group-by-sender")
+        for label, mode in (("Don't group", "off"), ("By sender", "sender"), ("By organisation", "domain")):
+            item = Gio.MenuItem.new(label, None)
+            item.set_action_and_target_value("sort.group", GLib.Variant("s", mode))
+            section.append_item(item)
+        menu.append_section("Group", section)
+        section = Gio.Menu()
+        section.append("Fold all", "sort.fold-all")
+        section.append("Unfold all", "sort.unfold-all")
         menu.append_section(None, section)
         return menu
 
-    def set_sort(self, key: str, flagged_first: bool, unread_first: bool, group: bool | None = None) -> None:
+    def set_sort(self, key: str, flagged_first: bool, unread_first: bool, group: str | None = None) -> None:
         self._setting_sort = True
         try:
             if group is not None:
-                self._group_action.set_state(GLib.Variant("b", group))
+                self._group_action.set_state(GLib.Variant("s", group))
             self._sort_action.set_state(GLib.Variant("s", key))
             self._flagged_action.set_state(GLib.Variant("b", flagged_first))
             self._unread_action.set_state(GLib.Variant("b", unread_first))
@@ -458,7 +536,7 @@ class ThreadList(Adw.NavigationPage):
         self.on_sort_changed(self._sort_action.get_state().get_string(),
                              self._flagged_action.get_state().get_boolean(),
                              self._unread_action.get_state().get_boolean(),
-                             self._group_action.get_state().get_boolean())
+                             self._group_action.get_state().get_string())
 
     # ------------------------------------------------------------ rows
 
@@ -493,6 +571,7 @@ class ThreadList(Adw.NavigationPage):
             w = header
         else:
             row = stack.get_child_by_name("thread")
+            row.set_compact(self.model.grouped)
             row.bind(item)
             stack.set_visible_child(row)
             self._rows.add(row)
@@ -617,12 +696,20 @@ class ThreadList(Adw.NavigationPage):
         self.on_context_menu(obj, int(x), int(y))
 
     def popup_menu(self, menu: Gio.MenuModel, x: int, y: int) -> None:
+        """x, y in list view coordinates.  The popover is parented to the page,
+        not the (taller than visible) list view, so it can use the pane's full
+        height instead of scrolling inside a clipped area."""
         popover = Gtk.PopoverMenu.new_from_model(menu)
-        popover.set_parent(self.listview)
+        popover.set_parent(self)
         popover.set_has_arrow(False)
+        # to the right of the pointer: GTK then slides a tall menu up to fit
+        # instead of shrinking it into a scrolled box
+        popover.set_position(Gtk.PositionType.RIGHT)
         popover.connect("closed", lambda p: GLib.idle_add(lambda: (p.unparent(), False)[1]))
+        ok, point = self.listview.compute_point(self, Graphene.Point().init(x, y))
         rect = Gdk.Rectangle()
-        rect.x, rect.y, rect.width, rect.height = x, y, 1, 1
+        rect.x, rect.y = (int(point.x), int(point.y)) if ok else (x, y)
+        rect.width = rect.height = 1
         popover.set_pointing_to(rect)
         popover.popup()
 

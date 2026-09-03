@@ -6,7 +6,19 @@ from datetime import datetime, timezone
 
 from gi.repository import Gio, GLib, GObject
 
+from ..avatars import registrable_domain
 from ..store.db import Database, ThreadSummary
+
+GROUP_MODES = ("off", "sender", "domain")
+
+
+def domain_group_key(addr: dict | None) -> str:
+    """Grouping key by organisation: the registrable domain of the address
+    (lippu.vr.fi and tili.vr.fi both become vr.fi); falls back to the sender key."""
+    email = (addr or {}).get("email") or ""
+    if "@" not in email:
+        return sender_group_key(addr)
+    return registrable_domain(email.rsplit("@", 1)[1].strip().lower().strip("."))
 
 
 def sender_group_key(addr: dict | None) -> str:
@@ -78,6 +90,7 @@ class ThreadObject(GObject.Object):
         labels_text = "\x1f".join(f"{n}:{c}" for n, c in labels)
         first = summary.from_addresses[0] if summary.from_addresses else {}
         self.sender_key = sender_group_key(first)
+        self.domain_key = domain_group_key(first)
         for prop, value in (
             ("sender_name", first.get("name") or first.get("email") or "(unknown sender)"),
             ("sender_email", first.get("email") or ""),
@@ -108,7 +121,8 @@ class SenderGroup(GObject.Object):
     __gtype_name__ = "FmSenderGroup"
 
     name = GObject.Property(type=str, default="")
-    email = GObject.Property(type=str, default="")
+    email = GObject.Property(type=str, default="")     # address of the first thread (for the logo)
+    detail = GObject.Property(type=str, default="")    # secondary text: address, or domain and sender count
     count = GObject.Property(type=int, default=0)
     unread = GObject.Property(type=int, default=0)
     collapsed = GObject.Property(type=bool, default=False)
@@ -118,11 +132,21 @@ class SenderGroup(GObject.Object):
         self.key = key
         self.threads: list[ThreadObject] = []
 
-    def update(self, threads: list[ThreadObject], collapsed: bool) -> None:
+    def update(self, threads: list[ThreadObject], collapsed: bool, mode: str = "sender") -> None:
         self.threads = threads
         first = threads[0]
-        for prop, value in (("name", first.sender_name), ("email", first.sender_email), ("count", len(threads)),
-                            ("unread", sum(1 for t in threads if t.unread)), ("collapsed", collapsed)):
+        if mode == "domain":
+            names: dict[str, int] = {}
+            for t in threads:
+                names[t.sender_name] = names.get(t.sender_name, 0) + 1
+            name = max(names, key=lambda n: (names[n], -list(names).index(n)))
+            senders = len({t.sender_email.lower() for t in threads if t.sender_email})
+            detail = self.key + (f" · {senders} senders" if senders > 1 else "")
+        else:
+            name, detail = first.sender_name, first.sender_email
+        for prop, value in (("name", name), ("email", first.sender_email), ("detail", detail),
+                            ("count", len(threads)), ("unread", sum(1 for t in threads if t.unread)),
+                            ("collapsed", collapsed)):
             if self.get_property(prop) != value:
                 self.set_property(prop, value)
 
@@ -150,7 +174,7 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
         self.by_thread: dict[str, ThreadObject] = {}
         self.groups: dict[str, SenderGroup] = {}
         self.collapsed: set[str] = set()
-        self.grouped = False
+        self.group_mode = "off"
         self.mailbox_id: str | None = None
         self.trash_junk: set[str] = set()
         self.label_namer = lambda mailbox_ids: []
@@ -167,10 +191,24 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
 
     # ------------------------------------------------------ grouping
 
-    def set_grouped(self, grouped: bool) -> None:
-        if grouped != self.grouped:
-            self.grouped = grouped
+    @property
+    def grouped(self) -> bool:
+        return self.group_mode != "off"
+
+    def set_grouped(self, mode) -> None:
+        """mode: "off", "sender" (by display name) or "domain" (by organisation)."""
+        if mode is True:
+            mode = "sender"
+        elif mode is False or mode is None:
+            mode = "off"
+        if mode not in GROUP_MODES:
+            mode = "off"
+        if mode != self.group_mode:
+            self.group_mode = mode
             self._rebuild_visible()
+
+    def key_of(self, thread: ThreadObject) -> str:
+        return thread.domain_key if self.group_mode == "domain" else thread.sender_key
 
     def toggle_collapsed(self, key: str) -> None:
         self.collapsed.symmetric_difference_update({key})
@@ -181,13 +219,13 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
         self._rebuild_visible()
 
     def group_of(self, thread: ThreadObject) -> SenderGroup | None:
-        return self.groups.get(thread.sender_key) if self.grouped else None
+        return self.groups.get(self.key_of(thread)) if self.grouped else None
 
     def reveal(self, thread_id: str) -> None:
         """Expand the group hiding this thread, if any."""
         obj = self.by_thread.get(thread_id)
-        if obj is not None and obj.sender_key in self.collapsed:
-            self.toggle_collapsed(obj.sender_key)
+        if obj is not None and self.key_of(obj) in self.collapsed:
+            self.toggle_collapsed(self.key_of(obj))
 
     def _rebuild_visible(self) -> None:
         if not self.grouped:
@@ -195,12 +233,12 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
             return
         runs: dict[str, list[ThreadObject]] = {}
         for t in self.threads:
-            runs.setdefault(t.sender_key, []).append(t)
+            runs.setdefault(self.key_of(t), []).append(t)
         visible: list[GObject.Object] = []
         groups: dict[str, SenderGroup] = {}
         for key, run in runs.items():
             group = self.groups.get(key) or SenderGroup(key)
-            group.update(run, key in self.collapsed)
+            group.update(run, key in self.collapsed, self.group_mode)
             groups[key] = group
             visible.append(group)
             if not group.collapsed:
@@ -271,7 +309,7 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
                 obj.update(summary, self.label_namer(summary.mailbox_ids))
         if thread_ids and self.grouped:
             for group in self.groups.values():
-                group.update(group.threads, group.collapsed)
+                group.update(group.threads, group.collapsed, self.group_mode)
 
     def remove_threads(self, thread_ids: set[str]) -> None:
         self.threads = [o for o in self.threads if o.thread_id not in thread_ids]

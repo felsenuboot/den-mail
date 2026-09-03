@@ -20,7 +20,7 @@ DEFAULTS: dict[str, Any] = {
     "load_remote_images": "ask",  # "ask" | "always" | "never"
     "open_links_new_window": False,  # start the browser with its new-window switch (see launch.py)
     "mark_read_on_open": True,
-    "group_by_sender": False,  # thread list shows a row per sender above its conversations
+    "group_by_sender": "off",  # "off" | "sender" | "domain": a row per sender/organisation above its conversations
     "notify_new_mail": True,
     "poll_interval_seconds": 300,
     "thread_page_size": 50,

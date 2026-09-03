@@ -204,8 +204,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.threadlist = ThreadList(self.model, self._on_selection, self._on_activate_thread, self._on_search,
                                      self._on_load_more, lambda: self.engine.sync_now(), avatars=self.avatars)
         self.threadlist.set_sort(self.sort["key"], self.sort["flagged_first"], self.sort["unread_first"],
-                                 bool(self.config.get("group_by_sender", False)))
-        self.threadlist.set_grouped(bool(self.config.get("group_by_sender", False)))
+                                 self._group_mode())
+        self.threadlist.set_grouped(self._group_mode())
         self.threadlist.on_sort_changed = self._on_sort_changed
         self.threadlist.on_context_menu = self._on_thread_context_menu
         self.conversation = ConversationView(self.db, self.engine, self.tree, self.config, self._compose_from,
@@ -516,8 +516,14 @@ class MainWindow(Adw.ApplicationWindow):
         s = self._sort_for_mailbox(self.current_mailbox if not self.threadlist.search_active else None)
         return build_sort(s.get("key", "newest"), bool(s.get("flagged_first")), bool(s.get("unread_first")))
 
-    def _on_sort_changed(self, key: str, flagged_first: bool, unread_first: bool, group: bool = False) -> None:
-        if group != bool(self.config.get("group_by_sender", False)):
+    def _group_mode(self) -> str:
+        mode = self.config.get("group_by_sender", "off")
+        if mode is True:
+            return "sender"
+        return mode if mode in ("off", "sender", "domain") else "off"
+
+    def _on_sort_changed(self, key: str, flagged_first: bool, unread_first: bool, group: str = "off") -> None:
+        if group != self._group_mode():
             # Only the grouping toggle changed: a global view setting, applied client-side.
             self.config.set("group_by_sender", group)
             self.threadlist.set_grouped(group)

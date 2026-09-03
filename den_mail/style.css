@@ -26,7 +26,15 @@
   padding: 2px 6px;
 }
 .sender-header {
-  padding: 4px 8px 4px 0;
+  padding: 6px 10px 6px 2px;
+  margin: 8px 0 0 0;
+  border-radius: 8px;
+  background: alpha(currentColor, 0.06);
+}
+.thread-row.in-group {
+  margin-left: 30px;
+  margin-top: 3px;
+  margin-bottom: 3px;
 }
 .sender-header .heading.unread {
   font-weight: 700;
