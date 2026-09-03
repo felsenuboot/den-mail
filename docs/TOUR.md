@@ -1,6 +1,6 @@
 # Den Mail tour
 
-<p align="center"><img src="../data/den-calligraphy.png" width="150" alt="伝"></p>
+<img src="../data/den-calligraphy.png" width="140" alt="伝" align="left" hspace="24">
 
 > **伝** 〔でん · *den*〕 noun
 > 1. legend; tradition
@@ -9,6 +9,8 @@
 > 4. horseback transportation and communication relay system used in ancient Japan
 >
 > <sub>[jisho.org](https://jisho.org/word/%E4%BC%9D-1)</sub>
+
+<br clear="all">
 
 ## Reading mail
 
