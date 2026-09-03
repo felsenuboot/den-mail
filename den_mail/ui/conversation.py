@@ -385,8 +385,17 @@ class MessageCard(Gtk.Box):
             toast(self, f"{self.sender_email} is no longer trusted", 4)
 
 
-JISHO_URL = "https://jisho.org/word/%E4%BC%9D-1"
+JISHO_URL = "https://jisho.org/search/%E4%BC%9D"  # both readings, as jisho.org lists them
 CALLIGRAPHY = Path(__file__).resolve().parent.parent / "den-calligraphy.png"
+
+# (reading, romaji, senses, note)
+ENTRIES = (
+    ("でん", "den", ("legend; tradition", "biography; life", "method; way",
+                    "horseback transportation and communication relay system used in ancient Japan"), None),
+    ("つて", "tsute", ("means of making contact; intermediary; go-between",
+                      "connections; influence; pull; good offices"),
+     "usually written using kana alone; also 伝手, ツテ"),
+)
 
 
 def _calligraphy(height: int) -> Gtk.Widget:
@@ -409,21 +418,27 @@ def kanji_placeholder() -> Gtk.Widget:
     box = Gtk.Box(spacing=28, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
     box.add_css_class("kanji-placeholder")
     box.append(_calligraphy(150))
-    entry = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, valign=Gtk.Align.CENTER)
-    head = Gtk.Label(xalign=0, use_markup=True,
-                     label="<span size='x-large' weight='bold'>伝</span>  〔でん · <i>den</i>〕  "  # noqa: RUF001 - dictionary brackets
-                           "<span size='small' alpha='60%'>noun</span>")
-    entry.append(head)
-    for i, sense in enumerate(("legend; tradition", "biography; life", "method; way",
-                               "horseback transportation and communication relay system used in ancient Japan"), 1):
-        line = Gtk.Label(label=f"{i}. {sense}", xalign=0, wrap=True, max_width_chars=36)
-        entry.append(line)
+    column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, valign=Gtk.Align.CENTER)
+    for n, (kana, romaji, senses, note) in enumerate(ENTRIES):
+        head = Gtk.Label(xalign=0, use_markup=True,
+                         label=f"<span size='x-large' weight='bold'>伝</span>  〔{kana} · <i>{romaji}</i>〕  "  # noqa: RUF001 - dictionary brackets
+                               "<span size='small' alpha='60%'>noun</span>")
+        if n:
+            head.set_margin_top(14)
+        column.append(head)
+        for i, sense in enumerate(senses, 1):
+            column.append(Gtk.Label(label=f"{i}. {sense}", xalign=0, wrap=True, max_width_chars=36))
+        if note:
+            note_label = Gtk.Label(label=note, xalign=0, wrap=True, max_width_chars=36)
+            note_label.add_css_class("caption")
+            note_label.add_css_class("dim-label")
+            column.append(note_label)
     link = Gtk.Label(xalign=0, use_markup=True, label=f"<a href='{JISHO_URL}'>jisho.org</a>")
     link.add_css_class("caption")
     link.connect("activate-link", lambda w, uri: (open_uri(uri, w.get_root()), True)[1])
-    link.set_margin_top(6)
-    entry.append(link)
-    box.append(entry)
+    link.set_margin_top(8)
+    column.append(link)
+    box.append(column)
     return box
 
 

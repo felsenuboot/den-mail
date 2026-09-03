@@ -8,7 +8,11 @@
 > 3. method; way
 > 4. horseback transportation and communication relay system used in ancient Japan
 >
-> <sub>[jisho.org](https://jisho.org/word/%E4%BC%9D-1)</sub>
+> **伝** 〔つて · *tsute*〕 noun
+> 1. means of making contact; intermediary; go-between
+> 2. connections; influence; pull; good offices
+>
+> <sub>usually written using kana alone; also 伝手, ツテ · [jisho.org](https://jisho.org/search/%E4%BC%9D)</sub>
 
 <br clear="all">
 
