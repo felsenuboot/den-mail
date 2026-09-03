@@ -15,6 +15,7 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -163,14 +164,14 @@ def search_query_spec(text: str, mailbox_id: str | None, trash_junk: list[str],
     return {"filter": filt, "sort": sort or SORT_NEWEST, "collapseThreads": True}
 
 
+@dataclass(order=True, slots=True)
 class _Job:
-    __slots__ = ("fn", "name", "prio", "seq")
+    """Queue entry ordered by priority, then arrival; the callable itself never compares."""
 
-    def __init__(self, prio: int, seq: int, fn: Callable[[], None], name: str):
-        self.prio, self.seq, self.fn, self.name = prio, seq, fn, name
-
-    def __lt__(self, other: _Job) -> bool:
-        return (self.prio, self.seq) < (other.prio, other.seq)
+    prio: int
+    seq: int
+    fn: Callable[[], None] = field(compare=False)
+    name: str = field(compare=False)
 
 
 class SyncEngine(GObject.Object):

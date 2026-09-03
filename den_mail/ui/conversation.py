@@ -412,6 +412,11 @@ def _calligraphy(height: int) -> Gtk.Widget:
     return Gtk.Picture(paintable=snapshot.to_paintable(Graphene.Size().init(width, height)), can_shrink=False)
 
 
+def _open_link(label: Gtk.Label, uri: str) -> bool:
+    open_uri(uri, label.get_root())
+    return True  # handled: GTK must not launch it a second time
+
+
 def kanji_placeholder() -> Gtk.Widget:
     """What the conversation pane shows while nothing is selected: the name of the app as a
     dictionary entry, the way the tour introduces it."""
@@ -435,7 +440,7 @@ def kanji_placeholder() -> Gtk.Widget:
             column.append(note_label)
     link = Gtk.Label(xalign=0, use_markup=True, label=f"<a href='{JISHO_URL}'>jisho.org</a>")
     link.add_css_class("caption")
-    link.connect("activate-link", lambda w, uri: (open_uri(uri, w.get_root()), True)[1])
+    link.connect("activate-link", _open_link)
     link.set_margin_top(8)
     column.append(link)
     box.append(column)

@@ -138,8 +138,7 @@ class AddressCompletion:
                 r.add_css_class("active")
             else:
                 r.remove_css_class("active")
-        self._active = index
-        self._rows[index].grab_focus() if False else None  # focus must stay in the entry
+        self._active = index  # no grab_focus here: focus must stay in the entry
 
     def _current_token(self) -> str:
         return self.row.get_text().rsplit(",", 1)[-1].strip()

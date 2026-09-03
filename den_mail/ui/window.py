@@ -213,11 +213,11 @@ class MainWindow(Adw.ApplicationWindow):
                                              self._email_action, avatars=self.avatars)
         self.conversation.on_remove_label = lambda mid: self._label_toggle(self.tree.get(mid), False)
         self.labels_popover = MailboxPickerPopover(self.tree, "labels",
-                                                   on_toggle=lambda mb, on: self._label_toggle(mb, on),
-                                                   on_create=lambda name: self._create_label_and_apply(name))
+                                                   on_toggle=self._label_toggle,
+                                                   on_create=self._create_label_and_apply)
         self.conversation.labels_button.set_popover(self.labels_popover)
         self.conversation.labels_button.connect("notify::active", self._on_labels_button)
-        self.move_popover = MailboxPickerPopover(self.tree, "move", on_pick=lambda mb: self._move_to(mb))
+        self.move_popover = MailboxPickerPopover(self.tree, "move", on_pick=self._move_to)
         self.conversation.move_button.set_popover(self.move_popover)
         self.conversation.move_button.connect("notify::active", lambda b, _p: self.move_popover._rebuild() if b.get_active() else None)
 

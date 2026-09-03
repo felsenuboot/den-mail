@@ -47,34 +47,36 @@ LIGHT_NAMED_COLOURS = """
 @define-color scrollbar_outline_color #ffffff;
 """
 
-_provider: Gtk.CssProvider | None = None
-_installed = False
-_hooked = False
+class _State:
+    provider: Gtk.CssProvider | None = None
+    installed = False   # provider currently added to the display
+    hooked = False      # notify::dark handler connected
+
+
+_state = _State()
 
 
 def _sync(*_args) -> None:
-    global _provider, _installed
     display = Gdk.Display.get_default()
     if display is None:
         return
-    if _provider is None:
-        _provider = Gtk.CssProvider()
-        _provider.load_from_string(LIGHT_NAMED_COLOURS)
+    if _state.provider is None:
+        _state.provider = Gtk.CssProvider()
+        _state.provider.load_from_string(LIGHT_NAMED_COLOURS)
     want = not Adw.StyleManager.get_default().get_dark()
-    if want and not _installed:
-        Gtk.StyleContext.add_provider_for_display(display, _provider, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
-        _installed = True
-    elif not want and _installed:
-        Gtk.StyleContext.remove_provider_for_display(display, _provider)
-        _installed = False
+    if want and not _state.installed:
+        Gtk.StyleContext.add_provider_for_display(display, _state.provider, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
+        _state.installed = True
+    elif not want and _state.installed:
+        Gtk.StyleContext.remove_provider_for_display(display, _state.provider)
+        _state.installed = False
     for win in Gtk.Window.list_toplevels():
         win.queue_draw()
 
 
 def install_palette_guard() -> None:
     """Call once after the display exists; keeps the light palette intact from then on."""
-    global _hooked
-    if not _hooked:
+    if not _state.hooked:
         Adw.StyleManager.get_default().connect("notify::dark", _sync)
-        _hooked = True
+        _state.hooked = True
     _sync()
