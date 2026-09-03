@@ -491,21 +491,29 @@ class ConversationView(Adw.NavigationPage):
         while child := self.chips.get_first_child():
             self.chips.remove(child)
         shown = 0
-        for mid in sorted(thread.summary.mailbox_ids, key=lambda m: self.tree.path_name(m)):
+        # Inbox first, then labels by path; Archive is implied by the absence of Inbox and stays hidden.
+        ids = sorted(thread.summary.mailbox_ids,
+                     key=lambda m: (0 if (self.tree.get(m) and self.tree.get(m).role == "inbox") else 1,
+                                    self.tree.path_name(m)))
+        for mid in ids:
             mb = self.tree.get(mid)
-            if mb is None or mb.is_system:
+            if mb is None or mb.role == "archive":
                 continue
             box = Gtk.Box(spacing=2)
             box.add_css_class("chip")
-            box.add_css_class("removable")
-            box.add_css_class(f"label-color-{mb.color_index}")
+            if mb.is_system:
+                box.add_css_class("chip-system")
+            else:
+                box.add_css_class(f"label-color-{mb.color_index}")
             box.append(Gtk.Label(label=self.tree.path_name(mid)))
-            x = Gtk.Button(icon_name="window-close-symbolic")
-            x.add_css_class("flat")
-            x.add_css_class("circular")
-            x.set_tooltip_text("Remove label")
-            x.connect("clicked", lambda _b, m=mid: self.on_remove_label(m))
-            box.append(x)
+            if not mb.is_system or mb.role == "inbox":
+                box.add_css_class("removable")
+                x = Gtk.Button(icon_name="window-close-symbolic")
+                x.add_css_class("flat")
+                x.add_css_class("circular")
+                x.set_tooltip_text("Archive" if mb.role == "inbox" else "Remove label")
+                x.connect("clicked", lambda _b, m=mid: self.on_remove_label(m))
+                box.append(x)
             self.chips.append(box)
             shown += 1
         self.chips.set_visible(shown > 0)

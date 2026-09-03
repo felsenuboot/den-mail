@@ -128,6 +128,10 @@
   border-radius: 4px;
   background: alpha(currentColor, 0.12);
 }
+.chip.chip-system {
+  background: alpha(currentColor, 0.12);
+  color: @window_fg_color;
+}
 
 /* Label colour palette (stable per label id). Icons use the colour; chips a tint of it. */
 image.label-color-0 { color: #3584e4; }  .chip.label-color-0 { background: alpha(#3584e4, 0.18); color: #62a0ea; }

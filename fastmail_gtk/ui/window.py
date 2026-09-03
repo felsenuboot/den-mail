@@ -634,16 +634,22 @@ class MainWindow(Adw.ApplicationWindow):
         self.engine.perform(act, self._after_action)
 
     def _label_names(self, mailbox_ids: set[str]) -> list[tuple[str, int]]:
+        """Chips for a list row: Inbox (when not viewing it) plus labels by full path, never the current one."""
         labels = []
         for mid in mailbox_ids:
             mb = self.tree.get(mid)
-            if mb is None or mb.is_system or (self.current_mailbox and mid == self.current_mailbox.id):
+            if mb is None or (self.current_mailbox and mid == self.current_mailbox.id):
                 continue
-            labels.append((mb.name, mb.color_index))
+            if mb.is_system:
+                if mb.role == ROLE_INBOX:
+                    labels.append(("", "Inbox", -1))
+                continue
+            labels.append((self.tree.path_name(mid), self.tree.path_name(mid), mb.color_index))
         labels.sort()
-        if len(labels) > 3:
-            labels = labels[:2] + [(f"+{len(labels) - 2}", -1)]
-        return labels
+        out = [(name, color) for _key, name, color in labels]
+        if len(out) > 3:
+            out = out[:2] + [(f"+{len(out) - 2}", -1)]
+        return out
 
     # ------------------------------------------------------------ labels
 

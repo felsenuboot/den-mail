@@ -50,7 +50,7 @@ def avatar(name: str, size: int = 32) -> Adw.Avatar:
 
 
 def chip(text: str, css: str = "chip") -> Gtk.Label:
-    lbl = Gtk.Label(label=text, ellipsize=3, max_width_chars=18)
+    lbl = Gtk.Label(label=text, ellipsize=3, max_width_chars=30)
     lbl.add_css_class(css)
     return lbl
 
