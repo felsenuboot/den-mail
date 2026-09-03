@@ -66,6 +66,8 @@ def _run(app, steps: list[str]) -> bool:
             win.threadlist.set_selection_mode(arg.strip() in ("on", "1", "true"))
         elif cmd == "toggle" and win:
             win.threadlist._toggle_position(int(arg))
+        elif cmd == "sort-menu" and win:
+            win.threadlist.sort_button.popup()
         elif cmd == "fold-all" and win:
             win.threadlist.fold_all(arg.strip() != "off")
         elif cmd == "fold" and win:

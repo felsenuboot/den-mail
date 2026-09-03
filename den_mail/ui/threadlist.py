@@ -466,10 +466,14 @@ class ThreadList(Adw.NavigationPage):
         self.scroll_to_top()
 
     def _sync_fold_button(self) -> None:
-        self.fold_button.set_visible(self.model.grouped)
+        groups = list(self.model.groups.values()) if self.model.grouped else []
+        self.fold_button.set_visible(bool(groups))
         folded = self._all_folded()
         self.fold_button.set_icon_name("fm-unfold-symbolic" if folded else "fm-fold-symbolic")
         self.fold_button.set_tooltip_text("Unfold all groups" if folded else "Fold all groups")
+        # menu entries only when they would change something
+        self._fold_actions[True].set_enabled(any(not g.collapsed for g in groups))
+        self._fold_actions[False].set_enabled(any(g.collapsed for g in groups))
 
     # ------------------------------------------------------------ sort
 
@@ -489,10 +493,13 @@ class ThreadList(Adw.NavigationPage):
         self._group_action = Gio.SimpleAction.new_stateful("group", GLib.VariantType.new("s"), GLib.Variant("s", "off"))
         self._group_action.connect("change-state", self._on_sort_state)
         group.add_action(self._group_action)
+        self._fold_actions = {}
         for name, collapsed in (("fold-all", True), ("unfold-all", False)):
             a = Gio.SimpleAction.new(name, None)
             a.connect("activate", lambda *_, c=collapsed: self.fold_all(c))
+            a.set_enabled(False)
             group.add_action(a)
+            self._fold_actions[collapsed] = a
         self.insert_action_group("sort", group)
         menu = Gio.Menu()
         section = Gio.Menu()
@@ -786,6 +793,7 @@ class ThreadList(Adw.NavigationPage):
 
     def _on_items_changed(self, model, position: int, removed: int, added: int) -> None:
         self._update_empty()
+        self._sync_fold_button()
         if self._want_top and added and model.get_n_items() == added:
             self._want_top = False
             GLib.idle_add(lambda: self.scrolled.get_vadjustment().set_value(0) or False)
