@@ -82,3 +82,33 @@ def test_dark_mode_keeps_text_readable_and_backgrounds_dark():
         return colorsys.rgb_to_hls(r, g, b)[1]
     assert lightness(text_hex) >= 0.6  # pure blue link becomes a light blue
     assert lightness(bg_hex) <= 0.46  # pure blue background stays dark-ish
+
+
+def test_assemble_body_handles_part_sequences():
+    from den_mail.html.body import assemble_body, find_inline_part
+    # Apple Mail: text, inline photo, text; htmlBody mirrors textBody, no text/html
+    parts = [{"partId": "1", "type": "text/plain"},
+             {"partId": "2", "type": "image/jpeg", "blobId": "b2", "name": "IMG_8163.jpeg", "disposition": "inline"},
+             {"partId": "3", "type": "text/plain"}]
+    full = {"textBody": parts, "htmlBody": parts,
+            "bodyValues": {"1": {"value": "\r\n"}, "3": {"value": "Sent from my iPhone\r\n"}}}
+    c = assemble_body(full)
+    assert c.has_html is False
+    assert 'src="cid:part:2"' in c.html and "Sent from my iPhone" in c.html
+    assert c.text.strip() == "Sent from my iPhone"
+    assert find_inline_part(full, "part:2")["blobId"] == "b2"
+    assert find_inline_part(full, "part:1") is None          # no blob behind a text part
+    # plain text only: every text part, not just the first
+    c = assemble_body({"textBody": [{"partId": "1", "type": "text/plain"}, {"partId": "2", "type": "text/plain"}],
+                       "bodyValues": {"1": {"value": "one"}, "2": {"value": "two"}}})
+    assert c.html is None and c.text == "one\ntwo"
+    # real html wins, images between html parts are kept
+    c = assemble_body({"htmlBody": [{"partId": "h", "type": "text/html"},
+                                    {"partId": "i", "type": "image/png", "blobId": "b", "cid": "<pic@x>"}],
+                       "textBody": [{"partId": "t", "type": "text/plain"}],
+                       "bodyValues": {"h": {"value": "<p>hi</p>", "isTruncated": True}, "t": {"value": "hi"}}})
+    assert c.has_html and c.truncated and "<p>hi</p>" in c.html and 'src="cid:pic@x"' in c.html
+    # whitespace-only html and no pictures falls back to text
+    c = assemble_body({"htmlBody": [{"partId": "h", "type": "text/html"}], "textBody": [{"partId": "t", "type": "text/plain"}],
+                       "bodyValues": {"h": {"value": " \n"}, "t": {"value": "plain"}}})
+    assert c.html is None and c.text == "plain" and not c.has_html

@@ -132,10 +132,29 @@ class FakeData:
         return bid
 
     def add_email(self, *, frm, to, subject, text=None, html=None, mailboxes, keywords=None, when=None,
-                  thread=None, cc=None, attachments=None, inline_png=False, in_reply_to=None, headers=None) -> dict:
+                  thread=None, cc=None, attachments=None, inline_png=False, in_reply_to=None, headers=None,
+                  sequence=None) -> dict:
+        """`sequence`: an Apple-Mail-style body, a list of str (text/plain) and
+        (name, mime, bytes) tuples (inline images) with no text/html part;
+        textBody and htmlBody then both list the whole sequence."""
         eid = self.new_id("M")
         when = when or datetime.now(UTC)
         values, text_body, html_body, atts = {}, [], [], []
+        preview_text = text
+        if sequence:
+            for i, item in enumerate(sequence, start=1):
+                pid = str(i)
+                if isinstance(item, str):
+                    values[pid] = {"value": item, "isEncodingProblem": False, "isTruncated": False}
+                    text_body.append({"partId": pid, "type": "text/plain", "size": len(item), "name": None,
+                                      "cid": None, "disposition": None, "charset": "us-ascii"})
+                else:
+                    name, mime, data = item
+                    bid = self.add_blob(data, mime, name)
+                    text_body.append({"partId": pid, "blobId": bid, "type": mime, "size": len(data), "name": name,
+                                      "cid": None, "disposition": "inline", "charset": None})
+            html_body = list(text_body)
+            preview_text = "".join(i for i in sequence if isinstance(i, str))
         if text is not None:
             values["1"] = {"value": text, "isEncodingProblem": False, "isTruncated": False}
             text_body.append({"partId": "1", "type": "text/plain", "size": len(text), "name": None, "cid": None,
@@ -162,7 +181,7 @@ class FakeData:
             "messageId": [msg_id], "inReplyTo": [in_reply_to] if in_reply_to else None,
             "references": [in_reply_to] if in_reply_to else None,
             "from": [frm], "sender": None, "to": to, "cc": cc, "bcc": None, "replyTo": None, "subject": subject,
-            "preview": re.sub(r"\s+", " ", text or re.sub(r"<[^>]+>", " ", re.sub(r"<(style|script)[^>]*>.*?</\1>", " ", html or "", flags=re.DOTALL | re.IGNORECASE))).strip()[:200],
+            "preview": re.sub(r"\s+", " ", preview_text or re.sub(r"<[^>]+>", " ", re.sub(r"<(style|script)[^>]*>.*?</\1>", " ", html or "", flags=re.DOTALL | re.IGNORECASE))).strip()[:200],
             "hasAttachment": any(a["disposition"] == "attachment" for a in atts),
             "textBody": text_body, "htmlBody": html_body, "attachments": atts, "bodyValues": values,
             "bodyStructure": {"partId": None, "type": "multipart/mixed", "subParts": text_body + html_body + atts},
@@ -235,6 +254,10 @@ class FakeData:
                                thread=thread, in_reply_to=prev)
             thread, prev = e["threadId"], e["messageId"][0]
         # HTML newsletter with remote images
+        # Apple-Mail-style: text, a photo, text -- and no text/html part at all
+        self.add_email(frm={"name": "Dana Ito", "email": "dana@example.net"}, to=[me], subject="Photo from the workshop", mailboxes=[inbox],
+                       when=t - timedelta(hours=2),
+                       sequence=["\r\n", ("IMG_0001.png", "image/png", _png_1x1()), "Sent from my iPhone\r\n"])
         self.add_email(frm=people[4], to=[me], subject="Arch Linux news: kernel 7.2 and Plasma 7",
                        html="""<html><head><style>body{font-family:sans-serif}</style></head><body>
 <h1 style="color:#1793d1">Arch Linux Newsletter</h1>

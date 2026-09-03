@@ -10,6 +10,7 @@ from gi.repository import Adw, Gio, GLib, Gtk
 from .. import secrets
 from ..avatars import AvatarService
 from ..config import Config, database_path
+from ..html.body import find_inline_part
 from ..jmap.client import AuthError, JMAPClient, JMAPError
 from ..jmap.types import KW_FLAGGED, ROLE_ARCHIVE, ROLE_DRAFTS, ROLE_INBOX, ROLE_JUNK, ROLE_TRASH
 from ..models.mailbox import MailboxObject, MailboxTree
@@ -416,11 +417,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _resolve_cid(self, email_id: str, cid: str, done) -> None:
         body = self.db.get_email_body(email_id) if self.db else None
-        att = None
-        for a in (body or {}).get("attachments") or []:
-            if (a.get("cid") or "").strip("<>") == cid:
-                att = a
-                break
+        att = find_inline_part(body or {}, cid)
         if att is None:
             done(None, None)
             return

@@ -10,6 +10,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 from .. import launch
 from ..avatars import sender_key
+from ..html.body import assemble_body
 from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full
 from ..models.thread import ThreadObject, format_date_long
 from ..unsubscribe import parse_list_unsubscribe
@@ -270,25 +271,11 @@ class MessageCard(Gtk.Box):
         self.email = {**self.email, **{k: v for k, v in full.items() if k != "bodyValues"}}
         self._fill_details()
         self.loading.set_visible(False)
-        values = full.get("bodyValues") or {}
-        html = None
-        text = None
-        truncated = False
-        for part in full.get("htmlBody") or []:
-            v = values.get(part.get("partId"))
-            if v and v.get("value") is not None:
-                html = v["value"]
-                truncated = truncated or bool(v.get("isTruncated"))
-                break
-        for part in full.get("textBody") or []:
-            v = values.get(part.get("partId"))
-            if v and v.get("value") is not None:
-                text = v["value"]
-                truncated = truncated or bool(v.get("isTruncated"))
-                break
+        content = assemble_body(full)
+        html, text, truncated = content.html, content.text, content.truncated
         policy = self.view.config.get("load_remote_images", "ask")
         trusted = self.view.config.is_trusted(self.sender_email)
-        self.has_html = bool(html)
+        self.has_html = content.has_html
         self.light_toggle.set_visible(self.has_html and self.view.style_manager.get_dark())
         self.unsubscribe_plan = parse_list_unsubscribe(full.get("header:List-Unsubscribe:asRaw"),
                                                        full.get("header:List-Unsubscribe-Post:asRaw"))

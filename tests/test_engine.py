@@ -323,3 +323,22 @@ def test_sender_grouping_rows(engine):
     # an empty all-mail search lists everything outside trash/junk
     spec = search_query_spec("", None, ["t", "j"])
     assert spec["filter"] == {"inMailboxOtherThan": ["t", "j"]}
+
+
+def test_photo_sequence_message_renders_with_picture(engine):
+    from den_mail.html.body import assemble_body, find_inline_part
+    from den_mail.html.sanitize import sanitize_html
+    inbox = engine.roles[ROLE_INBOX]
+    key = engine.load_query(mailbox_query_spec(inbox))
+    pump(lambda: any(a[0] == key for a in engine.events.get("query-updated", [])))
+    row = engine.db.conn().execute("SELECT id FROM emails WHERE subject=?", ("Photo from the workshop",)).fetchone()
+    eid = row["id"]
+    engine.fetch_body(eid)
+    pump(lambda: any(a[0] == eid for a in engine.events.get("body-ready", [])))
+    body = engine.db.get_email_body(eid)
+    c = assemble_body(body)
+    assert c.html and "Sent from my iPhone" in c.html and not c.has_html
+    part = find_inline_part(body, "part:2")
+    assert part and part["type"] == "image/png"
+    out = sanitize_html(c.html, allow_remote=False, cid_scheme=f"fmcid://{eid}/")
+    assert f"fmcid://{eid}/part%3A2" in out.html

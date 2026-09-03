@@ -2,6 +2,14 @@
 
 <p align="center"><img src="../data/den-calligraphy.png" width="150" alt="伝"></p>
 
+> **伝** 〔でん · *den*〕 noun
+> 1. legend; tradition
+> 2. biography; life
+> 3. method; way
+> 4. horseback transportation and communication relay system used in ancient Japan
+>
+> <sub>[jisho.org](https://jisho.org/word/%E4%BC%9D-1)</sub>
+
 ## Reading mail
 
 Three panes: folders and labels, the conversation list, the open conversation.
