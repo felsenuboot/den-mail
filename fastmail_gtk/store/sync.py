@@ -683,6 +683,26 @@ class SyncEngine(GObject.Object):
 
         self._pool.submit(work)
 
+    def fetch_email_headers(self, email_id: str, properties: list[str], on_done: Callable[[dict], None],
+                            on_error: Callable[[str], None] | None = None) -> None:
+        """Fetch a few header properties for one message (for bodies cached by older versions)."""
+        def job() -> None:
+            acc = self.client.session.account_id
+            try:
+                res = self.client.call("Email/get", {"accountId": acc, "ids": [email_id], "properties": properties})
+            except JMAPError as e:
+                self._callback(on_error, str(e))
+                return
+            items = res.get("list") or []
+            if not items:
+                self._callback(on_error, "message not found")
+                return
+            headers = {k: v for k, v in items[0].items() if k.startswith("header:")}
+            self.db.merge_body_headers(email_id, headers)
+            self._callback(on_done, headers)
+
+        self.enqueue(PRIO_ACTION, job, "headers")
+
     def unsubscribe_one_click(self, url: str, on_done: Callable[[], None],
                               on_error: Callable[[str], None] | None = None) -> None:
         """RFC 8058 POST to a List-Unsubscribe URL, off the UI thread."""

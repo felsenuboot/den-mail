@@ -250,6 +250,16 @@ class Database:
         row = self.conn().execute("SELECT body_json FROM emails WHERE id=?", (email_id,)).fetchone()
         return json.loads(row["body_json"]) if row and row["body_json"] else None
 
+    def merge_body_headers(self, email_id: str, headers: dict) -> None:
+        with self._write_lock:
+            c = self.conn()
+            row = c.execute("SELECT body_json FROM emails WHERE id=?", (email_id,)).fetchone()
+            if row and row["body_json"]:
+                body = json.loads(row["body_json"])
+                body.update(headers)
+                c.execute("UPDATE emails SET body_json=? WHERE id=?", (json.dumps(body), email_id))
+                c.commit()
+
     def set_email_body(self, email: dict) -> None:
         with self._write_lock:
             c = self.conn()

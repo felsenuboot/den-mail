@@ -20,47 +20,71 @@ class UnsubscribeError(Exception):
 
 @dataclass
 class UnsubscribePlan:
-    kind: str  # "one-click" (POST to the URL) | "browser" (open the URL) | "mailto" (send a message)
-    url: str | None = None
-    to: str | None = None
+    """Every method the sender offers. The primary one (`kind`) is tried first: the RFC 8058
+    one-click POST, then the mailto: message, then opening the page in the browser (a plain GET
+    on a one-click endpoint often just shows an error page)."""
+
+    one_click: str | None = None  # https URL that accepts the RFC 8058 POST
+    mailto: str | None = None  # address for the mailto: method
     subject: str = ""
     body: str = ""
+    page: str | None = None  # https/http page for the browser
+
+    @property
+    def kind(self) -> str:
+        return "one-click" if self.one_click else "mailto" if self.mailto else "browser"
+
+    @property
+    def url(self) -> str | None:
+        return self.one_click if self.kind == "one-click" else self.page
+
+    @property
+    def to(self) -> str | None:
+        return self.mailto
 
     @property
     def target(self) -> str:
-        """Human-readable destination: the host of the URL or the mailto address."""
-        if self.url:
-            return urllib.parse.urlsplit(self.url).hostname or self.url
-        return self.to or ""
+        """Human-readable destination of the primary method: host of the URL or the mailto address."""
+        if self.kind == "mailto":
+            return self.mailto or ""
+        return urllib.parse.urlsplit(self.url or "").hostname or (self.url or "")
+
+    def fallback(self) -> "UnsubscribePlan | None":
+        """The plan without its primary method, for retrying after a failure."""
+        if self.kind == "one-click":
+            rest = UnsubscribePlan(mailto=self.mailto, subject=self.subject, body=self.body, page=self.page)
+        elif self.kind == "mailto":
+            rest = UnsubscribePlan(page=self.page)
+        else:
+            return None
+        return rest if (rest.mailto or rest.page) else None
 
 
 def parse_list_unsubscribe(header: str | None, post_header: str | None) -> UnsubscribePlan | None:
-    """Pick the best unsubscribe method from the List-Unsubscribe(-Post) headers.
+    """Collect the unsubscribe methods from the List-Unsubscribe(-Post) headers.
 
-    Preference: one-click POST (needs https and the -Post header), then an https/http
-    page for the browser, then a mailto: message. Plain http one-click is only
-    accepted for loopback hosts (tests)."""
+    One-click needs https plus the -Post header; plain http one-click is only accepted for
+    loopback hosts (tests)."""
     urls = [u.strip() for u in ANGLE_RE.findall(header or "")]
     if not urls and header and "://" in header:  # tolerate a bare URL without angle brackets
         urls = [header.strip()]
     https = [u for u in urls if u.lower().startswith("https://")]
     http = [u for u in urls if u.lower().startswith("http://")]
     mailtos = [u for u in urls if u.lower().startswith("mailto:")]
-    one_click = "list-unsubscribe=one-click" in (post_header or "").lower().replace(" ", "")
-    if one_click:
+    plan = UnsubscribePlan()
+    if "list-unsubscribe=one-click" in (post_header or "").lower().replace(" ", ""):
         loopback_http = [u for u in http if urllib.parse.urlsplit(u).hostname in LOOPBACK]
-        for u in https + loopback_http:
-            return UnsubscribePlan("one-click", url=u)
-    if https or http:
-        return UnsubscribePlan("browser", url=(https or http)[0])
+        plan.one_click = next(iter(https + loopback_http), None)
+    plan.page = next(iter(https + http), None)
     if mailtos:
         parts = urllib.parse.urlsplit(mailtos[0])
         to = urllib.parse.unquote(parts.path).split(",")[0].strip()
         query = urllib.parse.parse_qs(parts.query)
         if to:
-            return UnsubscribePlan("mailto", to=to, subject=(query.get("subject") or ["unsubscribe"])[0],
-                                   body=(query.get("body") or [""])[0])
-    return None
+            plan.mailto = to
+            plan.subject = (query.get("subject") or ["unsubscribe"])[0]
+            plan.body = (query.get("body") or [""])[0]
+    return plan if (plan.one_click or plan.mailto or plan.page) else None
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):

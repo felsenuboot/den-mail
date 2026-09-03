@@ -510,10 +510,34 @@ class ConversationView(Adw.NavigationPage):
 
     # ----------------------------------------------------------- unsubscribe
 
+    UNSUBSCRIBE_HEADERS = ["header:List-Unsubscribe:asRaw", "header:List-Unsubscribe-Post:asRaw"]
+
     def unsubscribe(self, email_id: str) -> None:
         card = self.cards.get(email_id)
         if card is None or card.unsubscribe_plan is None:
             return
+        if any(h not in card.email for h in self.UNSUBSCRIBE_HEADERS):
+            # body cached by an older version without the -Post header: check before picking a method
+            card.unsubscribe_btn.set_sensitive(False)
+
+            def got(headers: dict) -> None:
+                card.unsubscribe_btn.set_sensitive(True)
+                card.email.update(headers)
+                card.unsubscribe_plan = parse_list_unsubscribe(headers.get(self.UNSUBSCRIBE_HEADERS[0]),
+                                                               headers.get(self.UNSUBSCRIBE_HEADERS[1]))
+                card.refresh_unsubscribe()
+                if card.unsubscribe_plan is not None:
+                    self._confirm_unsubscribe(card)
+
+            def failed(message: str) -> None:
+                card.unsubscribe_btn.set_sensitive(True)
+                toast(self, f"Could not check the unsubscribe headers: {message}", 6)
+
+            self.engine.fetch_email_headers(card.email_id, self.UNSUBSCRIBE_HEADERS, got, failed)
+            return
+        self._confirm_unsubscribe(card)
+
+    def _confirm_unsubscribe(self, card: MessageCard) -> None:
         plan = card.unsubscribe_plan
         sender = address_display((card.email.get("from") or [{}])[0]) or card.sender_email or "this sender"
         body = {"one-click": f"Sends an unsubscribe request to {plan.target}.",
@@ -540,22 +564,27 @@ class ConversationView(Adw.NavigationPage):
                          "browser": f"Opened the unsubscribe page at {plan.target}",
                          "mailto": f"Unsubscribe message sent to {plan.target}"}[plan.kind], 4)
 
+        def retry_with_fallback(message: str) -> None:
+            button.set_sensitive(True)
+            nxt = plan.fallback()
+            if nxt is None:
+                toast(self, f"Unsubscribe via {plan.target} failed: {message}", 6)
+                return
+            how = {"mailto": f"sending a message to {nxt.target}",
+                   "browser": f"opening the page at {nxt.target}"}[nxt.kind]
+            toast(self, f"Unsubscribe via {plan.target} failed ({message}); {how} instead", 6)
+            self._run_unsubscribe(card, nxt)
+
         if plan.kind == "one-click":
             button.set_sensitive(False)
-
-            def failed(message: str) -> None:
-                button.set_sensitive(True)
-                toast(self, f"Request to {plan.target} failed ({message}); opening the page instead", 6)
-                open_uri(plan.url, self.get_root())
-
-            self.engine.unsubscribe_one_click(plan.url, done, failed)
+            self.engine.unsubscribe_one_click(plan.url, done, retry_with_fallback)
         elif plan.kind == "browser":
             open_uri(plan.url, self.get_root())
             done()
         else:
             ident = self.identity_for(card.email)
             if ident is None:
-                toast(self, "No identity to send the unsubscribe message from", 6)
+                retry_with_fallback("no identity to send from")
                 return
             draft = {"from": [{"name": ident.get("name") or None, "email": ident["email"]}],
                      "to": [{"name": None, "email": plan.to}],
@@ -564,11 +593,7 @@ class ConversationView(Adw.NavigationPage):
                      "bodyValues": {"t": {"value": plan.body or "unsubscribe"}}}
             button.set_sensitive(False)
 
-            def failed_send(message: str) -> None:
-                button.set_sensitive(True)
-                toast(self, f"Could not send the unsubscribe message: {message}", 6)
-
-            self.engine.send_email(draft, ident["id"], None, done, failed_send)
+            self.engine.send_email(draft, ident["id"], None, done, retry_with_fallback)
 
     def identity_for(self, email: dict) -> dict | None:
         """The identity a message was delivered to (Delivered-To, To, Cc), else the primary one."""
