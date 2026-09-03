@@ -1,1 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path fill="#2e3436" fill-rule="evenodd" d="M2 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1zm.4 1h11.2L8 8.2zM2 5.4l6 4.4 6-4.4V12H2z"/></svg>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <polygon points="1.744,4.095 6.060,8.000 1.744,11.905" fill="#2e3436" stroke="#2e3436" stroke-width="0.750" stroke-linejoin="round"/>
+  <polygon points="3.554,3.625 8.389,8.000 3.554,12.375 5.231,12.375 10.066,8.000 5.231,3.625" fill="#2e3436" stroke="#2e3436" stroke-width="0.750" stroke-linejoin="round"/>
+  <polygon points="7.559,3.625 12.395,8.000 7.559,12.375 9.236,12.375 14.072,8.000 9.236,3.625" fill="#2e3436" stroke="#2e3436" stroke-width="0.750" stroke-linejoin="round"/>
+</svg>
