@@ -6,7 +6,7 @@ you own in the From field.
 
 ![The inbox with a conversation open, dark theme](data/screenshots/inbox-dark.png)
 
-> [!WARNING]
+> [!NOTE]
 > **This app was written mostly by an AI.** Nearly all of the code was produced
 > by Claude Code (Anthropic's coding agent) under my direction. I read and test
 > what it writes and use the app daily, but nobody has audited it. It works on
