@@ -118,7 +118,8 @@ class Sidebar(Adw.NavigationPage):
         factory.connect("setup", self._setup_row)
         factory.connect("bind", self._bind_row)
         factory.connect("unbind", self._unbind_row)
-        self.listview = Gtk.ListView(model=self.selection, factory=factory, single_click_activate=False)
+        self.listview = Gtk.ListView(model=self.selection, factory=factory, single_click_activate=True)
+        self.listview.connect("activate", self._on_list_activated)
         self.listview.add_css_class("navigation-sidebar")
         scrolled = Gtk.ScrolledWindow(child=self.listview, vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
         view.set_content(scrolled)
@@ -284,6 +285,10 @@ class Sidebar(Adw.NavigationPage):
         return tree_row.get_item() if tree_row else None
 
     # --------------------------------------------------------- selection
+
+    def _on_list_activated(self, _listview, position: int) -> None:
+        if self.selection.get_selected() == position:
+            self._on_selection_changed()
 
     def _on_selection_changed(self, *_) -> None:
         if self._suppress_select:
