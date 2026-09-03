@@ -1,6 +1,8 @@
-# Fastmail GTK
+# Den Mail
 
 A native Fastmail client for the GNOME desktop: GTK4, libadwaita and JMAP.
+(Formerly *fastmail-gtk*; existing settings and the keyring token migrate on
+first start.)
 Three panes, labels that nest, push updates, offline reading, and every alias
 you own in the From field.
 
@@ -59,14 +61,14 @@ Debian and Ubuntu: `python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 gir1.
 Then:
 
 ```
-git clone https://github.com/felsenuboot/fastmail-gtk.git
-cd fastmail-gtk
+git clone https://github.com/felsenuboot/den-mail.git
+cd den-mail
 ./install.sh
 ```
 
 This puts a launcher in `~/.local/bin`, a desktop entry and icons in your user
 profile, so the app shows up in your app grid and can be set as the `mailto:`
-handler. You can also just run `./bin/fastmail-gtk` from the checkout. Without
+handler. You can also just run `./bin/den-mail` from the checkout. Without
 WebKitGTK the app still works and shows HTML mail as formatted text.
 
 ## Getting started
@@ -136,7 +138,7 @@ specific message; turn them off in Preferences → Appearance if you prefer.
 ## Contributing
 
 Bug reports, ideas and pull requests are welcome on the
-[issue tracker](https://github.com/felsenuboot/fastmail-gtk/issues). The inbox
+[issue tracker](https://github.com/felsenuboot/den-mail/issues). The inbox
 cleanup roadmap (categories, cleanup views, optional local classifiers) is
 tracked in #15. Developer notes, including the fake JMAP server the tests run
 against and how screenshots are made, are in

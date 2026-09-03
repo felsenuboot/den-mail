@@ -1,11 +1,11 @@
 [Desktop Entry]
 Type=Application
-Name=Fastmail GTK
+Name=Den Mail
 Comment=Fastmail client for GNOME
-Exec=fastmail-gtk
-Icon=io.github.felsenuboot.FastmailGtk
+Exec=den-mail
+Icon=io.github.felsenuboot.DenMail
 Terminal=false
 Categories=Network;Email;GTK;
-Keywords=mail;email;fastmail;jmap;
+Keywords=mail;email;fastmail;jmap;den;
 StartupNotify=true
 MimeType=x-scheme-handler/mailto;

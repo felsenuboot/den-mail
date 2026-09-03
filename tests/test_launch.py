@@ -5,7 +5,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from fastmail_gtk.launch import new_window_argv  # noqa: E402
+from den_mail.launch import new_window_argv  # noqa: E402
 
 URL = "https://example.com/x?a=1&b=2"
 
@@ -39,7 +39,7 @@ def test_commandline_survives_glib_field_code_expansion(tmp_path):
 
     from gi.repository import Gio
 
-    from fastmail_gtk.launch import commandline_for
+    from den_mail.launch import commandline_for
 
     out = tmp_path / "argv.txt"
     stub = tmp_path / "stub.sh"

@@ -4,8 +4,8 @@ from __future__ import annotations
 import pytest
 from gi.repository import GdkPixbuf, GLib
 
-from fastmail_gtk.avatars import AvatarService, sender_key
-from fastmail_gtk.config import Config
+from den_mail.avatars import AvatarService, sender_key
+from den_mail.config import Config
 
 
 @pytest.fixture

@@ -30,7 +30,7 @@ NEGATIVE_TTL = 7 * 24 * 3600
 MAX_BYTES = 1_000_000
 MIN_SIZE = 16
 TARGET_SIZE = 128
-USER_AGENT = "Mozilla/5.0 (X11; Linux) fastmail-gtk avatar fetcher"
+USER_AGENT = "Mozilla/5.0 (X11; Linux) den-mail avatar fetcher"
 BIMI_URL_RE = re.compile(r"\bl=([^;\s]+)")
 # second-level public suffixes where the registrable domain has three labels
 SECOND_LEVEL = {"co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "co.jp", "or.jp", "ne.jp",
@@ -141,7 +141,7 @@ class AvatarService(GObject.Object):
                 else:
                     (self.dir / f"{key}.none").touch()
             if pixbuf is not None:
-                texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+                texture = Gdk.Texture.new_for_pixbuf(self._plate(pixbuf))
         except Exception as e:  # noqa: BLE001 - never let a logo break the list
             log.debug("avatar %s failed: %s", key, e)
         GLib.idle_add(self._done, key, texture)
@@ -210,6 +210,21 @@ class AvatarService(GObject.Object):
             if m and m.group(1).startswith("https://"):
                 return m.group(1)
         return None
+
+    @staticmethod
+    def _plate(pixbuf, size: int = TARGET_SIZE, inset: float = 0.14):
+        """Centre the logo on a white disc-sized plate.  Many brand logos are
+        dark on dark (Lufthansa, banks...), so without a light plate they
+        disappear on a dark theme."""
+        plate = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, size, size)
+        plate.fill(0xFFFFFFFF)
+        inner = size * (1 - 2 * inset)
+        scale = min(inner / pixbuf.get_width(), inner / pixbuf.get_height())
+        w, h = max(1, round(pixbuf.get_width() * scale)), max(1, round(pixbuf.get_height() * scale))
+        ox, oy = (size - w) / 2, (size - h) / 2
+        pixbuf.composite(plate, round(ox), round(oy), w, h, ox, oy, scale, scale,
+                         GdkPixbuf.InterpType.BILINEAR, 255)
+        return plate
 
     @staticmethod
     def _download(url: str) -> bytes | None:

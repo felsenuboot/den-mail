@@ -6,9 +6,9 @@ import pytest
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from fastmail_gtk.jmap.client import JMAPClient  # noqa: E402
-from fastmail_gtk.jmap.types import EMAIL_BODY_PROPERTIES  # noqa: E402
-from fastmail_gtk.unsubscribe import UnsubscribeError, one_click_request, parse_list_unsubscribe  # noqa: E402
+from den_mail.jmap.client import JMAPClient  # noqa: E402
+from den_mail.jmap.types import EMAIL_BODY_PROPERTIES  # noqa: E402
+from den_mail.unsubscribe import UnsubscribeError, one_click_request, parse_list_unsubscribe  # noqa: E402
 
 from .fake_server import FakeJMAPServer  # noqa: E402
 
@@ -68,9 +68,9 @@ def test_newsletter_headers_reach_the_client(server):
 
 
 def test_fetch_email_headers_updates_a_stale_cached_body(server, tmp_path, monkeypatch):
-    from fastmail_gtk.config import Config
-    from fastmail_gtk.store.db import Database
-    from fastmail_gtk.store.sync import SyncEngine
+    from den_mail.config import Config
+    from den_mail.store.db import Database
+    from den_mail.store.sync import SyncEngine
 
     from .test_engine import pump
 

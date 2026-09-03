@@ -10,7 +10,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 from ..jmap.types import ROLE_JUNK, ROLE_TRASH
 from ..models.mailbox import MailboxObject, MailboxTree
 
-DRAG_PREFIX = "fastmail-gtk-emails:"
+DRAG_PREFIX = "den-mail-emails:"
 COLOR_NAMES = ["Blue", "Green", "Yellow", "Orange", "Red", "Purple", "Pink", "Teal", "Brown", "Navy", "Violet",
                "Crimson"]
 

@@ -91,4 +91,4 @@ the blob cache. Without WebKit, `html/totext.py` converts HTML to Pango markup.
 drafts, masked emails, wildcard identities). It implements method chaining and
 result references, `/changes` and `/queryChanges` with real state tracking, and
 the EventSource stream, so `tests/test_engine.py` runs the actual client code
-end to end. `fastmail_gtk/autopilot.py` scripts the UI for screenshots.
+end to end. `den_mail/autopilot.py` scripts the UI for screenshots.

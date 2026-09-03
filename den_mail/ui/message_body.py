@@ -24,7 +24,7 @@ from .widgets import open_uri
 log = logging.getLogger(__name__)
 
 HAVE_WEBKIT = False
-if not os.environ.get("FASTMAIL_GTK_NO_WEBKIT"):
+if not os.environ.get("DEN_MAIL_NO_WEBKIT"):
     # WebKitGTK's DMA-BUF renderer intermittently paints nothing on NVIDIA/Wayland
     # setups; mail bodies are static, so the plain renderer costs us nothing.
     os.environ.setdefault("WEBKIT_DISABLE_DMABUF_RENDERER", "1")

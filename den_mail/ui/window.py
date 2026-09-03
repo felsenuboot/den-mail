@@ -185,7 +185,7 @@ class MainWindow(Adw.ApplicationWindow):
         section = Gio.Menu()
         section.append("Preferences", "win.preferences")
         section.append("Keyboard Shortcuts", "win.shortcuts")
-        section.append("About Fastmail GTK", "app.about")
+        section.append("About Den Mail", "app.about")
         primary.append_section(None, section)
 
         self.sidebar = Sidebar(self.tree, self.client.session.account_name if self.client and self.client.session else "",

@@ -10,13 +10,13 @@ import pytest
 gi.require_version("Gtk", "4.0")
 from gi.repository import GLib  # noqa: E402
 
-from fastmail_gtk.config import Config  # noqa: E402
-from fastmail_gtk.jmap.client import JMAPClient  # noqa: E402
-from fastmail_gtk.jmap.types import KW_SEEN, ROLE_ARCHIVE, ROLE_INBOX, ROLE_TRASH  # noqa: E402
-from fastmail_gtk.models.thread import ThreadListModel  # noqa: E402
-from fastmail_gtk.store import actions  # noqa: E402
-from fastmail_gtk.store.db import Database  # noqa: E402
-from fastmail_gtk.store.sync import SyncEngine, mailbox_query_spec, search_query_spec  # noqa: E402
+from den_mail.config import Config  # noqa: E402
+from den_mail.jmap.client import JMAPClient  # noqa: E402
+from den_mail.jmap.types import KW_SEEN, ROLE_ARCHIVE, ROLE_INBOX, ROLE_TRASH  # noqa: E402
+from den_mail.models.thread import ThreadListModel  # noqa: E402
+from den_mail.store import actions  # noqa: E402
+from den_mail.store.db import Database  # noqa: E402
+from den_mail.store.sync import SyncEngine, mailbox_query_spec, search_query_spec  # noqa: E402
 
 from .fake_server import FakeJMAPServer  # noqa: E402
 
@@ -241,7 +241,7 @@ def test_identity_update(engine, server):
 
 def test_body_fetch_falls_back_when_server_rejects_header_property(engine, server):
     """Fastmail rejects header:List-Unsubscribe:asText; the engine must drop it and retry."""
-    from fastmail_gtk.store.sync import SyncEngine
+    from den_mail.store.sync import SyncEngine
 
     SyncEngine._body_properties = [p for p in SyncEngine._body_properties if not p.startswith("header:List")] + [
         "header:List-Unsubscribe:asText"]
@@ -253,7 +253,7 @@ def test_body_fetch_falls_back_when_server_rejects_header_property(engine, serve
 
 
 def test_sort_options_round_trip_and_server_sorting(engine, server):
-    from fastmail_gtk.store.sync import build_sort, parse_sort
+    from den_mail.store.sync import build_sort, parse_sort
 
     for key in ("newest", "oldest", "sender", "subject", "size"):
         for flagged in (False, True):

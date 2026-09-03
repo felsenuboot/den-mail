@@ -1,5 +1,5 @@
 [project]
-name = "fastmail-gtk"
+name = "den-mail"
 version = "0.1.0"
 description = "A Fastmail (JMAP) mail client in GTK4 + libadwaita"
 requires-python = ">=3.11"
@@ -7,17 +7,17 @@ license = { text = "MIT" }
 dependencies = ["PyGObject>=3.46"]
 
 [project.scripts]
-fastmail-gtk = "fastmail_gtk.app:main_entry"
+den-mail = "den_mail.app:main_entry"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["fastmail_gtk", "fastmail_gtk.jmap", "fastmail_gtk.store", "fastmail_gtk.models", "fastmail_gtk.ui", "fastmail_gtk.html"]
+packages = ["den_mail", "den_mail.jmap", "den_mail.store", "den_mail.models", "den_mail.ui", "den_mail.html"]
 
 [tool.setuptools.package-data]
-fastmail_gtk = ["style.css", "icons/**/*.svg"]
+den_mail = ["style.css", "icons/**/*.svg"]
 
 [tool.ruff]
 line-length = 110

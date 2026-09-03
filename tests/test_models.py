@@ -5,7 +5,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from fastmail_gtk.models.mailbox import MailboxTree  # noqa: E402
+from den_mail.models.mailbox import MailboxTree  # noqa: E402
 
 
 def _mb(i, name, parent=None, role=None, hidden=0):
@@ -41,7 +41,7 @@ def test_color_overrides_apply_and_reset():
 
 def test_trusted_senders_round_trip(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    from fastmail_gtk.config import Config
+    from den_mail.config import Config
 
     cfg = Config()
     assert not cfg.is_trusted("News@Example.com")
@@ -56,7 +56,7 @@ def test_trusted_senders_round_trip(tmp_path, monkeypatch):
 
 def test_favorite_identities_config(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    from fastmail_gtk.config import Config
+    from den_mail.config import Config
 
     cfg = Config()
     cfg.set_favorite_identity("id2", True)

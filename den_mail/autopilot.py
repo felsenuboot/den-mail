@@ -1,6 +1,6 @@
 """Scripted UI driving for screenshots and smoke tests (no input tool needed).
 
-Set FASTMAIL_GTK_AUTOPILOT to a semicolon-separated script, e.g.
+Set DEN_MAIL_AUTOPILOT to a semicolon-separated script, e.g.
   "sleep 4; select 0; sleep 2; action win.reply; sleep 2; quit"
 Commands:
   sleep <seconds>      wait
@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 
 
 def install(app) -> None:
-    script = os.environ.get("FASTMAIL_GTK_AUTOPILOT")
+    script = os.environ.get("DEN_MAIL_AUTOPILOT")
     if not script:
         return
     steps = [s.strip() for s in script.split(";") if s.strip()]

@@ -22,7 +22,7 @@ from .types import CAP_CORE, CAP_MAIL, CAP_MASKED_EMAIL, CAP_SUBMISSION, DEFAULT
 
 log = logging.getLogger(__name__)
 
-USER_AGENT = f"{APP_NAME}/{VERSION} (+https://github.com/felsenuboot/fastmail-gtk)"
+USER_AGENT = f"{APP_NAME}/{VERSION} (+https://github.com/felsenuboot/den-mail)"
 DEFAULT_TIMEOUT = 60
 
 

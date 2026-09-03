@@ -13,7 +13,8 @@ from gi.repository import GLib
 
 log = logging.getLogger(__name__)
 
-APP_DIR_NAME = "fastmail-gtk"
+APP_DIR_NAME = "den-mail"
+LEGACY_DIR_NAME = "fastmail-gtk"   # name before the app became Den Mail
 
 DEFAULTS: dict[str, Any] = {
     "load_remote_images": "ask",  # "ask" | "always" | "never"
@@ -28,22 +29,29 @@ DEFAULTS: dict[str, Any] = {
 }
 
 
-def config_dir() -> Path:
-    p = Path(GLib.get_user_config_dir()) / APP_DIR_NAME
+def _app_dir(base: str) -> Path:
+    p = Path(base) / APP_DIR_NAME
+    legacy = Path(base) / LEGACY_DIR_NAME
+    if not p.exists() and legacy.is_dir():
+        try:
+            legacy.rename(p)
+            log.info("migrated %s to %s", legacy, p)
+        except OSError as e:
+            log.warning("could not migrate %s: %s", legacy, e)
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def config_dir() -> Path:
+    return _app_dir(GLib.get_user_config_dir())
 
 
 def data_dir() -> Path:
-    p = Path(GLib.get_user_data_dir()) / APP_DIR_NAME
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+    return _app_dir(GLib.get_user_data_dir())
 
 
 def cache_dir() -> Path:
-    p = Path(GLib.get_user_cache_dir()) / APP_DIR_NAME
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+    return _app_dir(GLib.get_user_cache_dir())
 
 
 def attachments_dir() -> Path:
@@ -139,6 +147,6 @@ class Config:
 
     @property
     def session_url(self) -> str:
-        return os.environ.get("FASTMAIL_GTK_SESSION_URL") or self._data.get(
+        return os.environ.get("DEN_MAIL_SESSION_URL") or self._data.get(
             "session_url", "https://api.fastmail.com/jmap/session"
         )

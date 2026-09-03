@@ -2,7 +2,7 @@
 Masked Email extension) to exercise the whole client without a real account.
 
 Run standalone:  python -m tests.fake_server   (prints the session URL)
-Then:            FASTMAIL_GTK_SESSION_URL=<url> FASTMAIL_GTK_TOKEN=fake-token fastmail-gtk
+Then:            DEN_MAIL_SESSION_URL=<url> DEN_MAIL_TOKEN=fake-token den-mail
 """
 
 from __future__ import annotations
@@ -260,7 +260,7 @@ class FakeData:
         # GitHub notifications thread
         gh_thread = None
         for k in range(3):
-            e = self.add_email(frm=people[3], to=[me], subject="[felsenuboot/fastmail-gtk] Sync engine review (#12)",
+            e = self.add_email(frm=people[3], to=[me], subject="[felsenuboot/den-mail] Sync engine review (#12)",
                                text=f"Comment {k + 1}: looks good, one nit about the queue priorities.\n\n-- \nReply to this email directly or view it on GitHub.",
                                mailboxes=[inbox, work, projects] if k == 2 else [archive, work, projects],
                                keywords={"$seen": k < 2}, when=t - timedelta(days=2, hours=-k * 4), thread=gh_thread)
@@ -727,7 +727,7 @@ class FakeData:
             mid = self.new_id("masked-")
             item = {"id": mid, "email": f"{local}@fastmail.com", "state": obj.get("state") or "enabled",
                     "forDomain": obj.get("forDomain") or "", "description": obj.get("description") or "",
-                    "url": obj.get("url"), "createdBy": "Fastmail GTK (fake)", "createdAt": _now(),
+                    "url": obj.get("url"), "createdBy": "Den Mail (fake)", "createdAt": _now(),
                     "lastMessageAt": None, "emailPrefix": prefix}
             self.masked[mid] = item
             res["created"][cid] = {k: v for k, v in item.items() if k not in obj}
@@ -1057,7 +1057,7 @@ if __name__ == "__main__":
     import sys
 
     srv = FakeJMAPServer(port=int(sys.argv[1]) if len(sys.argv) > 1 else 0, verbose="-v" in sys.argv).start()
-    print(f"FASTMAIL_GTK_SESSION_URL={srv.session_url} FASTMAIL_GTK_TOKEN={srv.token}", flush=True)
+    print(f"DEN_MAIL_SESSION_URL={srv.session_url} DEN_MAIL_TOKEN={srv.token}", flush=True)
     try:
         while True:
             time.sleep(3600)

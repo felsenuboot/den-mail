@@ -46,7 +46,7 @@ ACCELS = {
 class FastmailApp(Adw.Application):
     def __init__(self) -> None:
         flags = Gio.ApplicationFlags.HANDLES_OPEN
-        if os.environ.get("FASTMAIL_GTK_SESSION_URL") or os.environ.get("FASTMAIL_GTK_AUTOPILOT"):
+        if os.environ.get("DEN_MAIL_SESSION_URL") or os.environ.get("DEN_MAIL_AUTOPILOT"):
             flags |= Gio.ApplicationFlags.NON_UNIQUE  # test instances must not join a running app
         super().__init__(application_id=APP_ID, flags=flags)
         GLib.set_application_name(APP_NAME)
@@ -144,15 +144,15 @@ class FastmailApp(Adw.Application):
             version=VERSION,
             developer_name="felsenuboot",
             license_type=Gtk.License.MIT_X11,
-            website="https://github.com/felsenuboot/fastmail-gtk",
-            issue_url="https://github.com/felsenuboot/fastmail-gtk/issues",
+            website="https://github.com/felsenuboot/den-mail",
+            issue_url="https://github.com/felsenuboot/den-mail/issues",
             comments="A Fastmail client built on JMAP, GTK4 and libadwaita.",
         )
         dlg.present(self.window)
 
 
 def main_entry() -> int:
-    logging.basicConfig(level=logging.DEBUG if os.environ.get("FASTMAIL_GTK_DEBUG") else logging.INFO,
+    logging.basicConfig(level=logging.DEBUG if os.environ.get("DEN_MAIL_DEBUG") else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     app = FastmailApp()
     return app.run(sys.argv)

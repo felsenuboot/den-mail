@@ -1,6 +1,6 @@
-from fastmail_gtk.html.compose import forward_subject, parse_address_list, quote_text, reply_subject, text_to_html
-from fastmail_gtk.html.sanitize import BLOCKED_PIXEL, sanitize_html
-from fastmail_gtk.html.totext import html_to_markup, html_to_text
+from den_mail.html.compose import forward_subject, parse_address_list, quote_text, reply_subject, text_to_html
+from den_mail.html.sanitize import BLOCKED_PIXEL, sanitize_html
+from den_mail.html.totext import html_to_markup, html_to_text
 
 
 def test_sanitizer_strips_scripts_and_gates_remote_images():
@@ -48,8 +48,8 @@ def test_compose_helpers():
 
 
 def test_dark_mode_flips_colours_but_not_images():
-    from fastmail_gtk.html.darkmode import flip_color_value, flip_css
-    from fastmail_gtk.html.sanitize import sanitize_html
+    from den_mail.html.darkmode import flip_color_value, flip_css
+    from den_mail.html.sanitize import sanitize_html
 
     assert flip_color_value("#ffffff") != "#ffffff"
     dark_bg = flip_color_value("#ffffff")
@@ -72,7 +72,7 @@ def test_dark_mode_flips_colours_but_not_images():
 
 
 def test_dark_mode_keeps_text_readable_and_backgrounds_dark():
-    from fastmail_gtk.html.darkmode import flip_css
+    from den_mail.html.darkmode import flip_css
 
     css = flip_css("color: #0000ff; background-color: #0000ff")
     text_hex, bg_hex = [m for m in __import__("re").findall(r"#[0-9a-f]{6}", css)]
