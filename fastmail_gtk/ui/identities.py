@@ -24,12 +24,31 @@ class IdentitiesDialog(Adw.Dialog):
         refresh.connect("clicked", lambda *_: engine.refresh_identities())
         header.pack_end(refresh)
         view.add_top_bar(header)
+        self.search = Gtk.SearchEntry(placeholder_text="Filter by name or address")
+        self.search.set_margin_start(12)
+        self.search.set_margin_end(12)
+        self.search.set_margin_bottom(6)
+        self.search.connect("search-changed", lambda *_: self._filter())
+        view.add_top_bar(self.search)
         self.page = Adw.PreferencesPage()
         view.set_content(self.page)
         self.toast_overlay = Adw.ToastOverlay(child=view)
         self.set_child(self.toast_overlay)
         self.groups: list[Adw.PreferencesGroup] = []
+        self.rows: list[tuple[Adw.ExpanderRow, str]] = []
         self.reload()
+        self.connect("map", lambda *_: self.search.grab_focus())
+
+    def _filter(self) -> None:
+        text = self.search.get_text().strip().lower()
+        shown = 0
+        for row, hay in self.rows:
+            visible = not text or text in hay
+            row.set_visible(visible)
+            shown += visible
+        if self.groups:
+            total = len(self.rows)
+            self.groups[0].set_title("Send-as addresses" if not text else f"Send-as addresses ({shown} of {total})")
 
     def reload(self) -> None:
         for g in self.groups:
@@ -43,10 +62,14 @@ class IdentitiesDialog(Adw.Dialog):
                                                  f"lists only those ({favs} starred).")
         identities = sorted(self.db.get_identities(),
                             key=lambda i: ((i.get("email") or "").startswith("*@"), (i.get("email") or "").lower()))
+        self.rows = []
         for ident in identities:
-            group.add(self._row(ident))
+            row = self._row(ident)
+            group.add(row)
+            self.rows.append((row, f"{ident.get('name') or ''} {ident.get('email') or ''}".lower()))
         self.page.add(group)
         self.groups.append(group)
+        self._filter()
 
         info = Adw.PreferencesGroup(title="Creating aliases")
         row = Adw.ActionRow(title="Manage aliases in Fastmail settings",

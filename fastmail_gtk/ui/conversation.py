@@ -92,6 +92,7 @@ class MessageCard(Gtk.Box):
         self.email_id = email["id"]
         self.expanded = expanded
         self.body_loaded = False
+        self.has_html = False
         self.remote_allowed = False
         self.add_css_class("message-card")
         self.add_css_class("card")
@@ -133,6 +134,12 @@ class MessageCard(Gtk.Box):
         header.append(col)
         # per-message actions
         actions = Gtk.Box(spacing=0, valign=Gtk.Align.START)
+        self.light_toggle = Gtk.ToggleButton(icon_name="fm-light-mode-symbolic",
+                                             tooltip_text="Show this message with its original light colours")
+        self.light_toggle.add_css_class("flat")
+        self.light_toggle.set_visible(False)
+        self.light_toggle.connect("toggled", lambda b: self._set_original_colours(b.get_active()))
+        actions.append(self.light_toggle)
         for icon, tip, mode in (("fm-reply-symbolic", "Reply", "reply"),
                                 ("fm-reply-all-symbolic", "Reply all", "reply-all"),
                                 ("fm-forward-symbolic", "Forward", "forward")):
@@ -272,6 +279,8 @@ class MessageCard(Gtk.Box):
                 break
         policy = self.view.config.get("load_remote_images", "ask")
         trusted = self.view.config.is_trusted(self.sender_email)
+        self.has_html = bool(html)
+        self.light_toggle.set_visible(self.has_html and self.view.style_manager.get_dark())
         if html:
             allow = self.remote_allowed or policy == "always" or (trusted and policy != "never")
             self.body.show_html(html, self.email_id, allow_remote=allow, dark=self.wants_dark())
@@ -313,12 +322,20 @@ class MessageCard(Gtk.Box):
         return self.view.is_dark() and not self.force_original_colours
 
     def set_dark(self, _dark: bool | None = None) -> None:
+        self.light_toggle.set_visible(self.has_html and self.view.style_manager.get_dark())
         if self.body_loaded:
             self.body.set_dark(self.wants_dark())
 
-    def toggle_colours(self) -> None:
-        self.force_original_colours = not self.force_original_colours
+    def _set_original_colours(self, on: bool) -> None:
+        if self.force_original_colours == on:
+            return
+        self.force_original_colours = on
+        if self.light_toggle.get_active() != on:
+            self.light_toggle.set_active(on)
         self.set_dark()
+
+    def toggle_colours(self) -> None:
+        self._set_original_colours(not self.force_original_colours)
 
     def show_body_error(self, message: str) -> None:
         self.loading.set_visible(False)
