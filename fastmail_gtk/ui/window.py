@@ -257,7 +257,7 @@ class MainWindow(Adw.ApplicationWindow):
             "open": lambda: self.selected and self._on_activate_thread(self.selected[-1]),
             "back": self._go_back,
             "masked": lambda: MaskedEmailDialog(self.engine, self.db).present(self),
-            "identities": lambda: IdentitiesDialog(self.engine, self.db).present(self),
+            "identities": lambda: IdentitiesDialog(self.engine, self.db, self.config).present(self),
             "preferences": self.show_preferences,
             "shortcuts": self.show_shortcuts,
             "goto-inbox": lambda: self._goto_role(ROLE_INBOX),
@@ -781,7 +781,8 @@ class MainWindow(Adw.ApplicationWindow):
         win = ComposeWindow(self, self.engine, self.db, self.identities, mode, source, mailto,
                             on_closed=lambda w: w in self.compose_windows and self.compose_windows.remove(w),
                             preferred_identity_id=preferred,
-                            default_identity_email=self.client.session.username if self.client else None)
+                            default_identity_email=self.client.session.username if self.client else None,
+                            config=self.config)
         win.set_transient_for(None)
         self.compose_windows.append(win)
         win.present()
@@ -810,7 +811,9 @@ class MainWindow(Adw.ApplicationWindow):
         PreferencesDialog(self.config, self.client.session if self.client else None,
                           on_sign_out=lambda: confirm(self, "Sign out?", "The local cache will be removed.",
                                                       "Sign out", True, lambda: self.sign_out(clear=True)),
-                          on_clear_cache=lambda: self.engine.enqueue(0, self.engine.reset_cache, "reset")).present(self)
+                          on_clear_cache=lambda: self.engine.enqueue(0, self.engine.reset_cache, "reset"),
+                          on_manage_identities=lambda: IdentitiesDialog(self.engine, self.db, self.config).present(self),
+                          ).present(self)
 
     def show_shortcuts(self) -> None:
         dlg = Adw.ShortcutsDialog()

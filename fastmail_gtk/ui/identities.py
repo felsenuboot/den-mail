@@ -10,10 +10,11 @@ ALIASES_URL = "https://app.fastmail.com/settings/addresses"
 
 
 class IdentitiesDialog(Adw.Dialog):
-    def __init__(self, engine, db):
+    def __init__(self, engine, db, config=None):
         super().__init__(title="Identities & Aliases", content_width=620, content_height=680)
         self.engine = engine
         self.db = db
+        self.config = config
         self._signal = engine.connect("identities-changed", lambda *_: self.reload())
         self.connect("closed", lambda *_: engine.disconnect(self._signal))
 
@@ -34,10 +35,12 @@ class IdentitiesDialog(Adw.Dialog):
         for g in self.groups:
             self.page.remove(g)
         self.groups.clear()
+        favs = len(self.config.favorite_identities()) if self.config else 0
         group = Adw.PreferencesGroup(title="Send-as addresses",
                                      description="Aliases and identities configured in your Fastmail account. "
                                                  "Wildcard entries (*@domain) let you send from any address at "
-                                                 "that domain.")
+                                                 "that domain. Star the ones you use: the compose window then "
+                                                 f"lists only those ({favs} starred).")
         identities = sorted(self.db.get_identities(),
                             key=lambda i: ((i.get("email") or "").startswith("*@"), (i.get("email") or "").lower()))
         for ident in identities:
@@ -64,6 +67,20 @@ class IdentitiesDialog(Adw.Dialog):
             tag = Gtk.Label(label="wildcard")
             tag.add_css_class("chip")
             row.add_suffix(tag)
+        if self.config is not None:
+            fav = ident["id"] in self.config.favorite_identities()
+            star = Gtk.ToggleButton(active=fav, valign=Gtk.Align.CENTER,
+                                    icon_name="fm-star-symbolic" if fav else "fm-star-outline-symbolic",
+                                    tooltip_text="Show in the compose window")
+            star.add_css_class("flat")
+
+            def on_star(button, ident_id=ident["id"]):
+                on = button.get_active()
+                button.set_icon_name("fm-star-symbolic" if on else "fm-star-outline-symbolic")
+                self.config.set_favorite_identity(ident_id, on)
+
+            star.connect("toggled", on_star)
+            row.add_suffix(star)
         name = Adw.EntryRow(title="Sender name", text=ident.get("name") or "")
         reply_to = Adw.EntryRow(title="Reply-To (optional)",
                                 text=", ".join(a.get("email", "") for a in ident.get("replyTo") or []))

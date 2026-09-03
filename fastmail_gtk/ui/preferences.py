@@ -38,11 +38,25 @@ class PreferencesDialog(Adw.PreferencesDialog):
             expander._rows.append(row)
         expander.set_enable_expansion(bool(senders))
 
-    def __init__(self, config, session, on_sign_out: Callable[[], None], on_clear_cache: Callable[[], None]):
+    def __init__(self, config, session, on_sign_out: Callable[[], None], on_clear_cache: Callable[[], None],
+                 on_manage_identities: Callable[[], None] | None = None):
         super().__init__(title="Preferences")
         self.config = config
         page = Adw.PreferencesPage(title="General", icon_name="preferences-system-symbolic")
         self.add(page)
+
+        composing = Adw.PreferencesGroup(title="Composing")
+        favs = len(config.favorite_identities())
+        identities = Adw.ActionRow(
+            title="Favourite identities",
+            subtitle=(f"{favs} starred: the From list shows only these" if favs
+                      else "None starred: the From list shows every identity"),
+            activatable=on_manage_identities is not None)
+        identities.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
+        if on_manage_identities is not None:
+            identities.connect("activated", lambda *_: on_manage_identities())
+        composing.add(identities)
+        page.add(composing)
 
         appearance = Adw.PreferencesGroup(title="Appearance")
         scheme = Adw.ComboRow(title="Theme", model=Gtk.StringList.new(["Follow system", "Light", "Dark"]))

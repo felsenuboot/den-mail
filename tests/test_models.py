@@ -52,3 +52,14 @@ def test_trusted_senders_round_trip(tmp_path, monkeypatch):
     assert Config().is_trusted("news@example.com")  # persisted
     cfg.untrust_sender("news@example.com")
     assert not Config().is_trusted("news@example.com")
+
+
+def test_favorite_identities_config(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    from fastmail_gtk.config import Config
+
+    cfg = Config()
+    cfg.set_favorite_identity("id2", True)
+    cfg.set_favorite_identity("id3", True)
+    cfg.set_favorite_identity("id2", False)
+    assert Config().favorite_identities() == ["id3"]

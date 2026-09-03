@@ -109,6 +109,19 @@ class Config:
         senders = [s for s in self.trusted_senders() if s != addr]
         self.set("trusted_senders", senders)
 
+    # ------------------------------------------------- favourite identities
+
+    def favorite_identities(self) -> list[str]:
+        return list(self._data.get("favorite_identities") or [])
+
+    def set_favorite_identity(self, identity_id: str, favorite: bool) -> None:
+        favs = self.favorite_identities()
+        if favorite and identity_id not in favs:
+            favs.append(identity_id)
+        elif not favorite and identity_id in favs:
+            favs.remove(identity_id)
+        self.set("favorite_identities", favs)
+
     @property
     def session_url(self) -> str:
         return os.environ.get("FASTMAIL_GTK_SESSION_URL") or self._data.get(

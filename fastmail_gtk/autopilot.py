@@ -61,6 +61,9 @@ def _run(app, steps: list[str]) -> bool:
                 action.activate(None)
         elif cmd == "compose" and win:
             win.compose("new")
+        elif cmd == "dump-compose" and win and win.compose_windows:
+            cw = win.compose_windows[-1]
+            log.info("compose From entries: %s (selected: %s)", cw._identity_strings(), cw._identity().display)
         elif cmd in ("masked", "identities", "preferences") and win:
             win.lookup_action(cmd).activate(None)
         elif cmd == "resize" and win:

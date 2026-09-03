@@ -12,7 +12,8 @@ A native Fastmail client for GNOME, built on JMAP, GTK4 and libadwaita.
 - HTML mail rendered by WebKitGTK with scripts stripped, remote content blocked
   until you allow it, and inline images served locally
 - Compose, reply, reply-all, forward, drafts with autosave, attachments
-- Send from any identity, including wildcard `*@yourdomain` identities
+- Send from any identity, including wildcard `*@yourdomain` identities; star
+  your favourites so the From list stays short
 - Masked Email management (create, block, restore, delete)
 - Search with `from:`, `to:`, `subject:`, `is:unread`, `is:flagged`,
   `has:attachment`, `before:`/`after:` operators, scoped to a mailbox or all mail
