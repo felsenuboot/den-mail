@@ -18,7 +18,12 @@ ROLE_DRAFTS = "drafts"
 ROLE_SENT = "sent"
 ROLE_JUNK = "junk"
 ROLE_TRASH = "trash"
-ROLE_ORDER = [ROLE_INBOX, ROLE_DRAFTS, ROLE_SENT, ROLE_ARCHIVE, ROLE_JUNK, ROLE_TRASH]
+# Fastmail-specific roles
+ROLE_SNOOZED = "snoozed"
+ROLE_SCHEDULED = "scheduled"
+ROLE_TEMPLATES = "xtemplates"
+ROLE_ORDER = [ROLE_INBOX, ROLE_DRAFTS, ROLE_SENT, ROLE_ARCHIVE, ROLE_JUNK, ROLE_TRASH, ROLE_SNOOZED, ROLE_SCHEDULED,
+              ROLE_TEMPLATES]
 ROLE_ICONS = {
     ROLE_INBOX: "fm-inbox-symbolic",
     ROLE_ARCHIVE: "fm-archive-symbolic",
@@ -26,6 +31,9 @@ ROLE_ICONS = {
     ROLE_SENT: "fm-sent-symbolic",
     ROLE_JUNK: "fm-junk-symbolic",
     ROLE_TRASH: "user-trash-symbolic",
+    ROLE_SNOOZED: "fm-snoozed-symbolic",
+    ROLE_SCHEDULED: "fm-scheduled-symbolic",
+    ROLE_TEMPLATES: "fm-templates-symbolic",
     None: "folder-symbolic",
 }
 
@@ -69,7 +77,7 @@ EMAIL_BODY_PROPERTIES = EMAIL_LIST_PROPERTIES + [
     "attachments",
     "bodyValues",
     "header:Delivered-To:asText",
-    "header:List-Unsubscribe:asText",
+    "header:List-Unsubscribe:asRaw",  # Fastmail rejects :asText for this header
 ]
 
 MAX_BODY_VALUE_BYTES = 2_000_000

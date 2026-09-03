@@ -8,6 +8,7 @@ import threading
 from gi.repository import Adw, Gio, GLib, Gtk
 
 from .. import secrets
+from ..avatars import AvatarService
 from ..config import Config, database_path
 from ..jmap.client import AuthError, JMAPClient, JMAPError
 from ..jmap.types import KW_FLAGGED, KW_SEEN, ROLE_ARCHIVE, ROLE_DRAFTS, ROLE_INBOX, ROLE_JUNK, ROLE_TRASH
@@ -16,8 +17,9 @@ from ..models.thread import ThreadListModel, ThreadObject
 from ..store import actions
 from ..store.actions import UndoRecord
 from ..store.db import Database
-from ..store.sync import SyncEngine, mailbox_query_spec, search_query_spec
+from ..store.sync import SyncEngine, build_sort, mailbox_query_spec, parse_sort, search_query_spec
 from .compose import ComposeWindow
+from .thread_window import ThreadWindow
 from .conversation import ConversationView
 from .identities import IdentitiesDialog
 from .labels import MailboxPickerPopover
@@ -48,8 +50,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.query_key: str | None = None
         self.selected: list[ThreadObject] = []
         self.compose_windows: list[ComposeWindow] = []
+        self.thread_windows: list[ThreadWindow] = []
         self.identities: list[dict] = []
         self._pending_select_position: int | None = None
+        self.avatars = AvatarService(config)
+        self.sort = dict(config.get("sort", {"key": "newest", "flagged_first": False, "unread_first": False}))
 
         self.toast_overlay = Adw.ToastOverlay()
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
@@ -135,8 +140,6 @@ class MainWindow(Adw.ApplicationWindow):
         e.connect("query-failed", lambda _e, key, msg: self._toast(f"Could not load: {msg}"))
         e.connect("emails-changed", self._on_emails_changed)
         e.connect("emails-destroyed", self._on_emails_changed)
-        e.connect("body-ready", lambda _e, eid: self.conversation.on_body_ready(eid))
-        e.connect("body-failed", lambda _e, eid, msg: self.conversation.on_body_failed(eid, msg))
         e.connect("sync-status", self._on_sync_status)
         e.connect("push-status", lambda _e, on: self._update_status())
         e.connect("new-mail", self._on_new_mail)
@@ -195,15 +198,18 @@ class MainWindow(Adw.ApplicationWindow):
         self.model = ThreadListModel(self.db)
         self.model.label_namer = self._label_names
         self.threadlist = ThreadList(self.model, self._on_selection, self._on_activate_thread, self._on_search,
-                                     self._on_load_more, lambda: self.engine.sync_now())
+                                     self._on_load_more, lambda: self.engine.sync_now(), avatars=self.avatars)
+        self.threadlist.set_sort(self.sort["key"], self.sort["flagged_first"], self.sort["unread_first"])
+        self.threadlist.on_sort_changed = self._on_sort_changed
         self.conversation = ConversationView(self.db, self.engine, self.tree, self.config, self._compose_from,
-                                             self._email_action)
+                                             self._email_action, avatars=self.avatars)
         self.conversation.on_remove_label = lambda mid: self._label_toggle(self.tree.get(mid), False)
-        self.labels_popover = MailboxPickerPopover(self.tree, "labels", on_toggle=self._label_toggle,
-                                                   on_create=self._create_label_and_apply)
+        self.labels_popover = MailboxPickerPopover(self.tree, "labels",
+                                                   on_toggle=lambda mb, on: self._label_toggle(mb, on),
+                                                   on_create=lambda name: self._create_label_and_apply(name))
         self.conversation.labels_button.set_popover(self.labels_popover)
         self.conversation.labels_button.connect("notify::active", self._on_labels_button)
-        self.move_popover = MailboxPickerPopover(self.tree, "move", on_pick=self._move_to)
+        self.move_popover = MailboxPickerPopover(self.tree, "move", on_pick=lambda mb: self._move_to(mb))
         self.conversation.move_button.set_popover(self.move_popover)
         self.conversation.move_button.connect("notify::active", lambda b, _p: self.move_popover._rebuild() if b.get_active() else None)
 
@@ -261,6 +267,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_mailboxes_changed(self, _engine) -> None:
         self.tree.update(self.db.get_mailboxes())
+        self.sidebar.apply_expansion()
         if self.current_mailbox is None:
             inbox = self.tree.by_role(ROLE_INBOX)
             if inbox is not None:
@@ -357,7 +364,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.model.clear()
         self.conversation.clear()
         self.threadlist.set_empty_text("No conversations", f"{mb.name} is empty.")
-        self.query_key = self.engine.load_query(mailbox_query_spec(mb.id))
+        s = self._sort_for_mailbox(mb)
+        self.threadlist.set_sort(s["key"], bool(s["flagged_first"]), bool(s["unread_first"]))
+        self.query_key = self.engine.load_query(mailbox_query_spec(mb.id, self._current_sort()))
         cached = self.db.get_query(self.query_key)
         if cached:
             self.model.set_email_ids(cached["ids"], cached["total"], cached["complete"])
@@ -396,8 +405,41 @@ class MainWindow(Adw.ApplicationWindow):
         self.model.clear()
         self.conversation.clear()
         self.threadlist.set_empty_text("No results", "Try different words, or search all mail.")
-        self.query_key = self.engine.load_query(search_query_spec(text, mailbox_id, self.engine.trash_junk_ids()))
+        self.query_key = self.engine.load_query(search_query_spec(text, mailbox_id, self.engine.trash_junk_ids(),
+                                                                  self._current_sort()))
         self.threadlist.set_title("Search", "Searching…")
+
+    def _sort_for_mailbox(self, mb: MailboxObject | None) -> dict:
+        """Per-mailbox sort: local override, else Fastmail's own per-mailbox `sort`, else the global choice."""
+        if mb is not None:
+            override = (self.config.get("mailbox_sort", {}) or {}).get(mb.id)
+            if override:
+                return override
+            if mb.data.get("sort"):
+                key, flagged, unread = parse_sort(mb.data["sort"])
+                return {"key": key, "flagged_first": flagged, "unread_first": unread}
+        return self.sort
+
+    def _current_sort(self) -> list[dict]:
+        s = self._sort_for_mailbox(self.current_mailbox if not self.threadlist.search_active else None)
+        return build_sort(s.get("key", "newest"), bool(s.get("flagged_first")), bool(s.get("unread_first")))
+
+    def _on_sort_changed(self, key: str, flagged_first: bool, unread_first: bool) -> None:
+        choice = {"key": key, "flagged_first": flagged_first, "unread_first": unread_first}
+        if self.current_mailbox and not self.threadlist.search_active:
+            overrides = dict(self.config.get("mailbox_sort", {}) or {})
+            overrides[self.current_mailbox.id] = choice
+            self.config.set("mailbox_sort", overrides)
+            # Fastmail keeps a per-mailbox sort; try to share it with the web client (ignored if rejected).
+            self.engine.mailbox_set(update={self.current_mailbox.id: {"sort": build_sort(key, flagged_first, unread_first)}},
+                                    on_error=lambda m: log.info("per-mailbox sort not accepted by server: %s", m))
+        else:
+            self.sort = choice
+            self.config.set("sort", choice)
+        if self.threadlist.search_active:
+            self.threadlist._fire_search()
+        elif self.current_mailbox:
+            self._load_mailbox(self.current_mailbox)
 
     def _on_load_more(self) -> None:
         if self.query_key:
@@ -437,6 +479,17 @@ class MainWindow(Adw.ApplicationWindow):
             return
         if self.inner.get_collapsed():
             self.inner.set_show_content(True)
+            return
+        self.open_thread_window(thread)
+
+    def open_thread_window(self, thread: ThreadObject) -> None:
+        for w in self.thread_windows:
+            if w.thread.thread_id == thread.thread_id:
+                w.present()
+                return
+        win = ThreadWindow(self, thread, self.model.mailbox_id)
+        self.thread_windows.append(win)
+        win.present()
 
     def _move_selection(self, delta: int) -> None:
         pos = self.threadlist.selected_position()
@@ -454,9 +507,12 @@ class MainWindow(Adw.ApplicationWindow):
             return
         self._email_action(kind, ids, from_selection=True)
 
-    def _email_action(self, kind: str, ids: list[str], from_selection: bool = False) -> None:
+    def _email_action(self, kind: str, ids: list[str], from_selection: bool = False,
+                      threads: list[ThreadObject] | None = None) -> None:
         roles = self.engine.roles
-        thread_ids = {t.thread_id for t in self.selected} if from_selection else set()
+        if threads is None:
+            threads = self.selected if from_selection else []
+        thread_ids = {t.thread_id for t in threads}
         removes_from_list = False
         mb = self.current_mailbox
         if kind == "archive":
@@ -465,7 +521,7 @@ class MainWindow(Adw.ApplicationWindow):
         elif kind == "trash":
             if mb and mb.role == ROLE_TRASH:
                 confirm(self, "Delete permanently?", "These messages will be removed for good.", "Delete", True,
-                        lambda: self._email_action("destroy", ids, from_selection))
+                        lambda: self._email_action("destroy", ids, from_selection, threads))
                 return
             act = actions.trash(ids, roles)
             removes_from_list = mb is not None and mb.role != ROLE_TRASH
@@ -486,22 +542,23 @@ class MainWindow(Adw.ApplicationWindow):
             act = actions.mark_read(ids, True)
         elif kind == "mark-unread":
             act = actions.mark_read(ids, False)
-            if not from_selection:
-                pass
         else:
             return
-        if kind == "mark-unread" and from_selection:
+        if kind == "mark-unread" and threads:
             # Like Fastmail: marking unread from the toolbar only touches the latest message per thread.
-            latest = []
-            for t in self.selected:
-                latest.append(t.email_ids[-1] if t.email_ids else t.email_id)
+            latest = [t.email_ids[-1] if t.email_ids else t.email_id for t in threads]
             act = actions.mark_read(latest, False)
         if removes_from_list and thread_ids and not self.threadlist.search_active:
-            pos = self.threadlist.selected_position()
-            self.model.remove_threads(thread_ids)
+            self._remove_from_list(thread_ids)
+        self.engine.perform(act, self._after_action)
+
+    def _remove_from_list(self, thread_ids: set[str]) -> None:
+        visible = {t.thread_id for t in self.selected}
+        pos = self.threadlist.selected_position()
+        self.model.remove_threads(thread_ids)
+        if visible & thread_ids:
             self.conversation.clear()
             self.threadlist.select_position(min(pos, self.model.get_n_items() - 1))
-        self.engine.perform(act, self._after_action)
 
     def _after_action(self, record: UndoRecord | None) -> None:
         if record is None:
@@ -510,47 +567,48 @@ class MainWindow(Adw.ApplicationWindow):
         toast.connect("button-clicked", lambda *_: self.engine.perform(record.to_action()))
         self.toast_overlay.add_toast(toast)
 
-    def _label_toggle(self, mb: MailboxObject | None, active: bool) -> None:
-        ids = self._selected_email_ids()
+    def _label_toggle(self, mb: MailboxObject | None, active: bool, threads: list[ThreadObject] | None = None) -> None:
+        threads = self.selected if threads is None else threads
+        ids = [eid for t in threads for eid in t.email_ids]
         if mb is None or not ids:
             return
         act = actions.add_label(ids, mb.id, mb.name) if active else actions.remove_label(ids, mb.id, mb.name)
         current = self.current_mailbox
         if not active and current and current.id == mb.id and not self.threadlist.search_active:
-            pos = self.threadlist.selected_position()
-            self.model.remove_threads({t.thread_id for t in self.selected})
-            self.conversation.clear()
-            self.threadlist.select_position(min(pos, self.model.get_n_items() - 1))
+            self._remove_from_list({t.thread_id for t in threads})
         self.engine.perform(act, self._after_action)
 
-    def _on_labels_button(self, button: Gtk.MenuButton, _p) -> None:
-        if not button.get_active():
-            return
-        sets = [t.summary.mailbox_ids for t in self.selected]
+    def _present_labels(self, popover: MailboxPickerPopover, threads: list[ThreadObject]) -> None:
+        sets = [t.summary.mailbox_ids for t in threads]
         if not sets:
             return
         union = set().union(*sets)
-        inter = set.intersection(*sets) if sets else set()
-        self.labels_popover.present_for(inter, union - inter)
+        inter = set.intersection(*sets)
+        popover.present_for(inter, union - inter)
 
-    def _create_label_and_apply(self, name: str) -> None:
+    def _on_labels_button(self, button: Gtk.MenuButton, _p) -> None:
+        if button.get_active():
+            self._present_labels(self.labels_popover, self.selected)
+
+    def _create_label_and_apply(self, name: str, threads: list[ThreadObject] | None = None) -> None:
+        threads = self.selected if threads is None else threads
+        ids = [eid for t in threads for eid in t.email_ids]
+
         def created(res: dict) -> None:
             new_id = res["created"]["new"]["id"]
-            self.engine.perform(actions.add_label(self._selected_email_ids(), new_id, name), self._after_action)
+            self.engine.perform(actions.add_label(ids, new_id, name), self._after_action)
 
         self.engine.mailbox_set(create={"new": {"name": name, "parentId": None, "isSubscribed": True}},
                                 on_done=created, on_error=lambda m: self._toast(f"Could not create label: {m}"))
 
-    def _move_to(self, mb: MailboxObject) -> None:
-        ids = self._selected_email_ids()
+    def _move_to(self, mb: MailboxObject, threads: list[ThreadObject] | None = None) -> None:
+        threads = self.selected if threads is None else threads
+        ids = [eid for t in threads for eid in t.email_ids]
         if not ids:
             return
         act = actions.move(ids, mb.id, mb.name)
         if self.current_mailbox and self.current_mailbox.id != mb.id and not self.threadlist.search_active:
-            pos = self.threadlist.selected_position()
-            self.model.remove_threads({t.thread_id for t in self.selected})
-            self.conversation.clear()
-            self.threadlist.select_position(min(pos, self.model.get_n_items() - 1))
+            self._remove_from_list({t.thread_id for t in threads})
         self.engine.perform(act, self._after_action)
 
     def _on_drop(self, mb: MailboxObject, email_ids: list[str], copy: bool) -> None:
@@ -571,14 +629,17 @@ class MainWindow(Adw.ApplicationWindow):
             self.conversation.clear()
         self.engine.perform(act, self._after_action)
 
-    def _label_names(self, mailbox_ids: set[str]) -> str:
-        names = []
+    def _label_names(self, mailbox_ids: set[str]) -> list[tuple[str, int]]:
+        labels = []
         for mid in mailbox_ids:
             mb = self.tree.get(mid)
             if mb is None or mb.is_system or (self.current_mailbox and mid == self.current_mailbox.id):
                 continue
-            names.append(mb.name)
-        return "  ".join(sorted(names)[:3])
+            labels.append((mb.name, mb.color_index))
+        labels.sort()
+        if len(labels) > 3:
+            labels = labels[:2] + [(f"+{len(labels) - 2}", -1)]
+        return labels
 
     # ------------------------------------------------------------ labels
 
@@ -609,8 +670,12 @@ class MainWindow(Adw.ApplicationWindow):
     # ----------------------------------------------------------- compose
 
     def compose(self, mode: str = "new", source: dict | None = None, mailto: dict | None = None) -> None:
+        # Fastmail lets a folder choose the identity used when composing from it (identityRef).
+        preferred = self.current_mailbox.data.get("identityRef") if self.current_mailbox else None
         win = ComposeWindow(self, self.engine, self.db, self.identities, mode, source, mailto,
-                            on_closed=lambda w: w in self.compose_windows and self.compose_windows.remove(w))
+                            on_closed=lambda w: w in self.compose_windows and self.compose_windows.remove(w),
+                            preferred_identity_id=preferred,
+                            default_identity_email=self.client.session.username if self.client else None)
         win.set_transient_for(None)
         self.compose_windows.append(win)
         win.present()
@@ -672,6 +737,9 @@ class MainWindow(Adw.ApplicationWindow):
     def shutdown(self) -> None:
         for w in list(self.compose_windows):
             w.destroy()
+        for w in list(self.thread_windows):
+            w.close()
+        self.avatars.shutdown()
         if self.engine:
             self.engine.stop()
         if self.db:

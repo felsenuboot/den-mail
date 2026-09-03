@@ -45,7 +45,10 @@ ACCELS = {
 
 class FastmailApp(Adw.Application):
     def __init__(self) -> None:
-        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_OPEN)
+        flags = Gio.ApplicationFlags.HANDLES_OPEN
+        if os.environ.get("FASTMAIL_GTK_SESSION_URL") or os.environ.get("FASTMAIL_GTK_AUTOPILOT"):
+            flags |= Gio.ApplicationFlags.NON_UNIQUE  # test instances must not join a running app
+        super().__init__(application_id=APP_ID, flags=flags)
         GLib.set_application_name(APP_NAME)
         self.config = Config()
         self.window: MainWindow | None = None
@@ -57,6 +60,9 @@ class FastmailApp(Adw.Application):
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
                                                   Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         Gtk.IconTheme.get_for_display(Gdk.Display.get_default()).add_search_path(os.path.join(HERE, "icons"))
+        from .ui.preferences import apply_color_scheme
+
+        apply_color_scheme(self.config)
         for name, cb in (("about", self._about), ("quit", lambda *_: self.quit()), ("activate", lambda *_: self.activate())):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", cb)

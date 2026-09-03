@@ -237,3 +237,40 @@ def test_identity_update(engine, server):
     pump(lambda: done)
     assert server.data.identities[ident["id"]]["name"] == "Felix Renamed"
     assert any(i["name"] == "Felix Renamed" for i in engine.db.get_identities())
+
+
+def test_body_fetch_falls_back_when_server_rejects_header_property(engine, server):
+    """Fastmail rejects header:List-Unsubscribe:asText; the engine must drop it and retry."""
+    from fastmail_gtk.store.sync import SyncEngine
+
+    SyncEngine._body_properties = [p for p in SyncEngine._body_properties if not p.startswith("header:List")] + [
+        "header:List-Unsubscribe:asText"]
+    ticket = next(e for e in server.data.emails.values() if "ticket" in e["subject"].lower())
+    engine.fetch_body(ticket["id"], force=True)
+    pump(lambda: any(a[0] == ticket["id"] for a in engine.events.get("body-ready", [])))
+    assert "header:List-Unsubscribe:asText" not in SyncEngine._body_properties
+    assert engine.db.get_email_body(ticket["id"])["header:Delivered-To:asText"] == "shop@example.com"
+
+
+def test_sort_options_round_trip_and_server_sorting(engine, server):
+    from fastmail_gtk.store.sync import build_sort, parse_sort
+
+    for key in ("newest", "oldest", "sender", "subject", "size"):
+        for flagged in (False, True):
+            for unread in (False, True):
+                assert parse_sort(build_sort(key, flagged, unread)) == (key, flagged, unread)
+    assert parse_sort([{"property": "receivedAt", "isAscending": False}]) == ("newest", False, False)
+    inbox = engine.roles[ROLE_INBOX]
+    key = engine.load_query(mailbox_query_spec(inbox, build_sort("oldest")))
+    pump(lambda: any(a[0] == key for a in engine.events.get("query-updated", [])))
+    ids = engine.db.get_query(key)["ids"]
+    dates = [engine.db.get_email(i)["receivedAt"] for i in ids]
+    assert dates == sorted(dates)
+    key = engine.load_query(mailbox_query_spec(inbox, build_sort("newest", flagged_first=True)))
+    pump(lambda: any(a[0] == key for a in engine.events.get("query-updated", [])))
+    first = engine.db.get_email(engine.db.get_query(key)["ids"][0])
+    assert first["keywords"].get("$flagged")
+    key = engine.load_query(mailbox_query_spec(inbox, build_sort("sender")))
+    pump(lambda: any(a[0] == key for a in engine.events.get("query-updated", [])))
+    senders = [(engine.db.get_email(i)["from"][0].get("name") or "").lower() for i in engine.db.get_query(key)["ids"]]
+    assert senders == sorted(senders)

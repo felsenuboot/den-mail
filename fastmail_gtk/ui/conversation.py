@@ -7,6 +7,7 @@ from pathlib import Path
 
 from gi.repository import Adw, Gio, GLib, Gtk
 
+from ..avatars import sender_key
 from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full
 from ..models.thread import ThreadObject, format_date_long
 from .message_body import MessageBody
@@ -56,6 +57,9 @@ class MessageCard(Gtk.Box):
         sender = (email.get("from") or [{}])[0]
         self.avatar = avatar(address_display(sender) or "?", 36)
         self.avatar.set_valign(Gtk.Align.START)
+        self.sender_email = sender.get("email")
+        self.avatar_key = sender_key(self.sender_email)
+        self.refresh_avatar()
         header.append(self.avatar)
         col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1, hexpand=True)
         line1 = Gtk.Box(spacing=6)
@@ -130,6 +134,10 @@ class MessageCard(Gtk.Box):
         self._fill_summary()
         self._fill_details()
         self.set_expanded(expanded, initial=True)
+
+    def refresh_avatar(self) -> None:
+        avatars = getattr(self.view, "avatars", None)
+        self.avatar.set_custom_image(avatars.get(self.sender_email) if avatars else None)
 
     def _fill_summary(self) -> None:
         e = self.email
@@ -239,12 +247,18 @@ class MessageCard(Gtk.Box):
 
 class ConversationView(Adw.NavigationPage):
     def __init__(self, db, engine, tree, config, on_compose: Callable[[str, str], None],
-                 on_email_action: Callable[[str, list[str]], None]):
+                 on_email_action: Callable[[str, list[str]], None], avatars=None):
         super().__init__(title="Conversation", tag="conversation")
         self.db = db
         self.engine = engine
         self.tree = tree
         self.config = config
+        self.avatars = avatars
+        self._handlers: list[tuple[object, int]] = []
+        if avatars is not None:
+            self._handlers.append((avatars, avatars.connect("avatar-ready", self._on_avatar_ready)))
+        self._handlers.append((engine, engine.connect("body-ready", lambda _e, eid: self.on_body_ready(eid))))
+        self._handlers.append((engine, engine.connect("body-failed", lambda _e, eid, msg: self.on_body_failed(eid, msg))))
         self.on_compose = on_compose
         self.on_email_action = on_email_action
         self.thread_id: str | None = None
@@ -295,7 +309,7 @@ class ConversationView(Adw.NavigationPage):
         self.content.set_margin_end(16)
         self.content.set_margin_top(12)
         self.content.set_margin_bottom(24)
-        self.subject = Gtk.Label(xalign=0, wrap=True, selectable=True)
+        self.subject = Gtk.Label(xalign=0, wrap=True, selectable=True, focusable=False)
         self.subject.add_css_class("conversation-subject")
         self.content.append(self.subject)
         self.chips = Adw.WrapBox(child_spacing=6, line_spacing=6)
@@ -319,6 +333,17 @@ class ConversationView(Adw.NavigationPage):
             action.connect("activate", lambda _a, param, fn=fn: fn(param.get_string()))
             group.add_action(action)
         self.insert_action_group("conv", group)
+
+    def _on_avatar_ready(self, _service, key: str) -> None:
+        for card in self.cards.values():
+            if card.avatar_key == key:
+                card.refresh_avatar()
+
+    def detach(self) -> None:
+        """Disconnect from engine/avatar signals (for views living in closable windows)."""
+        for obj, hid in self._handlers:
+            obj.disconnect(hid)
+        self._handlers = []
 
     # ------------------------------------------------------------ display
 
@@ -383,6 +408,7 @@ class ConversationView(Adw.NavigationPage):
             box = Gtk.Box(spacing=2)
             box.add_css_class("chip")
             box.add_css_class("removable")
+            box.add_css_class(f"label-color-{mb.color_index}")
             box.append(Gtk.Label(label=self.tree.path_name(mid)))
             x = Gtk.Button(icon_name="window-close-symbolic")
             x.add_css_class("flat")

@@ -16,6 +16,10 @@ A native Fastmail client for GNOME, built on JMAP, GTK4 and libadwaita.
 - Masked Email management (create, block, restore, delete)
 - Search with `from:`, `to:`, `subject:`, `is:unread`, `is:flagged`,
   `has:attachment`, `before:`/`after:` operators, scoped to a mailbox or all mail
+- Sorting per mailbox (newest, oldest, sender, subject, size, flagged or unread
+  on top), following Fastmail's own per-mailbox sort setting
+- Double-click or Enter opens a conversation in its own window
+- Sender logos from BIMI records or favicons, coloured labels, light/dark theme
 - Desktop notifications for new mail, `mailto:` handler, keyboard shortcuts
 
 ## Requirements

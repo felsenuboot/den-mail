@@ -111,6 +111,33 @@
 .chip.removable {
   padding-right: 4px;
 }
+.chip-neutral {
+  font-size: 0.78em;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: alpha(currentColor, 0.12);
+}
+
+/* Label colour palette (stable per label id). Icons use the colour; chips a tint of it. */
+image.label-color-0 { color: #3584e4; }  .chip.label-color-0 { background: alpha(#3584e4, 0.18); color: #62a0ea; }
+image.label-color-1 { color: #2ec27e; }  .chip.label-color-1 { background: alpha(#2ec27e, 0.18); color: #57e389; }
+image.label-color-2 { color: #e5a50a; }  .chip.label-color-2 { background: alpha(#e5a50a, 0.18); color: #f6d32d; }
+image.label-color-3 { color: #ff7800; }  .chip.label-color-3 { background: alpha(#ff7800, 0.18); color: #ffa348; }
+image.label-color-4 { color: #e01b24; }  .chip.label-color-4 { background: alpha(#e01b24, 0.18); color: #ed333b; }
+image.label-color-5 { color: #9141ac; }  .chip.label-color-5 { background: alpha(#9141ac, 0.18); color: #c061cb; }
+image.label-color-6 { color: #e66ba2; }  .chip.label-color-6 { background: alpha(#e66ba2, 0.18); color: #f28cb9; }
+image.label-color-7 { color: #26a269; }  .chip.label-color-7 { background: alpha(#26a269, 0.18); color: #33d17a; }
+image.label-color-8 { color: #986a44; }  .chip.label-color-8 { background: alpha(#986a44, 0.18); color: #b5835a; }
+image.label-color-9 { color: #1c71d8; }  .chip.label-color-9 { background: alpha(#1c71d8, 0.18); color: #3584e4; }
+image.label-color-10 { color: #613583; } .chip.label-color-10 { background: alpha(#613583, 0.18); color: #9141ac; }
+image.label-color-11 { color: #a51d2d; } .chip.label-color-11 { background: alpha(#a51d2d, 0.18); color: #c01c28; }
+.chip.label-color-0, .chip.label-color-1, .chip.label-color-2, .chip.label-color-3, .chip.label-color-4,
+.chip.label-color-5, .chip.label-color-6, .chip.label-color-7, .chip.label-color-8, .chip.label-color-9,
+.chip.label-color-10, .chip.label-color-11 {
+  font-size: 0.78em;
+  padding: 0 6px;
+  border-radius: 4px;
+}
 
 /* Compose */
 .compose-header-entry {

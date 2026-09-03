@@ -59,16 +59,60 @@ PRIO_BACKGROUND = 3
 
 SORT_NEWEST = [{"property": "receivedAt", "isAscending": False}]
 
+SORT_OPTIONS: dict[str, list[dict]] = {
+    "newest": SORT_NEWEST,
+    "oldest": [{"property": "receivedAt", "isAscending": True}],
+    "sender": [{"property": "from", "isAscending": True}, {"property": "receivedAt", "isAscending": False}],
+    "subject": [{"property": "subject", "isAscending": True}, {"property": "receivedAt", "isAscending": False}],
+    "size": [{"property": "size", "isAscending": False}],
+}
+
+
+def build_sort(key: str = "newest", flagged_first: bool = False, unread_first: bool = False) -> list[dict]:
+    """JMAP sort comparators for the list; keyword comparators go first (RFC 8621 §4.4.2)."""
+    sort: list[dict] = []
+    if flagged_first:
+        sort.append({"property": "someInThreadHaveKeyword", "keyword": "$flagged", "isAscending": False})
+    if unread_first:
+        sort.append({"property": "allInThreadHaveKeyword", "keyword": "$seen", "isAscending": True})
+    return sort + SORT_OPTIONS.get(key, SORT_NEWEST)
+
+
+def parse_sort(sort: list[dict] | None) -> tuple[str, bool, bool]:
+    """Inverse of build_sort: (key, flagged_first, unread_first) from JMAP comparators
+    (also understands the per-mailbox `sort` Fastmail stores on Mailbox objects)."""
+    key, flagged, unread = "newest", False, False
+    for comp in sort or []:
+        prop = comp.get("property")
+        if prop in ("someInThreadHaveKeyword", "hasKeyword") and comp.get("keyword") == "$flagged":
+            flagged = True
+        elif prop in ("allInThreadHaveKeyword", "someInThreadHaveKeyword") and comp.get("keyword") == "$seen":
+            unread = True
+        elif prop == "receivedAt" or prop == "sentAt":
+            key = "oldest" if comp.get("isAscending") else "newest"
+            break
+        elif prop == "from":
+            key = "sender"
+            break
+        elif prop == "subject":
+            key = "subject"
+            break
+        elif prop == "size":
+            key = "size"
+            break
+    return key, flagged, unread
+
 
 def query_key(spec: dict) -> str:
     return hashlib.sha1(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:16]
 
 
-def mailbox_query_spec(mailbox_id: str) -> dict:
-    return {"filter": {"inMailbox": mailbox_id}, "sort": SORT_NEWEST, "collapseThreads": True}
+def mailbox_query_spec(mailbox_id: str, sort: list[dict] | None = None) -> dict:
+    return {"filter": {"inMailbox": mailbox_id}, "sort": sort or SORT_NEWEST, "collapseThreads": True}
 
 
-def search_query_spec(text: str, mailbox_id: str | None, trash_junk: list[str]) -> dict:
+def search_query_spec(text: str, mailbox_id: str | None, trash_junk: list[str],
+                      sort: list[dict] | None = None) -> dict:
     """Turn a search box string into a JMAP filter (supports from:/to:/subject:/is:/has:/before:/after:)."""
     conditions: list[dict] = []
     words: list[str] = []
@@ -115,7 +159,7 @@ def search_query_spec(text: str, mailbox_id: str | None, trash_junk: list[str]) 
         filt = conditions[0]
     else:
         filt = {"operator": "AND", "conditions": conditions}
-    return {"filter": filt, "sort": SORT_NEWEST, "collapseThreads": True}
+    return {"filter": filt, "sort": sort or SORT_NEWEST, "collapseThreads": True}
 
 
 class _Job:
@@ -576,16 +620,34 @@ class SyncEngine(GObject.Object):
             return
         self.enqueue(PRIO_LOAD, lambda: self._job_fetch_body(email_id), "body")
 
+    _body_properties: list[str] = list(EMAIL_BODY_PROPERTIES)
+
     def _job_fetch_body(self, email_id: str) -> None:
         acc = self.client.session.account_id
-        try:
-            res = self.client.call("Email/get", {
-                "accountId": acc, "ids": [email_id], "properties": EMAIL_BODY_PROPERTIES,
-                "fetchHTMLBodyValues": True, "fetchTextBodyValues": True, "maxBodyValueBytes": MAX_BODY_VALUE_BYTES,
-            })
-        except MethodError as e:
-            self._emit("body-failed", email_id, e.description or e.type)
-            return
+        res = None
+        for attempt in range(2):
+            try:
+                res = self.client.call("Email/get", {
+                    "accountId": acc, "ids": [email_id], "properties": self._body_properties,
+                    "fetchHTMLBodyValues": True, "fetchTextBodyValues": True,
+                    "maxBodyValueBytes": MAX_BODY_VALUE_BYTES,
+                })
+                break
+            except MethodError as e:
+                # Servers differ in which header:… forms they accept; drop the ones they reject and retry.
+                bad = [a for a in (e.extra.get("arguments") or []) if a.startswith("properties[")]
+                if e.type == "invalidArguments" and attempt == 0:
+                    rejected = {a.split(":", 1)[1].rstrip("]") for a in bad if ":" in a}
+                    keep = [p for p in self._body_properties
+                            if p not in rejected and (not p.startswith("header:") or not bad or p not in rejected)]
+                    if not bad:
+                        keep = [p for p in self._body_properties if not p.startswith("header:")]
+                    if keep != self._body_properties:
+                        log.warning("server rejected Email/get properties %s; retrying without", bad or "header:*")
+                        SyncEngine._body_properties = keep
+                        continue
+                self._emit("body-failed", email_id, e.description or e.type)
+                return
         if not res["list"]:
             self._emit("body-failed", email_id, "Message no longer exists")
             return

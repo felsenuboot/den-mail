@@ -18,7 +18,7 @@ class MailboxRow(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.icon = Gtk.Image()
         self.label = Gtk.Label(xalign=0, ellipsize=3, hexpand=True)
-        self.badge = Gtk.Label()
+        self.badge = Gtk.Label(valign=Gtk.Align.CENTER)
         self.badge.add_css_class("unread-badge")
         self.append(self.icon)
         self.append(self.label)
@@ -29,7 +29,7 @@ class MailboxRow(Gtk.Box):
     def bind(self, obj: MailboxObject) -> None:
         self.obj = obj
         self._sync()
-        for prop in ("name", "unread", "icon-name"):
+        for prop in ("name", "unread", "total", "icon-name", "color-index"):
             self._handlers.append((obj, obj.connect(f"notify::{prop}", lambda *_: self._sync())))
 
     def unbind(self) -> None:
@@ -51,6 +51,11 @@ class MailboxRow(Gtk.Box):
             return
         self.icon.set_visible(True)
         self.icon.set_from_icon_name(obj.icon_name)
+        for cls in list(self.icon.get_css_classes()):
+            if cls.startswith("label-color-"):
+                self.icon.remove_css_class(cls)
+        if not obj.is_system:
+            self.icon.add_css_class(f"label-color-{obj.color_index}")
         self.label.set_label(obj.name)
         self.label.remove_css_class("heading")
         self.label.remove_css_class("dim-label")
@@ -91,7 +96,6 @@ class Sidebar(Adw.NavigationPage):
         compose_content = Adw.ButtonContent(icon_name="fm-compose-symbolic", label="New Message")
         compose.set_child(compose_content)
         compose.add_css_class("suggested-action")
-        compose.add_css_class("pill")
         compose.set_action_name("win.compose")
         compose.set_margin_start(12)
         compose.set_margin_end(12)
@@ -99,7 +103,10 @@ class Sidebar(Adw.NavigationPage):
         compose.set_margin_bottom(6)
         view.add_top_bar(compose)
 
-        self.tree_model = Gtk.TreeListModel.new(tree.root, False, True, self._create_children)
+        # Expansion follows Fastmail's per-label isCollapsed until the user toggles a row.
+        self.tree_model = Gtk.TreeListModel.new(tree.root, False, False, self._create_children)
+        self._user_toggled: set[str] = set()
+        self._applying_expansion = False
         # autoselect must be off before the model is set, or GTK silently selects row 0.
         self.selection = Gtk.SingleSelection(can_unselect=False, autoselect=False)
         self.selection.set_model(self.tree_model)
@@ -225,10 +232,35 @@ class Sidebar(Adw.NavigationPage):
         drop.connect("drop", self._on_drop, list_item)
         expander.add_controller(drop)
 
+    def apply_expansion(self) -> None:
+        """Expand/collapse rows per Fastmail's isCollapsed, skipping rows the user toggled."""
+        self._applying_expansion = True
+        try:
+            i = 0
+            while i < self.tree_model.get_n_items():
+                tree_row = self.tree_model.get_item(i)
+                obj = tree_row.get_item()
+                if tree_row.is_expandable() and obj.id not in self._user_toggled:
+                    want = not obj.starts_collapsed
+                    if tree_row.get_expanded() != want:
+                        tree_row.set_expanded(want)
+                i += 1
+        finally:
+            self._applying_expansion = False
+
+    def _on_row_expanded(self, tree_row: Gtk.TreeListRow, _p) -> None:
+        if not self._applying_expansion:
+            obj = tree_row.get_item()
+            if obj is not None:
+                self._user_toggled.add(obj.id)
+
     def _bind_row(self, _factory, list_item: Gtk.ListItem) -> None:
         tree_row: Gtk.TreeListRow = list_item.get_item()
         expander: Gtk.TreeExpander = list_item.get_child()
         expander.set_list_row(tree_row)
+        if not getattr(tree_row, "_fm_hooked", False):
+            tree_row.connect("notify::expanded", self._on_row_expanded)
+            tree_row._fm_hooked = True
         obj: MailboxObject = tree_row.get_item()
         expander.get_child().bind(obj)
         list_item.set_selectable(not obj.is_section)

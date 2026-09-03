@@ -382,13 +382,30 @@ class FakeData:
                 raise MethodError("unsupportedFilter", key)
         return True
 
+    def _sort_value(self, e: dict, comparator: dict):
+        prop = comparator.get("property", "receivedAt")
+        if prop == "from":
+            a = (e.get("from") or [{}])[0]
+            return ((a.get("name") or a.get("email") or "").lower(), e["id"])
+        if prop == "subject":
+            return (re.sub(r"^((re|fwd?)\s*:\s*)+", "", (e.get("subject") or "").lower()), e["id"])
+        if prop == "size":
+            return (e.get("size") or 0, e["id"])
+        if prop == "hasKeyword":
+            return (1 if e["keywords"].get(comparator.get("keyword")) else 0, e["id"])
+        if prop in ("someInThreadHaveKeyword", "allInThreadHaveKeyword"):
+            kws = [self.emails[i]["keywords"].get(comparator.get("keyword"), False) for i in self.threads[e["threadId"]]]
+            return (1 if (any(kws) if prop.startswith("some") else all(kws)) else 0, e["id"])
+        if prop in ("receivedAt", "sentAt"):
+            return (e.get(prop) or "", e["id"])
+        raise MethodError("unsupportedSort", prop)
+
     def run_query(self, args: dict) -> list[str]:
         f = args.get("filter") or {}
         sort = args.get("sort") or [{"property": "receivedAt", "isAscending": False}]
-        prop = sort[0].get("property", "receivedAt")
-        asc = sort[0].get("isAscending", False)
         matched = [e for e in self.emails.values() if self._matches(e, f)]
-        matched.sort(key=lambda e: (e.get(prop) or "", e["id"]), reverse=not asc)
+        for comparator in reversed(sort):  # stable multi-key sort: apply least significant first
+            matched.sort(key=lambda e, c=comparator: self._sort_value(e, c), reverse=not comparator.get("isAscending", False))
         if args.get("collapseThreads"):
             seen, out = set(), []
             for e in matched:
@@ -447,6 +464,11 @@ class FakeData:
         found, not_found = [], []
         if ids is None:
             raise MethodError("requestTooLarge", "ids must be given")
+        for idx, p in enumerate(props or []):
+            if p == "header:List-Unsubscribe:asText":  # Fastmail behaviour observed 2026-09-03
+                err = MethodError("invalidArguments")
+                err.arguments = [f"properties[{idx}:{p}]"]
+                raise err
         for i in ids:
             e = self.emails.get(i)
             if not e:
@@ -780,6 +802,8 @@ class Dispatcher:
                     err = {"type": e.type}
                     if e.description:
                         err["description"] = e.description
+                    if getattr(e, "arguments", None):
+                        err["arguments"] = e.arguments
                     responses.append(["error", err, cid])
         return {"methodResponses": responses, "sessionState": "s1"}
 

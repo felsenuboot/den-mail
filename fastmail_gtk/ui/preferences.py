@@ -7,6 +7,15 @@ from collections.abc import Callable
 from gi.repository import Adw, Gtk
 
 REMOTE_OPTIONS = ["ask", "always", "never"]
+SCHEME_OPTIONS = ["system", "light", "dark"]
+
+
+def apply_color_scheme(config) -> None:
+    scheme = config.get("color_scheme", "system")
+    Adw.StyleManager.get_default().set_color_scheme({
+        "light": Adw.ColorScheme.FORCE_LIGHT,
+        "dark": Adw.ColorScheme.FORCE_DARK,
+    }.get(scheme, Adw.ColorScheme.DEFAULT))
 
 
 class PreferencesDialog(Adw.PreferencesDialog):
@@ -15,6 +24,23 @@ class PreferencesDialog(Adw.PreferencesDialog):
         self.config = config
         page = Adw.PreferencesPage(title="General", icon_name="preferences-system-symbolic")
         self.add(page)
+
+        appearance = Adw.PreferencesGroup(title="Appearance")
+        scheme = Adw.ComboRow(title="Theme", model=Gtk.StringList.new(["Follow system", "Light", "Dark"]))
+        scheme.set_selected(SCHEME_OPTIONS.index(config.get("color_scheme", "system")))
+
+        def on_scheme(row, _p):
+            config.set("color_scheme", SCHEME_OPTIONS[row.get_selected()])
+            apply_color_scheme(config)
+
+        scheme.connect("notify::selected", on_scheme)
+        appearance.add(scheme)
+        avatars = Adw.SwitchRow(title="Show sender logos",
+                                subtitle="Looks up the sender domain's BIMI logo or favicon (contacts that domain once)",
+                                active=config.get("sender_avatars", True))
+        avatars.connect("notify::active", lambda r, _p: config.set("sender_avatars", r.get_active()))
+        appearance.add(avatars)
+        page.add(appearance)
 
         reading = Adw.PreferencesGroup(title="Reading")
         remote = Adw.ComboRow(title="Remote images in HTML mail",

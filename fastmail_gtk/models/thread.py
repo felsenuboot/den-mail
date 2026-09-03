@@ -58,10 +58,13 @@ class ThreadObject(GObject.Object):
         super().__init__()
         self.summary = summary
         self.thread_id = summary.thread_id
-        self.update(summary, labels_text="")
+        self.labels: list[tuple[str, int]] = []  # (name, palette index)
+        self.update(summary, [])
 
-    def update(self, summary: ThreadSummary, labels_text: str) -> None:
+    def update(self, summary: ThreadSummary, labels: list[tuple[str, int]]) -> None:
         self.summary = summary
+        self.labels = labels
+        labels_text = "\x1f".join(f"{n}:{c}" for n, c in labels)
         for prop, value in (
             ("email_id", summary.email_id),
             ("subject", summary.subject or "(no subject)"),
@@ -100,7 +103,7 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
         self.by_thread: dict[str, ThreadObject] = {}
         self.mailbox_id: str | None = None
         self.trash_junk: set[str] = set()
-        self.label_namer = lambda mailbox_ids: ""
+        self.label_namer = lambda mailbox_ids: []
 
     # Gio.ListModel
     def do_get_item_type(self):

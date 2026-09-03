@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
+import zlib
+
 from gi.repository import Gio, GObject
 
 from ..jmap.types import ROLE_ICONS, ROLE_ORDER
+
+LABEL_PALETTE_SIZE = 12
+
+
+def label_color_index(key: str) -> int:
+    """Stable palette index for a label (keyed by id so renames keep the colour)."""
+    return zlib.crc32(key.encode("utf-8")) % LABEL_PALETTE_SIZE
 
 
 class MailboxObject(GObject.Object):
@@ -19,6 +28,7 @@ class MailboxObject(GObject.Object):
     depth = GObject.Property(type=int, default=0)
     icon_name = GObject.Property(type=str, default="folder-symbolic")
     is_section = GObject.Property(type=bool, default=False)
+    color_index = GObject.Property(type=int, default=0)
 
     def __init__(self, data: dict | None = None, depth: int = 0, section_title: str | None = None):
         super().__init__()
@@ -43,9 +53,18 @@ class MailboxObject(GObject.Object):
             ("unread", int(data.get("unreadEmails") or 0)),
             ("total", int(data.get("totalEmails") or 0)),
             ("icon_name", ROLE_ICONS.get(role or None, "folder-symbolic") if role else "fm-tag-symbolic"),
+            ("color_index", label_color_index(data["id"])),
         ):
             if self.get_property(prop) != value:
                 self.set_property(prop, value)
+
+    @property
+    def is_hidden(self) -> bool:
+        return bool(self.data.get("hidden"))
+
+    @property
+    def starts_collapsed(self) -> bool:
+        return bool(self.data.get("isCollapsed"))
 
     @property
     def is_system(self) -> bool:
@@ -90,6 +109,9 @@ class MailboxTree:
                 del self.by_id[mid]
         children: dict[str | None, list[dict]] = {}
         for m in mailboxes:
+            if m.get("hidden"):  # Fastmail: "hide from the folder list"
+                self._obj(m, 0)
+                continue
             parent = m.get("parentId")
             if parent and parent not in data_by_id:
                 parent = None
@@ -105,6 +127,8 @@ class MailboxTree:
         desired_root += [self._obj(m, 0) for m in labels]
         self._reconcile(self.root, desired_root)
         for m in mailboxes:
+            if m.get("hidden"):
+                continue
             obj = self.by_id[m["id"]]
             kids = [self._obj(c, obj.depth + 1) for c in children.get(m["id"], [])]
             self._reconcile(obj.children, kids)

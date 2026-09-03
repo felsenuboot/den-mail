@@ -4,16 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from gi.repository import Adw, Gdk, GLib, GObject, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
+from ..avatars import sender_key
 from ..models.thread import ThreadListModel, ThreadObject
 from .sidebar import DRAG_PREFIX
-from .widgets import avatar
+from .widgets import avatar, chip
 
 
 class ThreadRow(Gtk.Box):
-    def __init__(self):
+    def __init__(self, avatars):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.avatars = avatars
+        self.avatar_key: str | None = None
         self.add_css_class("thread-row")
         self.set_margin_top(6)
         self.set_margin_bottom(6)
@@ -59,10 +62,10 @@ class ThreadRow(Gtk.Box):
         self.preview.add_css_class("preview")
         self.preview.add_css_class("dim-label")
         line3.append(self.preview)
-        self.labels = Gtk.Label(xalign=1, ellipsize=3)
-        self.labels.add_css_class("label-chips")
+        self.labels = Gtk.Box(spacing=4, halign=Gtk.Align.END)
         line3.append(self.labels)
         col.append(line3)
+        self._labels_text = None
 
         self.obj: ThreadObject | None = None
         self._handlers: list[int] = []
@@ -87,6 +90,8 @@ class ThreadRow(Gtk.Box):
             return
         first = o.summary.from_addresses[0] if o.summary.from_addresses else None
         self.avatar.set_text((first.get("name") or first.get("email") or "?") if first else "?")
+        self.avatar_key = sender_key(first.get("email")) if first else None
+        self.refresh_avatar(first.get("email") if first else None)
         self.participants.set_label(("Draft: " if o.is_draft else "") + o.participants)
         self.subject.set_label(o.subject)
         self.preview.set_label(o.preview or " ")
@@ -96,13 +101,27 @@ class ThreadRow(Gtk.Box):
         self.attachment.set_visible(o.has_attachment)
         self.flag.set_visible(o.flagged)
         self.dot.set_opacity(1.0 if o.unread else 0.0)
-        self.labels.set_label(o.labels_text)
-        self.labels.set_visible(bool(o.labels_text))
+        if o.labels_text != self._labels_text:
+            self._labels_text = o.labels_text
+            while child := self.labels.get_first_child():
+                self.labels.remove(child)
+            for name, color in o.labels:
+                c = chip(name, "chip" if color >= 0 else "chip-neutral")
+                if color >= 0:
+                    c.add_css_class(f"label-color-{color}")
+                self.labels.append(c)
+            self.labels.set_visible(bool(o.labels))
         for w in (self.participants, self.subject):
             if o.unread:
                 w.add_css_class("unread")
             else:
                 w.remove_css_class("unread")
+
+    def refresh_avatar(self, email: str | None = None) -> None:
+        if email is None and self.obj is not None and self.obj.summary.from_addresses:
+            email = self.obj.summary.from_addresses[0].get("email")
+        texture = self.avatars.get(email) if (self.avatars and email) else None
+        self.avatar.set_custom_image(texture)
 
 
 class ThreadList(Adw.NavigationPage):
@@ -111,9 +130,14 @@ class ThreadList(Adw.NavigationPage):
                  on_activate: Callable[[ThreadObject], None],
                  on_search: Callable[[str, str], None],
                  on_load_more: Callable[[], None],
-                 on_refresh: Callable[[], None]):
+                 on_refresh: Callable[[], None],
+                 avatars=None):
         super().__init__(title="Inbox", tag="threads")
         self.model = model
+        self.avatars = avatars
+        self._rows: set[ThreadRow] = set()
+        if avatars is not None:
+            avatars.connect("avatar-ready", self._on_avatar_ready)
         self.on_selection = on_selection
         self.on_activate = on_activate
         self.on_search = on_search
@@ -127,6 +151,9 @@ class ThreadList(Adw.NavigationPage):
         header.set_title_widget(self.title_widget)
         self.search_button = Gtk.ToggleButton(icon_name="system-search-symbolic", tooltip_text="Search (Ctrl+F)")
         header.pack_end(self.search_button)
+        self.sort_button = Gtk.MenuButton(icon_name="fm-sort-symbolic", tooltip_text="Sort",
+                                          menu_model=self._build_sort_menu())
+        header.pack_end(self.sort_button)
         self.refresh_button = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Refresh (F5)")
         self.refresh_button.connect("clicked", lambda *_: on_refresh())
         header.pack_end(self.refresh_button)
@@ -179,10 +206,62 @@ class ThreadList(Adw.NavigationPage):
         model.connect("items-changed", lambda *_: self._update_empty())
         model.connect("notify::loading", lambda *_: self._update_empty())
 
+    # ------------------------------------------------------------ sort
+
+    on_sort_changed: Callable[[str, bool, bool], None] = lambda self, key, flagged, unread: None
+
+    def _build_sort_menu(self) -> Gio.Menu:
+        group = Gio.SimpleActionGroup()
+        self._sort_action = Gio.SimpleAction.new_stateful("by", GLib.VariantType.new("s"), GLib.Variant("s", "newest"))
+        self._sort_action.connect("change-state", self._on_sort_state)
+        group.add_action(self._sort_action)
+        self._flagged_action = Gio.SimpleAction.new_stateful("flagged-first", None, GLib.Variant("b", False))
+        self._flagged_action.connect("change-state", self._on_sort_state)
+        group.add_action(self._flagged_action)
+        self._unread_action = Gio.SimpleAction.new_stateful("unread-first", None, GLib.Variant("b", False))
+        self._unread_action.connect("change-state", self._on_sort_state)
+        group.add_action(self._unread_action)
+        self.insert_action_group("sort", group)
+        menu = Gio.Menu()
+        section = Gio.Menu()
+        for label, key in (("Newest first", "newest"), ("Oldest first", "oldest"), ("By sender", "sender"),
+                           ("By subject", "subject"), ("By size", "size")):
+            item = Gio.MenuItem.new(label, None)
+            item.set_action_and_target_value("sort.by", GLib.Variant("s", key))
+            section.append_item(item)
+        menu.append_section("Sort", section)
+        section = Gio.Menu()
+        section.append("Flagged on top", "sort.flagged-first")
+        section.append("Unread on top", "sort.unread-first")
+        menu.append_section(None, section)
+        return menu
+
+    def set_sort(self, key: str, flagged_first: bool, unread_first: bool) -> None:
+        self._setting_sort = True
+        try:
+            self._sort_action.set_state(GLib.Variant("s", key))
+            self._flagged_action.set_state(GLib.Variant("b", flagged_first))
+            self._unread_action.set_state(GLib.Variant("b", unread_first))
+        finally:
+            self._setting_sort = False
+
+    def _on_sort_state(self, action: Gio.SimpleAction, value: GLib.Variant) -> None:
+        action.set_state(value)
+        if getattr(self, "_setting_sort", False):
+            return
+        self.on_sort_changed(self._sort_action.get_state().get_string(),
+                             self._flagged_action.get_state().get_boolean(),
+                             self._unread_action.get_state().get_boolean())
+
     # ------------------------------------------------------------ rows
 
+    def _on_avatar_ready(self, _service, key: str) -> None:
+        for row in self._rows:
+            if row.avatar_key == key:
+                row.refresh_avatar()
+
     def _setup_row(self, _f, list_item: Gtk.ListItem) -> None:
-        row = ThreadRow()
+        row = ThreadRow(self.avatars)
         list_item.set_child(row)
         drag = Gtk.DragSource(actions=Gdk.DragAction.MOVE | Gdk.DragAction.COPY)
         drag.connect("prepare", self._on_drag_prepare, list_item)
@@ -190,10 +269,14 @@ class ThreadList(Adw.NavigationPage):
         row.add_controller(drag)
 
     def _bind_row(self, _f, list_item: Gtk.ListItem) -> None:
-        list_item.get_child().bind(list_item.get_item())
+        row = list_item.get_child()
+        row.bind(list_item.get_item())
+        self._rows.add(row)
 
     def _unbind_row(self, _f, list_item: Gtk.ListItem) -> None:
-        list_item.get_child().unbind()
+        row = list_item.get_child()
+        row.unbind()
+        self._rows.discard(row)
 
     def _on_drag_prepare(self, _source, _x, _y, list_item: Gtk.ListItem):
         obj: ThreadObject = list_item.get_item()

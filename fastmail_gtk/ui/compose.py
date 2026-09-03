@@ -26,12 +26,18 @@ AUTOSAVE_SECONDS = 30
 class ComposeWindow(Adw.Window):
     def __init__(self, parent: Gtk.Window, engine, db, identities: list[dict], mode: str = "new",
                  source: dict | None = None, mailto: dict | None = None,
-                 on_closed: Callable[["ComposeWindow"], None] | None = None):
+                 on_closed: Callable[["ComposeWindow"], None] | None = None,
+                 preferred_identity_id: str | None = None, default_identity_email: str | None = None):
         super().__init__(transient_for=None, default_width=760, default_height=640, title="New Message")
         self.parent_window = parent
+        self.preferred_identity_id = preferred_identity_id
         self.engine = engine
         self.db = db
-        self.identities = [IdentityObject(i) for i in identities] or [IdentityObject({"id": "", "email": ""})]
+        primary = (default_identity_email or "").lower()
+        self.identities = sorted(
+            [IdentityObject(i) for i in identities],
+            key=lambda i: (i.email.lower() != primary, i.is_wildcard, i.email.lower()),
+        ) or [IdentityObject({"id": "", "email": ""})]
         self.mode = mode
         self.source = source
         self.on_closed = on_closed
@@ -142,9 +148,15 @@ class ComposeWindow(Adw.Window):
         self._install_actions()
         self.connect("close-request", self._on_close_request)
         self._prefill(mailto)
+        self._on_identity_changed()
         self.dirty = False
 
     # --------------------------------------------------------------- setup
+
+    @staticmethod
+    def _focus_later(widget: Gtk.Widget) -> None:
+        # grab_focus() returns True, which GLib would read as "call me again forever".
+        GLib.idle_add(lambda: (widget.grab_focus(), False)[1])
 
     @staticmethod
     def _field_label(text: str) -> Gtk.Label:
@@ -222,7 +234,7 @@ class ComposeWindow(Adw.Window):
             self.buffer.set_text(reply_body(src, signature))
             self.buffer.place_cursor(self.buffer.get_start_iter())
             self.title_widget.set_title(self.subject.get_text())
-            GLib.idle_add(self.textview.grab_focus)
+            self._focus_later(self.textview)
         elif self.mode == "forward" and src:
             self.subject.set_text(forward_subject(src.get("subject")))
             self.buffer.set_text(forward_body(src, signature))
@@ -232,7 +244,7 @@ class ComposeWindow(Adw.Window):
                     self._add_attachment_chip({"blobId": a["blobId"], "type": a.get("type"), "name": a.get("name"),
                                                "size": a.get("size")})
             self.title_widget.set_title(self.subject.get_text())
-            GLib.idle_add(self.to.grab_focus)
+            self._focus_later(self.to)
         elif self.mode == "draft" and src:
             self._select_identity_for([a.get("email", "") for a in src.get("from") or []])
             self.to.set_text(format_address_list(src.get("to")))
@@ -248,8 +260,14 @@ class ComposeWindow(Adw.Window):
                 self._add_attachment_chip({"blobId": a["blobId"], "type": a.get("type"), "name": a.get("name"),
                                            "size": a.get("size")})
             self.title_widget.set_title(self.subject.get_text() or "Draft")
-            GLib.idle_add(self.textview.grab_focus)
+            self._focus_later(self.textview)
         else:
+            if self.preferred_identity_id:
+                for i, ident in enumerate(self.identities):
+                    if ident.id == self.preferred_identity_id:
+                        self.from_dropdown.set_selected(i)
+                        signature = ident.text_signature
+                        break
             if mailto:
                 self.to.set_text(mailto.get("to", ""))
                 if mailto.get("cc"):
@@ -263,7 +281,7 @@ class ComposeWindow(Adw.Window):
                 body = f"{body}\n\n-- \n{signature}" if body else f"\n\n-- \n{signature}"
             self.buffer.set_text(body)
             self.buffer.place_cursor(self.buffer.get_start_iter())
-            GLib.idle_add(self.to.grab_focus)
+            self._focus_later(self.to)
 
     # ------------------------------------------------------------- state
 
