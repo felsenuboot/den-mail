@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate three app-icon concepts (badge, disc, envelope) in Sanzo Wada
+"""Generate the envelope app-icon concept in several Sanzo Wada
 colour combinations, following the GNOME HIG app-icon conventions:
 128px canvas, 2px grid, content between y=8 and the baseline y=120, flat
 colours, a top surface plus a 4px darker front profile, no outer shadows.
@@ -19,18 +19,25 @@ PROFILE = 4          # height of the front profile below the top surface
 # combination id from combinations.json plus a darker Wada blue for the
 # front profile and a light Wada colour for the chevrons.
 COMBOS = {
-    "lyons": dict(  # combination 22: Yellow + Deep Lyons Blue
-        top="#1c4286", profile="#12354e", rim="#5a82b3",
-        light="#ffffff", light_profile="#97acc8", star="#fff200",
-        label="#22 Deep Lyons Blue / Yellow / White"),
-    "vandar": dict(  # combination 151: Sulpher Yellow + Yellow Orange + Vandar Poel's Blue
-        top="#064f6e", profile="#12354e", rim="#0093a5",
-        light="#f5ecc2", light_profile="#a5c8d1", star="#f99d1b",
-        label="#151 Vandar Poel's Blue / Yellow Orange / Sulpher Yellow"),
-    "antwarp": dict(  # combination 114: Orange Yellow + Antwarp Blue
-        top="#007190", profile="#064f6e", rim="#78cdd0",
-        light="#ffffff", light_profile="#a7d4e4", star="#fcb315",
-        label="#114 Antwarp Blue / Orange Yellow / White"),
+    # top = envelope body, profile = front profile, rim = lit flap,
+    # light = chevrons, star = seal.  Each combination id is real; the
+    # flap shade is the nearest lighter Wada tone of the same hue.
+    "green": dict(  # combination 284: Apricot Yellow + Sea Green + Dusky Green
+        top="#004f46", profile="#112f2c", rim="#00b49b",
+        light="#ffffff", star="#ffdd00",
+        label="#284 Dusky Green / Sea Green / Apricot Yellow"),
+    "purple": dict(  # combination 253: Lemon Yellow + Cotinga Purple
+        top="#501345", profile="#1e0e3f", rim="#642d5e",
+        light="#ffffff", star="#f8ed43",
+        label="#253 Cotinga Purple / Violet Red / Lemon Yellow"),
+    "wine": dict(  # combination 124: Pale Burnt Lake + Yellow Ocher, Ivory Buff via 266
+        top="#802626", profile="#4b3317", rim="#a84222",
+        light="#ebd3a2", star="#e2b540",
+        label="#124 Pale Burnt Lake / Brick Red / Yellow Ocher / Ivory Buff"),
+    "olive": dict(  # combination 310: Sulpher Yellow + Olive + Deep Slate Olive, Yellow Ocher via 96
+        top="#837e31", profile="#253122", rim="#a6a159",
+        light="#f5ecc2", star="#e2b540",
+        label="#310 Olive / Olive Yellow / Sulpher Yellow / Yellow Ocher"),
 }
 
 
@@ -117,7 +124,7 @@ def disc(c):
 
 
 def envelope(c):
-    """Landscape envelope: chevrons on the flap, star in a ring at the tip."""
+    """Landscape envelope: flat chevrons on the flap, four-point seal at the tip."""
     x0, y0, x1, y1 = 8, 24, 120, 116   # top surface bounds
     rr = 8
     tip_y = 78                          # where the flap meets
@@ -131,17 +138,17 @@ def envelope(c):
         poly([(x0, y1), (64, tip_y - 4), (x1, y1)], c["profile"], extra='clip-path="url(#env)"'),
         # flap, lighter than the body (lit from above)
         poly([(x0, y0), (x1, y0), (64, tip_y)], c["rim"], extra='clip-path="url(#env)"'),
-        # ring + star at the flap tip
-        f'<circle cx="64" cy="{tip_y}" r="18" fill="{c["profile"]}"/>',
-        f'<circle cx="64" cy="{tip_y - 2}" r="18" fill="{c["light"]}"/>',
-        f'<circle cx="64" cy="{tip_y - 2}" r="14" fill="{c["top"]}"/>',
-        poly(star5(64, tip_y - 1, 10, 4.2), c["star"]),
+        # seal: flat four-point star at the flap tip
+        poly(star4(64, tip_y, 16, 5), c["star"]),
     ]
-    body += chevrons(c, 34, 32, 20, 8, 8, r=0.5, profile=2)
+    # three flat chevrons, centred on the flap
+    h, t, gap, n = 20, 10, 6, 3
+    width = (n - 1) * (t + gap) + t + h / 2
+    body += chevrons(c, 64 - width / 2, 30, h, t, gap, n=n, r=0.5, profile=0)
     return svg(body)
 
 
-CONCEPTS = {"badge": badge, "disc": disc, "envelope": envelope}
+CONCEPTS = {"envelope": envelope}
 
 
 def main():

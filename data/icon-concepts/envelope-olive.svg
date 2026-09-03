@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+<rect x="8" y="28" width="112" height="92" rx="8" fill="#253122"/>
+<rect x="8" y="24" width="112" height="92" rx="8" fill="#837e31"/>
+<clipPath id="env"><rect x="8" y="24" width="112" height="92" rx="8"/></clipPath>
+<polygon points="8,116 64,74 120,116" fill="#253122" clip-path="url(#env)"/>
+<polygon points="8,24 120,24 64,78" fill="#a6a159" clip-path="url(#env)"/>
+<polygon points="64,62 67.5,74.5 80,78 67.5,81.5 64,94 60.5,81.5 48,78 60.5,74.5" fill="#e2b540" />
+<polygon points="38,30 48,30 58,40 48,50 38,50 48,40" fill="#f5ecc2"  stroke="#f5ecc2" stroke-width="1.0" stroke-linejoin="round"/>
+<polygon points="54,30 64,30 74,40 64,50 54,50 64,40" fill="#f5ecc2"  stroke="#f5ecc2" stroke-width="1.0" stroke-linejoin="round"/>
+<polygon points="70,30 80,30 90,40 80,50 70,50 80,40" fill="#f5ecc2"  stroke="#f5ecc2" stroke-width="1.0" stroke-linejoin="round"/>
+</svg>
