@@ -42,19 +42,22 @@ class ComposeWindow(Adw.Window):
                  on_closed: Callable[["ComposeWindow"], None] | None = None,
                  preferred_identity_id: str | None = None, default_identity_email: str | None = None,
                  config=None):
-        super().__init__(transient_for=None, default_width=820, default_height=680, title="New Message")
+        super().__init__(application=parent.get_application(), default_width=820, default_height=680,
+                         title="New Message")
         self.parent_window = parent
         self.preferred_identity_id = preferred_identity_id
         self.engine = engine
         self.db = db
         self.config = config
         primary = (default_identity_email or "").lower()
+        # Favourites (plus the primary address) keep the From list short; "Show all…" expands it, with
+        # the favourites still on top so they stay easy to find.
+        favs = set(config.favorite_identities()) if config else set()
         self.all_identities = sorted(
             [IdentityObject(i) for i in identities],
-            key=lambda i: (i.email.lower() != primary, i.is_wildcard, i.email.lower()),
+            key=lambda i: (i.email.lower() != primary, i.id not in favs, i.is_wildcard, i.email.lower()),
         ) or [IdentityObject({"id": "", "email": ""})]
-        # Favourites (plus the primary address) keep the From list short; "Show all…" expands it.
-        favs = set(config.favorite_identities()) if config else set()
+        self.favorite_displays = {i.display for i in self.all_identities if i.id in favs}
         shortlist = [i for i in self.all_identities if i.id in favs or i.email.lower() == primary]
         self.identities = shortlist if favs and shortlist else list(self.all_identities)
         self.showing_all = len(self.identities) == len(self.all_identities)
@@ -190,13 +193,18 @@ class ComposeWindow(Adw.Window):
         factory = Gtk.SignalListItemFactory()
 
         def setup(_f, item):
-            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+            text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1, hexpand=True)
             box.name_label = Gtk.Label(xalign=0)
             box.email_label = Gtk.Label(xalign=0)
             box.email_label.add_css_class("dim-label")
             box.email_label.add_css_class("caption")
-            box.append(box.name_label)
-            box.append(box.email_label)
+            text.append(box.name_label)
+            text.append(box.email_label)
+            box.star = Gtk.Image(icon_name="fm-star-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Favourite")
+            box.star.add_css_class("accent")
+            box.append(text)
+            box.append(box.star)
             item.set_child(box)
 
         def bind(_f, item):
@@ -206,6 +214,7 @@ class ComposeWindow(Adw.Window):
             box.name_label.set_label(name or display)
             box.email_label.set_label(email.rstrip(">") if name else "")
             box.email_label.set_visible(bool(name))
+            box.star.set_visible(display in self.favorite_displays)
 
         factory.connect("setup", setup)
         factory.connect("bind", bind)

@@ -14,9 +14,8 @@ A native Fastmail client for GNOME, built on JMAP, GTK4 and libadwaita.
 - Compose, reply, reply-all, forward, drafts with autosave, attachments
 - Send from any identity, including wildcard `*@yourdomain` identities; star
   your favourites so the From list stays short
-- **Links and attachments** open in the system browser or default app. On Hyprland you can choose
-  (Preferences → Reading) to open pages in a new browser window on the current workspace or to jump to
-  the browser's workspace instead of the default "new tab somewhere"
+- **Links and attachments** open with the desktop's default handlers. Optionally the browser is started
+  with its new-window switch, so pages open next to the mail client instead of as a tab somewhere else
 - Masked Email management (create, block, restore, delete)
 - Search with `from:`, `to:`, `subject:`, `is:unread`, `is:flagged`,
   `has:attachment`, `before:`/`after:` operators, scoped to a mailbox or all mail
@@ -81,14 +80,14 @@ Label colours are not available through Fastmail's JMAP API (the web client uses
 an internal API), so the app assigns stable colours per label; right-click a
 label → Colour to choose your own.
 
-### Opening links on Hyprland
+### Links and browser focus
 
-Hyprland does not switch to a browser that merely gained a tab on another workspace. "Open links and
-attachments" in Preferences → Reading offers two remedies: *New browser window on this workspace*
-starts the default browser with its new-window switch (Firefox/Zen/Chromium families, Epiphany,
-Falkon, qutebrowser), and *Switch to the browser's workspace* focuses the browser's most recently used
-window through `hyprctl` after the launch (Lua dispatch syntax on Hyprland ≥ 0.56, classic syntax
-before). Other apps are unaffected; they open new windows on the current workspace anyway.
+The app hands links to the default browser through the desktop portal and passes along an
+xdg-activation token. Whether the browser may then take focus (and pull you to its workspace) is your
+compositor's policy: GNOME and KDE allow it by default, Hyprland only with `misc.focus_on_activate`
+enabled. "Open links in a new browser window" (Preferences → Reading) sidesteps the question by
+starting the browser with its new-window switch (Firefox, Zen, LibreWolf, Chromium, Chrome, Brave,
+Vivaldi, Edge, Epiphany, Falkon, qutebrowser); other apps are unaffected.
 
 ## Development
 

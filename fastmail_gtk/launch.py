@@ -1,27 +1,21 @@
-"""Open links and files, optionally steering where the target window ends up.
+"""Open links and downloaded attachments.
 
-Hyprland puts *new* windows on the focused workspace but does not switch to a
-browser that merely gained a tab on another workspace. Two opt-in modes
-(Preferences → Reading → "Open links and attachments") address that:
+Everything goes through the desktop's default handlers (portal / GIO). The one
+option is "new browser window": instead of letting the browser add a tab to
+whichever window it likes, start it with its new-window switch so the page
+appears next to the mail client. That is plain browser command-line usage and
+works on any desktop.
 
-  * "new-window": start the default browser with its new-window flag, so the page
-    opens next to the mail client;
-  * "focus": launch as usual, then ask Hyprland (``hyprctl``) to focus the target
-    app's most recently used window, switching workspaces if necessary.
-
-"default" leaves everything to the browser (a tab in the existing window).
+Whether a browser that merely gained a tab is allowed to take focus is the
+compositor's decision (xdg-activation): the launch passes an activation token
+along, and GNOME/KDE honour it by default; Hyprland needs
+``misc.focus_on_activate = true``.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import shlex
-import shutil
-import subprocess
-import threading
-import time
 from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlparse
@@ -29,8 +23,6 @@ from urllib.parse import urlparse
 from gi.repository import Gdk, Gio, GLib, Gtk
 
 log = logging.getLogger(__name__)
-
-OPEN_MODES = ["default", "new-window", "focus"]
 
 # Executable name or desktop-entry id -> arguments that force a new window.
 NEW_WINDOW_ARGS: dict[str, list[str]] = {}
@@ -62,16 +54,8 @@ def configure(config) -> None:
     _config = config
 
 
-def mode() -> str:
-    value = _config.get("open_mode", "default") if _config is not None else "default"
-    return value if value in OPEN_MODES else "default"
-
-
-def hyprland_available() -> bool:
-    return bool(os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")) and shutil.which("hyprctl") is not None
-
-
-# ------------------------------------------------------------------ pure helpers (tested)
+def wants_new_window() -> bool:
+    return bool(_config.get("open_links_new_window", False)) if _config is not None else False
 
 
 def new_window_argv(commandline: str, target: str) -> list[str] | None:
@@ -115,81 +99,6 @@ def new_window_argv(commandline: str, target: str) -> list[str] | None:
     return argv
 
 
-def window_classes(app_id: str | None, wm_class: str | None, executable: str | None) -> list[str]:
-    """Candidate Wayland app-ids for the windows of an application."""
-    cands: list[str] = []
-    if app_id:
-        cands.append(app_id[:-8] if app_id.endswith(".desktop") else app_id)
-    if wm_class:
-        cands.append(wm_class)
-    exe = Path(executable).name if executable else ""
-    if exe:
-        cands.append(exe)
-        if exe.endswith("-bin"):
-            cands.append(exe[:-4])
-    seen: list[str] = []
-    for c in cands:
-        c = c.lower()
-        if c and c not in seen:
-            seen.append(c)
-    return seen
-
-
-def pick_window(clients: list[dict], classes: list[str]) -> str | None:
-    """Address of the most recently focused Hyprland client whose class matches."""
-    wanted = {c.lower() for c in classes}
-    matches = [c for c in clients
-               if c.get("mapped", True) and not c.get("hidden", False)
-               and (str(c.get("class") or "").lower() in wanted or str(c.get("initialClass") or "").lower() in wanted)]
-    if not matches:
-        return None
-    best = min(matches, key=lambda c: c.get("focusHistoryID", 1 << 30))
-    return best.get("address")
-
-
-# ------------------------------------------------------------------ Hyprland
-
-
-def _hyprctl(*args: str) -> str:
-    return subprocess.run(["hyprctl", *args], capture_output=True, text=True, timeout=5, check=False).stdout
-
-
-def _focus_window(address: str) -> None:
-    # Hyprland >= 0.56 takes Lua for `dispatch`; older releases take the classic "focuswindow" form.
-    out = _hyprctl("dispatch", f'hl.dsp.focus({{ window = "address:{address}" }})')
-    if not out.strip().startswith("ok"):
-        _hyprctl("dispatch", "focuswindow", f"address:{address}")
-
-
-def focus_app_later(classes: list[str], delays: tuple[float, ...] = (0.4, 0.8, 1.2, 1.6)) -> None:
-    """After a launch, focus the app's window once it exists (switching workspaces)."""
-    if not classes or not hyprland_available():
-        return
-
-    def run() -> None:
-        for delay in delays:
-            time.sleep(delay)
-            try:
-                clients = json.loads(_hyprctl("clients", "-j") or "[]")
-                address = pick_window(clients, classes)
-                if address:
-                    _focus_window(address)
-                    return
-            except (OSError, ValueError, subprocess.SubprocessError) as e:
-                log.debug("hyprctl failed: %s", e)
-                return
-        log.debug("no window found for %s", classes)
-
-    threading.Thread(target=run, name="focus-window", daemon=True).start()
-
-
-def _classes_for(app: Gio.AppInfo | None) -> list[str]:
-    if app is None:
-        return []
-    wm_class = app.get_startup_wm_class() if isinstance(app, Gio.DesktopAppInfo) else None
-    return window_classes(app.get_id(), wm_class, app.get_executable())
-
-
 def _spawn(argv: list[str], parent: Gtk.Widget | None) -> bool:
     try:
         display = parent.get_display() if parent is not None else Gdk.Display.get_default()
@@ -201,17 +110,18 @@ def _spawn(argv: list[str], parent: Gtk.Widget | None) -> bool:
         return False
 
 
-# ------------------------------------------------------------------ public API
+def _new_window_launch(app: Gio.AppInfo | None, target: str, parent: Gtk.Widget | None) -> bool:
+    if not wants_new_window() or app is None:
+        return False
+    argv = new_window_argv(app.get_commandline() or "", target)
+    return bool(argv) and _spawn(argv, parent)
 
 
 def open_uri(uri: str, parent: Gtk.Window | None = None, on_error: Callable[[str], None] | None = None) -> None:
-    current = mode()
     scheme = urlparse(uri).scheme.lower()
     app = Gio.AppInfo.get_default_for_uri_scheme(scheme) if scheme in ("http", "https") else None
-    if current == "new-window" and app is not None:
-        argv = new_window_argv(app.get_commandline() or "", uri)
-        if argv and _spawn(argv, parent):
-            return
+    if _new_window_launch(app, uri, parent):
+        return
 
     def finish(launcher, res) -> None:
         try:
@@ -220,9 +130,6 @@ def open_uri(uri: str, parent: Gtk.Window | None = None, on_error: Callable[[str
             log.warning("could not open %s: %s", uri, e.message)
             if on_error:
                 on_error(e.message)
-            return
-        if current == "focus":
-            focus_app_later(_classes_for(app))
 
     Gtk.UriLauncher(uri=uri).launch(parent, None, finish)
 
@@ -230,14 +137,11 @@ def open_uri(uri: str, parent: Gtk.Window | None = None, on_error: Callable[[str
 def open_file(path: Path, content_type: str | None, parent: Gtk.Window | None,
               on_done: Callable[[str | None], None]) -> None:
     """Open a downloaded attachment; `on_done` gets an error message or None."""
-    current = mode()
     ctype = content_type or Gio.content_type_guess(str(path), None)[0]
     app = Gio.AppInfo.get_default_for_type(ctype, False) if ctype else None
-    if current == "new-window" and app is not None:
-        argv = new_window_argv(app.get_commandline() or "", path.as_uri())
-        if argv and _spawn(argv, parent):
-            on_done(None)
-            return
+    if _new_window_launch(app, path.as_uri(), parent):
+        on_done(None)
+        return
 
     def finish(launcher, res) -> None:
         try:
@@ -245,8 +149,6 @@ def open_file(path: Path, content_type: str | None, parent: Gtk.Window | None,
         except GLib.Error as e:
             on_done(e.message)
             return
-        if current == "focus":
-            focus_app_later(_classes_for(app))
         on_done(None)
 
     Gtk.FileLauncher(file=Gio.File.new_for_path(str(path))).launch(parent, None, finish)

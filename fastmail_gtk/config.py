@@ -16,7 +16,7 @@ APP_DIR_NAME = "fastmail-gtk"
 
 DEFAULTS: dict[str, Any] = {
     "load_remote_images": "ask",  # "ask" | "always" | "never"
-    "open_mode": "default",  # "default" | "new-window" | "focus" (see launch.py)
+    "open_links_new_window": False,  # start the browser with its new-window switch (see launch.py)
     "mark_read_on_open": True,
     "notify_new_mail": True,
     "poll_interval_seconds": 300,

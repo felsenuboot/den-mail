@@ -12,7 +12,8 @@ from .labels import MailboxPickerPopover
 
 class ThreadWindow(Adw.Window):
     def __init__(self, main, thread: ThreadObject, mailbox_id: str | None):
-        super().__init__(default_width=960, default_height=760, title=thread.subject or "Conversation")
+        super().__init__(application=main.get_application(), default_width=960, default_height=760,
+                         title=thread.subject or "Conversation")
         self.main = main
         self.thread = thread
         self.mailbox_id = mailbox_id

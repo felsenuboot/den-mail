@@ -7,7 +7,6 @@ from collections.abc import Callable
 from gi.repository import Adw, Gtk
 
 REMOTE_OPTIONS = ["ask", "always", "never"]
-OPEN_LABELS = ["Let the browser decide", "New browser window on this workspace", "Switch to the browser's workspace"]
 SCHEME_OPTIONS = ["system", "light", "dark"]
 
 
@@ -91,16 +90,12 @@ class PreferencesDialog(Adw.PreferencesDialog):
                                   active=config.get("dark_html", True))
         dark_html.connect("notify::active", lambda r, _p: config.set("dark_html", r.get_active()))
         reading.add(dark_html)
-        from ..launch import OPEN_MODES, hyprland_available
-
-        opening = Adw.ComboRow(title="Open links and attachments",
-                               subtitle="Where the page ends up; switching workspaces uses Hyprland's hyprctl"
-                                        + ("" if hyprland_available() else " (not detected)"),
-                               model=Gtk.StringList.new(OPEN_LABELS))
-        opening.set_selected(OPEN_MODES.index(config.get("open_mode", "default"))
-                             if config.get("open_mode") in OPEN_MODES else 0)
-        opening.connect("notify::selected", lambda r, _p: config.set("open_mode", OPEN_MODES[r.get_selected()]))
-        reading.add(opening)
+        new_window = Adw.SwitchRow(title="Open links in a new browser window",
+                                   subtitle="Instead of a tab in whichever window the browser picks; "
+                                            "the new window appears on the current workspace",
+                                   active=config.get("open_links_new_window", False))
+        new_window.connect("notify::active", lambda r, _p: config.set("open_links_new_window", r.get_active()))
+        reading.add(new_window)
         trusted = Adw.ExpanderRow(title="Trusted senders",
                                   subtitle="Remote content loads automatically from these addresses")
         self._fill_trusted(trusted, config)
