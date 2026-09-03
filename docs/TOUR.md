@@ -1,6 +1,6 @@
 # Den Mail tour
 
-<img src="../data/den-calligraphy.png" width="140" alt="伝" align="left" hspace="24">
+<img src="../den_mail/den-calligraphy.png" width="140" alt="伝" align="left" hspace="24">
 
 > **伝** 〔でん · *den*〕 noun
 > 1. legend; tradition

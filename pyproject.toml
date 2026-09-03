@@ -17,7 +17,7 @@ build-backend = "setuptools.build_meta"
 packages = ["den_mail", "den_mail.jmap", "den_mail.store", "den_mail.models", "den_mail.ui", "den_mail.html"]
 
 [tool.setuptools.package-data]
-den_mail = ["style.css", "icons/**/*.svg"]
+den_mail = ["style.css", "den-calligraphy.png", "icons/**/*.svg"]
 
 [tool.ruff]
 line-length = 110

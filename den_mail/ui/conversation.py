@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import ClassVar
 
-from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk
 
 from .. import launch
 from ..avatars import sender_key
@@ -385,6 +385,48 @@ class MessageCard(Gtk.Box):
             toast(self, f"{self.sender_email} is no longer trusted", 4)
 
 
+JISHO_URL = "https://jisho.org/word/%E4%BC%9D-1"
+CALLIGRAPHY = Path(__file__).resolve().parent.parent / "den-calligraphy.png"
+
+
+def _calligraphy(height: int) -> Gtk.Widget:
+    """The 伝 calligraphy scaled to `height`, or the character in a large font without the file."""
+    try:
+        texture = Gdk.Texture.new_from_filename(str(CALLIGRAPHY))
+    except GLib.Error:
+        label = Gtk.Label(label="伝")
+        label.add_css_class("kanji-fallback")
+        return label
+    width = round(height * texture.get_width() / texture.get_height())
+    snapshot = Gtk.Snapshot()
+    snapshot.append_texture(texture, Graphene.Rect().init(0, 0, width, height))
+    return Gtk.Picture(paintable=snapshot.to_paintable(Graphene.Size().init(width, height)), can_shrink=False)
+
+
+def kanji_placeholder() -> Gtk.Widget:
+    """What the conversation pane shows while nothing is selected: the name of the app as a
+    dictionary entry, the way the tour introduces it."""
+    box = Gtk.Box(spacing=28, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+    box.add_css_class("kanji-placeholder")
+    box.append(_calligraphy(150))
+    entry = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, valign=Gtk.Align.CENTER)
+    head = Gtk.Label(xalign=0, use_markup=True,
+                     label="<span size='x-large' weight='bold'>伝</span>  〔でん · <i>den</i>〕  "  # noqa: RUF001 - dictionary brackets
+                           "<span size='small' alpha='60%'>noun</span>")
+    entry.append(head)
+    for i, sense in enumerate(("legend; tradition", "biography; life", "method; way",
+                               "horseback transportation and communication relay system used in ancient Japan"), 1):
+        line = Gtk.Label(label=f"{i}. {sense}", xalign=0, wrap=True, max_width_chars=36)
+        entry.append(line)
+    link = Gtk.Label(xalign=0, use_markup=True, label=f"<a href='{JISHO_URL}'>jisho.org</a>")
+    link.add_css_class("caption")
+    link.connect("activate-link", lambda w, uri: (open_uri(uri, w.get_root()), True)[1])
+    link.set_margin_top(6)
+    entry.append(link)
+    box.append(entry)
+    return box
+
+
 class RemoteContentBar(Gtk.Revealer):
     """'This message loads remote content' with Load once / Always from sender."""
 
@@ -474,8 +516,7 @@ class ConversationView(Adw.NavigationPage):
         view.add_top_bar(header)
 
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
-        self.placeholder = Adw.StatusPage(icon_name="fm-mail-read-symbolic", title="Select a conversation",
-                                          description="Choose a conversation from the list to read it here.")
+        self.placeholder = kanji_placeholder()
         self.stack.add_named(self.placeholder, "empty")
         self.multi = Adw.StatusPage(icon_name="edit-select-all-symbolic", title="Multiple conversations selected")
         self.stack.add_named(self.multi, "multi")

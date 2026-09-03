@@ -230,3 +230,15 @@ image.label-color-11 { color: #a51d2d; } .chip.label-color-11 { background: alph
 .selection-check {
   margin-right: 2px;
 }
+
+/* the conversation pane while nothing is selected */
+.kanji-placeholder {
+  margin: 24px;
+}
+.kanji-placeholder label {
+  color: alpha(currentColor, 0.8);
+}
+.kanji-fallback {
+  font-size: 110px;
+  color: @accent_bg_color;
+}
