@@ -89,6 +89,26 @@ class Config:
         self._data[key] = value
         self.save()
 
+    # ---------------------------------------------------- trusted senders
+
+    def trusted_senders(self) -> list[str]:
+        return list(self._data.get("trusted_senders") or [])
+
+    def is_trusted(self, email: str | None) -> bool:
+        return bool(email) and email.strip().lower() in self.trusted_senders()
+
+    def trust_sender(self, email: str) -> None:
+        addr = email.strip().lower()
+        senders = self.trusted_senders()
+        if addr and addr not in senders:
+            senders.append(addr)
+            self.set("trusted_senders", senders)
+
+    def untrust_sender(self, email: str) -> None:
+        addr = email.strip().lower()
+        senders = [s for s in self.trusted_senders() if s != addr]
+        self.set("trusted_senders", senders)
+
     @property
     def session_url(self) -> str:
         return os.environ.get("FASTMAIL_GTK_SESSION_URL") or self._data.get(

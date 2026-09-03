@@ -58,12 +58,22 @@ DECL_RE = re.compile(r"([a-zA-Z-]+)\s*:\s*([^;{}]+)")
 URL_RE = re.compile(r"url\([^)]*\)", re.I)
 
 
-def flip_lightness(r: float, g: float, b: float) -> tuple[float, float, float]:
+TEXT_MIN_L = 0.62  # text (incl. links) must stay readable on the dark ground
+BG_MAX_L = 0.45  # backgrounds must stay darker than the text
+
+
+def flip_lightness(r: float, g: float, b: float, text: bool | None = None) -> tuple[float, float, float]:
     """Invert perceived lightness in HSL space, keeping hue and saturation.
-    Extremes are pulled in slightly so pure white becomes dark grey, not black."""
+    Extremes are pulled in slightly so pure white becomes dark grey, not black.
+    `text=True` guarantees a readable (light) result, `text=False` a dark one;
+    mid-lightness colours such as pure blue would otherwise survive unchanged."""
     h, l, s = colorsys.rgb_to_hls(r, g, b)
-    new_l = 0.92 - 0.84 * l if l > 0.5 else 0.92 - 0.84 * l
+    new_l = 0.92 - 0.84 * l
     new_l = min(0.92, max(0.08, new_l))
+    if text is True:
+        new_l = max(new_l, TEXT_MIN_L)
+    elif text is False:
+        new_l = min(new_l, BG_MAX_L)
     return colorsys.hls_to_rgb(h, new_l, s)
 
 
@@ -71,7 +81,11 @@ def _hex(r: float, g: float, b: float) -> str:
     return "#{:02x}{:02x}{:02x}".format(round(r * 255), round(g * 255), round(b * 255))
 
 
-def _flip_hex(m: re.Match) -> str:
+TEXT_PROPS = {"color", "text-decoration-color", "caret-color", "-webkit-text-fill-color", "fill", "stroke"}
+TEXT_ATTRS = {"color", "text", "link", "alink", "vlink"}
+
+
+def _flip_hex(m: re.Match, text: bool | None = None) -> str:
     h = m.group(1)
     alpha = ""
     if len(h) in (3, 4):
@@ -81,7 +95,7 @@ def _flip_hex(m: re.Match) -> str:
     elif len(h) == 8:
         alpha, h = h[6:], h[:6]
     r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
-    out = _hex(*flip_lightness(r, g, b))
+    out = _hex(*flip_lightness(r, g, b, text))
     return out + alpha
 
 
@@ -89,32 +103,33 @@ def _channel(v: str) -> float:
     return float(v[:-1]) / 100 if v.endswith("%") else float(v) / 255
 
 
-def _flip_rgb(m: re.Match) -> str:
+def _flip_rgb(m: re.Match, text: bool | None = None) -> str:
     try:
         r, g, b = (min(1.0, max(0.0, _channel(m.group(i)))) for i in (1, 2, 3))
     except ValueError:
         return m.group(0)
-    nr, ng, nb = flip_lightness(r, g, b)
+    nr, ng, nb = flip_lightness(r, g, b, text)
     if m.group(4):
         return f"rgba({round(nr * 255)}, {round(ng * 255)}, {round(nb * 255)}, {m.group(4)})"
     return f"rgb({round(nr * 255)}, {round(ng * 255)}, {round(nb * 255)})"
 
 
-def _flip_named(m: re.Match) -> str:
+def _flip_named(m: re.Match, text: bool | None = None) -> str:
     h = NAMED[m.group(1).lower()]
     r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
-    return _hex(*flip_lightness(r, g, b))
+    return _hex(*flip_lightness(r, g, b, text))
 
 
-def flip_color_value(value: str) -> str:
-    """Flip every colour token in a CSS value (url() parts are left alone)."""
+def flip_color_value(value: str, text: bool | None = None) -> str:
+    """Flip every colour token in a CSS value (url() parts are left alone).
+    `text` tells whether the value colours text (True) or a background (False)."""
     parts = URL_RE.split(value)
     urls = URL_RE.findall(value)
     out = []
     for i, part in enumerate(parts):
-        part = HEX_RE.sub(_flip_hex, part)
-        part = RGB_RE.sub(_flip_rgb, part)
-        part = NAMED_RE.sub(_flip_named, part)
+        part = HEX_RE.sub(lambda m: _flip_hex(m, text), part)
+        part = RGB_RE.sub(lambda m: _flip_rgb(m, text), part)
+        part = NAMED_RE.sub(lambda m: _flip_named(m, text), part)
         out.append(part)
         if i < len(urls):
             out.append(urls[i])
@@ -127,19 +142,25 @@ def flip_css(css: str) -> str:
     def repl(m: re.Match) -> str:
         prop = m.group(1).lower()
         if prop in COLOR_PROPS or prop.endswith("-color"):
-            return f"{m.group(1)}:{flip_color_value(m.group(2))}"
+            if prop in TEXT_PROPS:
+                kind = True
+            elif prop.startswith("background"):
+                kind = False
+            else:
+                kind = None  # borders, shadows: plain flip
+            return f"{m.group(1)}:{flip_color_value(m.group(2), kind)}"
         return m.group(0)
 
     return DECL_RE.sub(repl, css)
 
 
-def flip_attr(value: str) -> str:
+def flip_attr(value: str, attr: str = "bgcolor") -> str:
     v = value.strip()
     if not v:
         return value
     if not v.startswith("#") and not v.lower().startswith(("rgb", "hsl")) and v.lower() not in NAMED:
         v = "#" + v if re.fullmatch(r"[0-9a-fA-F]{6}", v) else v
-    return flip_color_value(v)
+    return flip_color_value(v, True if attr in TEXT_ATTRS else False)
 
 
 def declares_dark_support(html: str) -> bool:

@@ -22,6 +22,22 @@ def apply_color_scheme(config) -> None:
 
 
 class PreferencesDialog(Adw.PreferencesDialog):
+    def _fill_trusted(self, expander: Adw.ExpanderRow, config) -> None:
+        senders = config.trusted_senders()
+        expander.set_subtitle(f"{len(senders)} address{'es' if len(senders) != 1 else ''} load remote content automatically")
+        for rows in list(getattr(expander, "_rows", [])):
+            expander.remove(rows)
+        expander._rows = []
+        for addr in senders:
+            row = Adw.ActionRow(title=addr)
+            remove = Gtk.Button(icon_name="window-close-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Forget")
+            remove.add_css_class("flat")
+            remove.connect("clicked", lambda _b, a=addr: (config.untrust_sender(a), self._fill_trusted(expander, config)))
+            row.add_suffix(remove)
+            expander.add_row(row)
+            expander._rows.append(row)
+        expander.set_enable_expansion(bool(senders))
+
     def __init__(self, config, session, on_sign_out: Callable[[], None], on_clear_cache: Callable[[], None]):
         super().__init__(title="Preferences")
         self.config = config
@@ -60,6 +76,10 @@ class PreferencesDialog(Adw.PreferencesDialog):
                                   active=config.get("dark_html", True))
         dark_html.connect("notify::active", lambda r, _p: config.set("dark_html", r.get_active()))
         reading.add(dark_html)
+        trusted = Adw.ExpanderRow(title="Trusted senders",
+                                  subtitle="Remote content loads automatically from these addresses")
+        self._fill_trusted(trusted, config)
+        reading.add(trusted)
         page.add(reading)
 
         sync = Adw.PreferencesGroup(title="Sync & notifications")

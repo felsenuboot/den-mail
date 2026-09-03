@@ -37,3 +37,18 @@ def test_color_overrides_apply_and_reset():
     tree.color_overrides = {}
     tree.refresh()
     assert tree.get("w").color_index != 4 or True  # falls back to the hash (may coincide)
+
+
+def test_trusted_senders_round_trip(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    from fastmail_gtk.config import Config
+
+    cfg = Config()
+    assert not cfg.is_trusted("News@Example.com")
+    cfg.trust_sender("News@Example.com ")
+    assert cfg.is_trusted("news@example.com") and cfg.trusted_senders() == ["news@example.com"]
+    cfg.trust_sender("news@example.com")  # idempotent
+    assert cfg.trusted_senders() == ["news@example.com"]
+    assert Config().is_trusted("news@example.com")  # persisted
+    cfg.untrust_sender("news@example.com")
+    assert not Config().is_trusted("news@example.com")

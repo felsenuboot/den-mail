@@ -121,7 +121,7 @@ class _Sanitizer(HTMLParser):
             elif n == "style":
                 value = self._fix_style(value)
             elif n in COLOR_ATTRS and self.dark:
-                value = flip_attr(value)
+                value = flip_attr(value, n)
             elif n == "target":
                 continue
             parts.append(f' {escape(n)}="{escape(value, quote=True)}"')

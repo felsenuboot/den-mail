@@ -69,3 +69,16 @@ def test_dark_mode_flips_colours_but_not_images():
     native = sanitize_html('<meta name="color-scheme" content="light dark"><p style="color:#111">x</p>', dark=True)
     assert "#111" in native.html  # message handles dark mode itself
     assert "color-scheme: dark" in native.html
+
+
+def test_dark_mode_keeps_text_readable_and_backgrounds_dark():
+    from fastmail_gtk.html.darkmode import flip_css
+
+    css = flip_css("color: #0000ff; background-color: #0000ff")
+    text_hex, bg_hex = [m for m in __import__("re").findall(r"#[0-9a-f]{6}", css)]
+    import colorsys
+    def lightness(h):
+        r, g, b = (int(h[i:i + 2], 16) / 255 for i in (1, 3, 5))
+        return colorsys.rgb_to_hls(r, g, b)[1]
+    assert lightness(text_hex) >= 0.6  # pure blue link becomes a light blue
+    assert lightness(bg_hex) <= 0.46  # pure blue background stays dark-ish

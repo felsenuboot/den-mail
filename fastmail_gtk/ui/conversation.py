@@ -144,7 +144,13 @@ class MessageCard(Gtk.Box):
         menu.append("Mark as unread", f"conv.unread::{self.email_id}")
         menu.append("Show details", f"conv.details::{self.email_id}")
         menu.append("Toggle dark adaptation", f"conv.colours::{self.email_id}")
-        menu.append("Delete this message", f"conv.trash::{self.email_id}")
+        trust = Gio.Menu()
+        trust.append("Always load remote content from this sender", f"conv.trust::{self.email_id}")
+        trust.append("Stop trusting this sender", f"conv.untrust::{self.email_id}")
+        menu.append_section(None, trust)
+        danger = Gio.Menu()
+        danger.append("Delete this message", f"conv.trash::{self.email_id}")
+        menu.append_section(None, danger)
         self.force_original_colours = False
         more = Gtk.MenuButton(icon_name="view-more-symbolic", menu_model=menu)
         more.add_css_class("flat")
@@ -165,9 +171,7 @@ class MessageCard(Gtk.Box):
         self.attachments_holder.add_css_class("attachments-row")
         self.attachments_holder.set_visible(False)
         self.body_box.append(self.attachments_holder)
-        self.banner = Adw.Banner(title="This message loads content from remote servers", button_label="Load")
-        self.banner.connect("button-clicked", self._on_allow_remote)
-        self.banner.set_revealed(False)
+        self.banner = RemoteContentBar(self._on_allow_remote, self._on_trust_sender)
         self.body_box.append(self.banner)
         self.truncated = Gtk.Label(label="Message was too large; showing the beginning only.", xalign=0)
         self.truncated.add_css_class("dim-label")
@@ -267,10 +271,12 @@ class MessageCard(Gtk.Box):
                 truncated = truncated or bool(v.get("isTruncated"))
                 break
         policy = self.view.config.get("load_remote_images", "ask")
+        trusted = self.view.config.is_trusted(self.sender_email)
         if html:
-            self.body.show_html(html, self.email_id, allow_remote=self.remote_allowed or policy == "always",
-                                dark=self.wants_dark())
-            self.banner.set_revealed(bool(self.body.has_remote) and not self.remote_allowed and policy == "ask")
+            allow = self.remote_allowed or policy == "always" or (trusted and policy != "never")
+            self.body.show_html(html, self.email_id, allow_remote=allow, dark=self.wants_dark())
+            self.banner.set_sender(address_display((self.email.get("from") or [{}])[0]) or self.sender_email or "")
+            self.banner.set_revealed(bool(self.body.has_remote) and not allow and policy == "ask")
         elif text is not None:
             self.body.show_text(text)
             self.banner.set_revealed(False)
@@ -322,6 +328,45 @@ class MessageCard(Gtk.Box):
         self.remote_allowed = True
         self.banner.set_revealed(False)
         self.body.allow_remote()
+
+    def _on_trust_sender(self, *_) -> None:
+        if self.sender_email:
+            self.view.config.trust_sender(self.sender_email)
+            toast(self, f"Remote content from {self.sender_email} will load automatically", 4)
+        self._on_allow_remote()
+
+    def _on_untrust_sender(self) -> None:
+        if self.sender_email:
+            self.view.config.untrust_sender(self.sender_email)
+            toast(self, f"{self.sender_email} is no longer trusted", 4)
+
+
+class RemoteContentBar(Gtk.Revealer):
+    """'This message loads remote content' with Load once / Always from sender."""
+
+    def __init__(self, on_load, on_trust):
+        super().__init__(reveal_child=False, transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
+        box = Gtk.Box(spacing=8)
+        box.add_css_class("remote-bar")
+        self.label = Gtk.Label(label="This message loads content from remote servers", xalign=0, hexpand=True,
+                               ellipsize=3)
+        box.append(self.label)
+        self.trust_button = Gtk.Button(label="Always from sender")
+        self.trust_button.add_css_class("flat")
+        self.trust_button.connect("clicked", on_trust)
+        box.append(self.trust_button)
+        load = Gtk.Button(label="Load")
+        load.add_css_class("suggested-action")
+        load.connect("clicked", on_load)
+        box.append(load)
+        self.set_child(box)
+
+    def set_sender(self, name: str) -> None:
+        self.trust_button.set_label(f"Always from {name}" if name else "Always from sender")
+        self.trust_button.set_tooltip_text("Remember this sender and load remote content automatically")
+
+    def set_revealed(self, revealed: bool) -> None:
+        self.set_reveal_child(revealed)
 
 
 class ConversationView(Adw.NavigationPage):
@@ -411,6 +456,8 @@ class ConversationView(Adw.NavigationPage):
         for name, fn in (("unread", lambda eid: self.on_email_action("mark-unread", [eid])),
                          ("trash", lambda eid: self.on_email_action("trash", [eid])),
                          ("colours", lambda eid: self.cards[eid].toggle_colours() if eid in self.cards else None),
+                         ("trust", lambda eid: self.cards[eid]._on_trust_sender() if eid in self.cards else None),
+                         ("untrust", lambda eid: self.cards[eid]._on_untrust_sender() if eid in self.cards else None),
                          ("details", lambda eid: self.cards[eid].toggle_details() if eid in self.cards else None)):
             action = Gio.SimpleAction.new(name, GLib.VariantType.new("s"))
             action.connect("activate", lambda _a, param, fn=fn: fn(param.get_string()))
