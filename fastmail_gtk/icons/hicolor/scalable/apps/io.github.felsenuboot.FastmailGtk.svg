@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <defs>
-    <clipPath id="tri"><polygon points="13.95,32.76 48.48,64.00 13.95,95.24" stroke="#006eb8" stroke-width="6.0" stroke-linejoin="round"/></clipPath>
-  </defs>
-  <polygon points="13.95,32.76 48.48,64.00 13.95,95.24" fill="#006eb8" stroke="#006eb8" stroke-width="6.0" stroke-linejoin="round"/>
-  <g clip-path="url(#tri)"><g fill="#0066ad"><circle cx="25.0" cy="70.0" r="9"/><circle cx="35.0" cy="65.0" r="11"/><circle cx="45.0" cy="71.0" r="8"/><rect x="19.0" y="68.0" width="32" height="11" rx="5"/></g></g>
-  <polygon points="28.43,29.00 67.11,64.00 28.43,99.00 41.84,99.00 80.53,64.00 41.84,29.00" fill="#006eb8" stroke="#006eb8" stroke-width="6.0" stroke-linejoin="round"/>
-  <polygon points="60.48,29.00 99.16,64.00 60.48,99.00 73.89,99.00 112.57,64.00 73.89,29.00" fill="#006eb8" stroke="#006eb8" stroke-width="6.0" stroke-linejoin="round"/>
+  <defs><clipPath id="tri"><polygon points="15.00,19.24 49.84,62.00 15.00,104.76" stroke="#3584e4" stroke-width="8.0" stroke-linejoin="round"/></clipPath></defs>
+  <polygon points="15.00,23.24 49.84,66.00 15.00,108.76" fill="#1a5fb4" stroke="#1a5fb4" stroke-width="8.0" stroke-linejoin="round"/>
+  <polygon points="29.74,16.00 70.48,66.00 29.74,116.00 40.06,116.00 80.80,66.00 40.06,16.00" fill="#1a5fb4" stroke="#1a5fb4" stroke-width="8.0" stroke-linejoin="round"/>
+  <polygon points="60.70,16.00 101.44,66.00 60.70,116.00 71.02,116.00 111.76,66.00 71.02,16.00" fill="#1a5fb4" stroke="#1a5fb4" stroke-width="8.0" stroke-linejoin="round"/>
+  <polygon points="15.00,19.24 49.84,62.00 15.00,104.76" fill="#3584e4" stroke="#3584e4" stroke-width="8.0" stroke-linejoin="round"/>
+  <polygon points="29.74,12.00 70.48,62.00 29.74,112.00 40.06,112.00 80.80,62.00 40.06,12.00" fill="#3584e4" stroke="#3584e4" stroke-width="8.0" stroke-linejoin="round"/>
+  <polygon points="60.70,12.00 101.44,62.00 60.70,112.00 71.02,112.00 111.76,62.00 71.02,12.00" fill="#3584e4" stroke="#3584e4" stroke-width="8.0" stroke-linejoin="round"/>
+  <g clip-path="url(#tri)"><g fill="#1c71d8"><circle cx="26.0" cy="70.0" r="9"/><circle cx="36.0" cy="64.0" r="11"/><circle cx="46.0" cy="71.0" r="7"/><rect x="19.0" y="68.0" width="34" height="11" rx="5"/></g></g>
 </svg>
