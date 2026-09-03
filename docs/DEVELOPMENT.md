@@ -67,3 +67,10 @@ pipx run --spec "bandit[toml]==1.9.2" bandit -q -c pyproject.toml -r den_mail da
 
 Bandit findings that are false positives get a `# nosec Bxxx` on the line and
 a comment above saying why; Ruff's rule set is pinned in `pyproject.toml`.
+
+## Screenshots
+
+The images in `data/screenshots/` and `docs/TOUR.md` are made from the fake
+account in a headless cage session (see above): one autopilot script per
+picture, `grim` inside the session, and `magick` to assemble the GIF from a
+handful of frames. Regenerate them after UI changes so the tour stays honest.
