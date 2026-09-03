@@ -65,6 +65,18 @@ and **Masked Email** scopes. The token is stored in your keyring via libsecret.
 | `Ctrl+S` | save draft (compose) |
 | `Ctrl+?` | shortcuts dialog |
 
+## Theming notes
+
+Wallpaper theming tools (Matugen, pywal, ML4W) write `~/.config/gtk-4.0/colors.css`,
+which redefines libadwaita's named colours to a dark palette for every GTK app.
+Fastmail GTK keeps that palette while it is dark, and re-asserts libadwaita's
+light palette while it is light (Preferences → Appearance), so "Light" actually
+looks light. Accent colours always come from your desktop.
+
+Label colours are not available through Fastmail's JMAP API (the web client uses
+an internal API), so the app assigns stable colours per label; right-click a
+label → Colour to choose your own.
+
 ## Development
 
 Everything network-related is exercised against an in-process fake JMAP server

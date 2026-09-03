@@ -11,11 +11,14 @@ SCHEME_OPTIONS = ["system", "light", "dark"]
 
 
 def apply_color_scheme(config) -> None:
+    from .theming import install_palette_guard
+
     scheme = config.get("color_scheme", "system")
     Adw.StyleManager.get_default().set_color_scheme({
         "light": Adw.ColorScheme.FORCE_LIGHT,
         "dark": Adw.ColorScheme.FORCE_DARK,
     }.get(scheme, Adw.ColorScheme.DEFAULT))
+    install_palette_guard()
 
 
 class PreferencesDialog(Adw.PreferencesDialog):

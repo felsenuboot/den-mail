@@ -106,10 +106,10 @@ class AddressCompletion:
         self.search = search
         self.popover = Gtk.Popover(has_arrow=False, autohide=False, position=Gtk.PositionType.BOTTOM)
         self.popover.set_parent(row)
-        self.popover.add_css_class("menu")
+        self.popover.add_css_class("completion-popover")
         self.popover.set_can_focus(False)
-        self.listbox = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
-        self.listbox.add_css_class("navigation-sidebar")
+        self.listbox = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        self.listbox.add_css_class("completion-list")
         self.listbox.connect("row-activated", self._on_pick)
         scrolled = Gtk.ScrolledWindow(child=self.listbox, hscrollbar_policy=Gtk.PolicyType.NEVER,
                                       propagate_natural_height=True, max_content_height=280)
@@ -117,7 +117,7 @@ class AddressCompletion:
         row.connect("changed", self._on_changed)
         keys = Gtk.EventControllerKey()
         keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
-        keys.connect("key-pressed", self._on_key)
+        keys.connect("key-pressed", lambda _c, keyval, _code, _state: self.handle_key(keyval))
         row.add_controller(keys)
         focus = Gtk.EventControllerFocus()
         focus.connect("leave", lambda *_: GLib.timeout_add(150, self._hide_if_unfocused))
@@ -125,6 +125,25 @@ class AddressCompletion:
         row.connect("unrealize", lambda *_: self.popover.unparent())
         self._debounce = 0
         self._suppress = False
+        self._rows: list[Gtk.ListBoxRow] = []
+        self._active = -1
+
+    @property
+    def visible(self) -> bool:
+        return self.popover.get_visible()
+
+    def _set_active(self, index: int) -> None:
+        if not self._rows:
+            self._active = -1
+            return
+        index = max(0, min(index, len(self._rows) - 1))
+        for i, r in enumerate(self._rows):
+            if i == index:
+                r.add_css_class("active")
+            else:
+                r.remove_css_class("active")
+        self._active = index
+        self._rows[index].grab_focus() if False else None  # focus must stay in the entry
 
     def _current_token(self) -> str:
         return self.row.get_text().rsplit(",", 1)[-1].strip()
@@ -141,12 +160,14 @@ class AddressCompletion:
         token = self._current_token()
         while child := self.listbox.get_first_child():
             self.listbox.remove(child)
+        self._rows = []
         matches = self.search(token) if len(token) >= 2 else []
         if not matches:
             self.popover.popdown()
             return False
         for m in matches:
-            lbrow = Gtk.ListBoxRow()
+            lbrow = Gtk.ListBoxRow(focusable=False)
+            lbrow.add_css_class("completion-row")
             label = f"{m['name']} <{m['email']}>" if m.get("name") else m["email"]
             lbl = Gtk.Label(label=label, xalign=0, ellipsize=3)
             lbl.set_margin_top(6)
@@ -156,7 +177,8 @@ class AddressCompletion:
             lbrow.set_child(lbl)
             lbrow.value = label
             self.listbox.append(lbrow)
-        self.listbox.select_row(self.listbox.get_row_at_index(0))
+            self._rows.append(lbrow)
+        self._set_active(0)
         self.popover.set_size_request(max(320, self.row.get_width() - 24), -1)
         if not self.popover.get_visible():
             self.popover.popup()
@@ -171,24 +193,22 @@ class AddressCompletion:
         self.row.set_position(-1)
         self.popover.popdown()
 
-    def _on_key(self, _ctrl, keyval, _code, _state) -> bool:
+    def handle_key(self, keyval: int) -> bool:
+        """Consume navigation keys while suggestions are showing. Returns True if handled."""
         if not self.popover.get_visible():
             return False
         if keyval == Gdk.KEY_Escape:
             self.popover.popdown()
             return True
-        if keyval in (Gdk.KEY_Down, Gdk.KEY_Up):
-            current = self.listbox.get_selected_row()
-            idx = current.get_index() if current else -1
-            idx = idx + 1 if keyval == Gdk.KEY_Down else max(0, idx - 1)
-            target = self.listbox.get_row_at_index(idx)
-            if target:
-                self.listbox.select_row(target)
+        if keyval == Gdk.KEY_Down:
+            self._set_active(self._active + 1)
             return True
-        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_Tab):
-            lbrow = self.listbox.get_selected_row() or self.listbox.get_row_at_index(0)
-            if lbrow:
-                self._on_pick(self.listbox, lbrow)
+        if keyval == Gdk.KEY_Up:
+            self._set_active(self._active - 1)
+            return True
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab):
+            if 0 <= self._active < len(self._rows):
+                self._on_pick(self.listbox, self._rows[self._active])
                 return True
         return False
 

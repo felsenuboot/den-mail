@@ -149,6 +149,23 @@ image.label-color-11 { color: #a51d2d; } .chip.label-color-11 { background: alph
   border-radius: 4px;
 }
 
+/* Recipient completion */
+.completion-popover > contents {
+  padding: 4px;
+}
+.completion-list {
+  background: transparent;
+}
+.completion-row {
+  border-radius: 6px;
+}
+.completion-row.active {
+  background: alpha(@accent_bg_color, 0.25);
+}
+.completion-row:hover {
+  background: alpha(currentColor, 0.08);
+}
+
 /* Compose */
 .compose-card {
   border-radius: 12px;

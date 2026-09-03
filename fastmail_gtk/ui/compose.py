@@ -75,7 +75,10 @@ class ComposeWindow(Adw.Window):
         fields.set_margin_bottom(6)
 
         self.identity_list = Gtk.StringList.new([i.display for i in self.identities])
-        self.from_row = Adw.ComboRow(title="From", model=self.identity_list)
+        self.from_row = Adw.ComboRow(title="From", model=self.identity_list,
+                                     enable_search=len(self.identities) > 6,
+                                     expression=Gtk.PropertyExpression.new(Gtk.StringObject, None, "string"))
+        self.from_row.set_list_factory(self._identity_factory())
         self.from_row.connect("notify::selected", lambda *_: self._on_identity_changed())
         fields.append(self.from_row)
         self.wildcard_row = Adw.EntryRow(title="Address at this domain (local part)")
@@ -142,11 +145,49 @@ class ComposeWindow(Adw.Window):
 
         self._install_actions()
         self.connect("close-request", self._on_close_request)
+        # Suggestion navigation is handled at the window level, in the capture phase, so no
+        # widget between the window and the entry can swallow Up/Down/Return first.
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self._on_window_key)
+        self.add_controller(keys)
         self._prefill(mailto)
         self._on_identity_changed()
         self.dirty = False
 
+    def _on_window_key(self, _ctrl, keyval, _code, _state) -> bool:
+        for completion in (self._to_completion, self._cc_completion, self._bcc_completion):
+            if completion.visible:
+                return completion.handle_key(keyval)
+        return False
+
     # --------------------------------------------------------------- setup
+
+    def _identity_factory(self) -> Gtk.SignalListItemFactory:
+        """Two-line rows (name / address) for the From popup, never ellipsised."""
+        factory = Gtk.SignalListItemFactory()
+
+        def setup(_f, item):
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+            box.name_label = Gtk.Label(xalign=0)
+            box.email_label = Gtk.Label(xalign=0)
+            box.email_label.add_css_class("dim-label")
+            box.email_label.add_css_class("caption")
+            box.append(box.name_label)
+            box.append(box.email_label)
+            item.set_child(box)
+
+        def bind(_f, item):
+            display = item.get_item().get_string()
+            name, _, email = display.rpartition(" <")
+            box = item.get_child()
+            box.name_label.set_label(name or display)
+            box.email_label.set_label(email.rstrip(">") if name else "")
+            box.email_label.set_visible(bool(name))
+
+        factory.connect("setup", setup)
+        factory.connect("bind", bind)
+        return factory
 
     @staticmethod
     def _focus_later(widget: Gtk.Widget) -> None:
@@ -179,6 +220,8 @@ class ComposeWindow(Adw.Window):
 
     def _on_identity_changed(self) -> None:
         ident = self._identity()
+        # The subtitle is markup, so "<address>" must be escaped (use_subtitle would not).
+        self.from_row.set_subtitle(GLib.markup_escape_text(ident.display))
         self.wildcard_row.set_visible(ident.is_wildcard)
         self.wildcard_row.set_title(f"Address at @{ident.domain} (local part)" if ident.is_wildcard else "")
         self._mark_dirty()

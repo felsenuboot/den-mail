@@ -139,27 +139,7 @@ class Sidebar(Adw.NavigationPage):
         self.set_child(view)
 
         self._install_actions()
-        self.menu = Gio.Menu()
-        self.menu.append("Mark all as read", "sidebar.mark-read")
-        section = Gio.Menu()
-        section.append("New label", "sidebar.new-label")
-        section.append("New sub-label", "sidebar.new-sublabel")
-        section.append("Rename…", "sidebar.rename")
-        colours = Gio.Menu()
-        for idx, name in enumerate(COLOR_NAMES):
-            item = Gio.MenuItem.new(name, None)
-            item.set_action_and_target_value("sidebar.color", GLib.Variant("i", idx))
-            colours.append_item(item)
-        auto = Gio.MenuItem.new("Automatic", None)
-        auto.set_action_and_target_value("sidebar.color", GLib.Variant("i", -1))
-        colours.append_item(auto)
-        section.append_submenu("Colour", colours)
-        section.append("Delete label", "sidebar.delete")
-        self.menu.append_section(None, section)
-        section2 = Gio.Menu()
-        section2.append("Empty mailbox…", "sidebar.empty")
-        self.menu.append_section(None, section2)
-        self.popover = Gtk.PopoverMenu.new_from_model(self.menu)
+        self.popover = Gtk.PopoverMenu.new_from_model(Gio.Menu())
         self.popover.set_parent(self.listview)
         self.popover.set_has_arrow(False)
         # The list view claims button presses on rows before child gestures see them,
@@ -184,6 +164,7 @@ class Sidebar(Adw.NavigationPage):
             ("delete", self._act_delete),
             ("mark-read", self._act_mark_read),
             ("empty", self._act_empty),
+            ("refresh", lambda: self._context_mailbox and self.on_refresh(self._context_mailbox)),
         ):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", lambda _a, _p, cb=cb: cb())
@@ -195,6 +176,7 @@ class Sidebar(Adw.NavigationPage):
         self.insert_action_group("sidebar", group)
 
     on_color: Callable[[MailboxObject, int], None] = lambda self, mb, idx: None
+    on_refresh: Callable[[MailboxObject], None] = lambda self, mb: None
 
     def _set_action_enabled(self, name: str, enabled: bool) -> None:
         self.actions.lookup_action(name).set_enabled(enabled)
@@ -346,18 +328,53 @@ class Sidebar(Adw.NavigationPage):
         gesture.set_state(Gtk.EventSequenceState.CLAIMED)
         self.show_context_menu(obj, int(x), int(y))
 
+    def _build_context_menu(self, obj: MailboxObject) -> Gio.Menu:
+        """A menu tailored to the mailbox: labels get label tools, system folders theirs."""
+        menu = Gio.Menu()
+        first = Gio.Menu()
+        first.append("Refresh", "sidebar.refresh")
+        if obj.unread > 0:
+            first.append(f"Mark all as read ({obj.unread})", "sidebar.mark-read")
+        if obj.role in (ROLE_TRASH, ROLE_JUNK) and obj.total > 0:
+            first.append(f"Empty {obj.name}…", "sidebar.empty")
+        menu.append_section(obj.name, first)
+        organise = Gio.Menu()
+        if obj.may("mayCreateChild"):
+            organise.append("New sub-label" if not obj.is_system else "New label inside", "sidebar.new-sublabel")
+        organise.append("New label", "sidebar.new-label")
+        if not obj.is_system and obj.may("mayRename"):
+            organise.append("Rename…", "sidebar.rename")
+        if not obj.is_system:
+            colours = Gio.Menu()
+            for idx, name in enumerate(COLOR_NAMES):
+                item = Gio.MenuItem.new(("● " if idx == obj.color_index else "   ") + name, None)
+                item.set_action_and_target_value("sidebar.color", GLib.Variant("i", idx))
+                colours.append_item(item)
+            auto = Gio.MenuItem.new("Automatic", None)
+            auto.set_action_and_target_value("sidebar.color", GLib.Variant("i", -1))
+            colours.append_item(auto)
+            organise.append_submenu("Colour", colours)
+        menu.append_section(None, organise)
+        if not obj.is_system and obj.may("mayDelete"):
+            danger = Gio.Menu()
+            danger.append("Delete label", "sidebar.delete")
+            menu.append_section(None, danger)
+        return menu
+
     def show_context_menu(self, obj: MailboxObject, x: int, y: int) -> None:
         self._context_mailbox = obj
-        self._set_action_enabled("rename", not obj.is_system and obj.may("mayRename"))
-        self._set_action_enabled("delete", not obj.is_system and obj.may("mayDelete"))
-        self._set_action_enabled("new-sublabel", obj.may("mayCreateChild"))
-        self._set_action_enabled("mark-read", obj.unread > 0)
-        self._set_action_enabled("empty", obj.role in (ROLE_TRASH, ROLE_JUNK) and obj.total > 0)
-        self._set_action_enabled("color", not obj.is_system)
+        # A fresh popover per menu: swapping the model on a realised PopoverMenu keeps its old size.
+        old = self.popover
+        self.popover = Gtk.PopoverMenu.new_from_model(self._build_context_menu(obj))
+        self.popover.set_parent(self.listview)
+        self.popover.set_has_arrow(False)
+        self.popover.connect("closed", lambda p: GLib.idle_add(lambda: (p.unparent(), False)[1]))
         rect = Gdk.Rectangle()
         rect.x, rect.y, rect.width, rect.height = x, y, 1, 1
         self.popover.set_pointing_to(rect)
         self.popover.popup()
+        if old is not None and old.get_parent() is not None and not old.get_visible():
+            old.unparent()
 
     # ------------------------------------------------------------- DnD
 

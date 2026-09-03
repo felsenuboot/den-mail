@@ -63,10 +63,31 @@ class FastmailApp(Adw.Application):
         from .ui.preferences import apply_color_scheme
 
         apply_color_scheme(self.config)
+        self._log_theme_state("at startup")
+        GLib.timeout_add_seconds(5, lambda: (self._log_theme_state("5s later"), False)[1])
         for name, cb in (("about", self._about), ("quit", lambda *_: self.quit()), ("activate", lambda *_: self.activate())):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", cb)
             self.add_action(action)
+        # Remote-controllable (gapplication action <id> set-theme "'light'") for debugging theme switches.
+        theme = Gio.SimpleAction.new("set-theme", GLib.VariantType.new("s"))
+        theme.connect("activate", self._set_theme)
+        self.add_action(theme)
+
+    def _set_theme(self, _action, param) -> None:
+        from .ui.preferences import apply_color_scheme
+
+        self.config.set("color_scheme", param.get_string())
+        apply_color_scheme(self.config)
+        self._log_theme_state("after set-theme")
+
+    def _log_theme_state(self, when: str) -> None:
+        sm = Adw.StyleManager.get_default()
+        gs = Gtk.Settings.get_default()
+        logging.getLogger(__name__).info(
+            "theme %s: scheme=%s dark=%s system-supports=%s gtk-theme=%s prefer-dark=%s",
+            when, sm.get_color_scheme().value_nick, sm.get_dark(), sm.get_system_supports_color_schemes(),
+            gs.get_property("gtk-theme-name"), gs.get_property("gtk-application-prefer-dark-theme"))
         for action, accels in ACCELS.items():
             self.set_accels_for_action(action, accels)
 

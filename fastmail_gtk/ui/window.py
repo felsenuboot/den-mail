@@ -196,6 +196,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.sidebar.on_mark_read = lambda mb: self.engine.mark_mailbox_read(mb.id)
         self.sidebar.on_empty = self.empty_mailbox
         self.sidebar.on_color = self.set_label_color
+        self.sidebar.on_refresh = self.refresh_mailbox
         self.tree.color_overrides = {k: int(v) for k, v in (self.config.get("label_colors", {}) or {}).items()}
 
         self.model = ThreadListModel(self.db)
@@ -665,6 +666,15 @@ class MainWindow(Adw.ApplicationWindow):
                 "Delete", True,
                 lambda: self.engine.mailbox_set(destroy=[mb.id],
                                                 on_error=lambda m: self._toast(f"Delete failed: {m}")))
+
+    def refresh_mailbox(self, mb: MailboxObject) -> None:
+        """Sync now and re-run the mailbox query from scratch (bypassing queryChanges)."""
+        if self.current_mailbox and self.current_mailbox.id == mb.id and self.query_key:
+            self.engine.load_query(mailbox_query_spec(mb.id, self._current_sort()))
+        else:
+            self.sidebar.select_mailbox(mb.id)
+        self.engine.sync_now()
+        self._toast(f"Refreshing {mb.name}")
 
     def set_label_color(self, mb: MailboxObject, index: int) -> None:
         overrides = dict(self.config.get("label_colors", {}) or {})
