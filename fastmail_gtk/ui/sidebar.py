@@ -18,6 +18,7 @@ COLOR_NAMES = ["Blue", "Green", "Yellow", "Orange", "Red", "Purple", "Pink", "Te
 class MailboxRow(Gtk.Box):
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.set_margin_end(8)
         self.icon = Gtk.Image()
         self.label = Gtk.Label(xalign=0, ellipsize=3, hexpand=True)
         self.badge = Gtk.Label(valign=Gtk.Align.CENTER)
