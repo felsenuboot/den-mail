@@ -131,7 +131,8 @@ class MailboxTree:
         for m in mailboxes:
             if m.get("hidden"):
                 continue
-            obj = self.by_id[m["id"]]
+            # Children of hidden parents never enter the tree but still need objects for lookups.
+            obj = self.by_id.get(m["id"]) or self._obj(m, 0)
             kids = [self._obj(c, obj.depth + 1) for c in children.get(m["id"], [])]
             self._reconcile(obj.children, kids)
 
