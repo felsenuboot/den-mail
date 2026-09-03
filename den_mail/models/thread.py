@@ -4,12 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import bisect
-
-import gi
-
-gi.require_version("Gtk", "4.0")
-from gi.repository import Gio, GLib, GObject, Gtk  # noqa: E402
+from gi.repository import Gio, GLib, GObject
 
 from ..store.db import Database, ThreadSummary
 
@@ -107,11 +102,39 @@ class ThreadObject(GObject.Object):
         return list(self.summary.email_ids)
 
 
-class ThreadListModel(GObject.Object, Gio.ListModel, Gtk.SectionModel):
-    """Ordered list of ThreadObjects for one query; objects keep identity by thread id.
+class SenderGroup(GObject.Object):
+    """Header row for the threads of one sender when the list is grouped."""
 
-    With `grouped` set, consecutive threads from the same sender form a section
-    (Gtk.SectionModel), which the list view renders with a header per sender."""
+    __gtype_name__ = "FmSenderGroup"
+
+    name = GObject.Property(type=str, default="")
+    email = GObject.Property(type=str, default="")
+    count = GObject.Property(type=int, default=0)
+    unread = GObject.Property(type=int, default=0)
+    collapsed = GObject.Property(type=bool, default=False)
+
+    def __init__(self, key: str):
+        super().__init__()
+        self.key = key
+        self.threads: list[ThreadObject] = []
+
+    def update(self, threads: list[ThreadObject], collapsed: bool) -> None:
+        self.threads = threads
+        first = threads[0]
+        for prop, value in (("name", first.sender_name), ("email", first.sender_email), ("count", len(threads)),
+                            ("unread", sum(1 for t in threads if t.unread)), ("collapsed", collapsed)):
+            if self.get_property(prop) != value:
+                self.set_property(prop, value)
+
+
+class ThreadListModel(GObject.Object, Gio.ListModel):
+    """Ordered list for one query; ThreadObjects keep identity by thread id.
+
+    `threads` holds every thread of the query in order.  `items` is what the
+    list view shows: the same threads, or -- with `grouped` set -- one
+    SenderGroup row per sender followed by that sender's threads.  Groups
+    keep the order of the active sort (the group of a sender sits where its
+    first thread was), and the threads of collapsed groups are left out."""
 
     __gtype_name__ = "FmThreadListModel"
 
@@ -122,61 +145,68 @@ class ThreadListModel(GObject.Object, Gio.ListModel, Gtk.SectionModel):
     def __init__(self, db: Database):
         super().__init__()
         self.db = db
-        self.items: list[ThreadObject] = []
+        self.threads: list[ThreadObject] = []
+        self.items: list[GObject.Object] = []
         self.by_thread: dict[str, ThreadObject] = {}
+        self.groups: dict[str, SenderGroup] = {}
+        self.collapsed: set[str] = set()
+        self.grouped = False
         self.mailbox_id: str | None = None
         self.trash_junk: set[str] = set()
         self.label_namer = lambda mailbox_ids: []
-        self.grouped = False
-        self._section_starts: list[int] = []   # start index of every section
-
-    # Gtk.SectionModel
-    def set_grouped(self, grouped: bool) -> None:
-        if grouped == self.grouped:
-            return
-        self.grouped = grouped
-        self._compute_sections()
-        if self.items:
-            self.sections_changed(0, len(self.items))
-
-    def _compute_sections(self) -> None:
-        starts: list[int] = []
-        if self.grouped:
-            last = object()
-            for i, o in enumerate(self.items):
-                if o.sender_key != last:
-                    starts.append(i)
-                    last = o.sender_key
-        self._section_starts = starts
-
-    def sections(self) -> list[tuple[int, int]]:
-        """(start, end) of every section, for tests and headers."""
-        n = len(self.items)
-        if not self.grouped:
-            return [(0, n)] if n else []
-        starts = self._section_starts
-        return [(s, starts[i + 1] if i + 1 < len(starts) else n) for i, s in enumerate(starts)]
-
-    def do_get_section(self, position):
-        n = len(self.items)
-        if position >= n:
-            return n, GLib.MAXUINT32
-        if not self.grouped:
-            return 0, n
-        i = bisect.bisect_right(self._section_starts, position) - 1
-        start = self._section_starts[i]
-        end = self._section_starts[i + 1] if i + 1 < len(self._section_starts) else n
-        return start, end
 
     # Gio.ListModel
     def do_get_item_type(self):
-        return ThreadObject.__gtype__
+        return GObject.Object.__gtype__
 
     def do_get_n_items(self):
         return len(self.items)
 
     def do_get_item(self, position):
         return self.items[position] if position < len(self.items) else None
+
+    # ------------------------------------------------------ grouping
+
+    def set_grouped(self, grouped: bool) -> None:
+        if grouped != self.grouped:
+            self.grouped = grouped
+            self._rebuild_visible()
+
+    def toggle_collapsed(self, key: str) -> None:
+        self.collapsed.symmetric_difference_update({key})
+        self._rebuild_visible()
+
+    def set_all_collapsed(self, collapsed: bool) -> None:
+        self.collapsed = {g.key for g in self.groups.values()} if collapsed else set()
+        self._rebuild_visible()
+
+    def group_of(self, thread: ThreadObject) -> SenderGroup | None:
+        return self.groups.get(thread.sender_key) if self.grouped else None
+
+    def reveal(self, thread_id: str) -> None:
+        """Expand the group hiding this thread, if any."""
+        obj = self.by_thread.get(thread_id)
+        if obj is not None and obj.sender_key in self.collapsed:
+            self.toggle_collapsed(obj.sender_key)
+
+    def _rebuild_visible(self) -> None:
+        if not self.grouped:
+            self._replace(list(self.threads))
+            return
+        runs: dict[str, list[ThreadObject]] = {}
+        for t in self.threads:
+            runs.setdefault(t.sender_key, []).append(t)
+        visible: list[GObject.Object] = []
+        groups: dict[str, SenderGroup] = {}
+        for key, run in runs.items():
+            group = self.groups.get(key) or SenderGroup(key)
+            group.update(run, key in self.collapsed)
+            groups[key] = group
+            visible.append(group)
+            if not group.collapsed:
+                visible.extend(run)
+        self.groups = groups
+        self._replace(visible)
 
     # ----------------------------------------------------------------
 
@@ -194,7 +224,7 @@ class ThreadListModel(GObject.Object, Gio.ListModel, Gtk.SectionModel):
             if tid and tid not in seen:
                 seen.add(tid)
                 thread_ids.append(tid)
-        new_items: list[ThreadObject] = []
+        threads: list[ThreadObject] = []
         for tid in thread_ids:
             summary = self._summary(tid)
             if summary is None:
@@ -203,16 +233,15 @@ class ThreadListModel(GObject.Object, Gio.ListModel, Gtk.SectionModel):
             labels = self.label_namer(summary.mailbox_ids)
             if obj is None:
                 obj = ThreadObject(summary)
-                obj.update(summary, labels)
-            else:
-                obj.update(summary, labels)
-            new_items.append(obj)
-        self._replace(new_items)
-        self.by_thread = {o.thread_id: o for o in self.items}
-        self.total = total if total is not None else len(self.items)
+            obj.update(summary, labels)
+            threads.append(obj)
+        self.threads = threads
+        self.by_thread = {o.thread_id: o for o in threads}
+        self._rebuild_visible()
+        self.total = total if total is not None else len(threads)
         self.complete = complete
 
-    def _replace(self, new_items: list[ThreadObject]) -> None:
+    def _replace(self, new_items: list) -> None:
         old = self.items
         # common prefix / suffix to keep the change minimal
         prefix = 0
@@ -225,7 +254,6 @@ class ThreadListModel(GObject.Object, Gio.ListModel, Gtk.SectionModel):
         removed = len(old) - prefix - suffix
         added = len(new_items) - prefix - suffix
         self.items = new_items
-        self._compute_sections()
         if removed or added:
             self.items_changed(prefix, removed, added)
 
@@ -241,19 +269,25 @@ class ThreadListModel(GObject.Object, Gio.ListModel, Gtk.SectionModel):
             summary = self._summary(tid)
             if summary is not None:
                 obj.update(summary, self.label_namer(summary.mailbox_ids))
+        if thread_ids and self.grouped:
+            for group in self.groups.values():
+                group.update(group.threads, group.collapsed)
 
     def remove_threads(self, thread_ids: set[str]) -> None:
-        self._replace([o for o in self.items if o.thread_id not in thread_ids])
-        self.by_thread = {o.thread_id: o for o in self.items}
+        self.threads = [o for o in self.threads if o.thread_id not in thread_ids]
+        self.by_thread = {o.thread_id: o for o in self.threads}
+        self._rebuild_visible()
 
     def index_of(self, thread_id: str) -> int:
         for i, o in enumerate(self.items):
-            if o.thread_id == thread_id:
+            if isinstance(o, ThreadObject) and o.thread_id == thread_id:
                 return i
-        return GLib.MAXUINT32 if False else -1
+        return -1
 
     def clear(self) -> None:
-        self._replace([])
+        self.threads = []
         self.by_thread = {}
+        self.groups = {}
+        self._replace([])
         self.total = 0
         self.complete = True

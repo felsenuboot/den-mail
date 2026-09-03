@@ -26,7 +26,9 @@ you own in the From field.
   dark mode that adapts light-coloured mail (with a per-message switch back).
 - **All your identities.** Send from any alias or wildcard address, star the
   ones you use, manage Masked Email addresses.
-- **One-click unsubscribe**, **group by sender**, search operators
+- **Bulk actions.** Ctrl/Shift-click or the Select button with checkboxes;
+  group by sender (any sort order), fold groups, act on a whole sender at once.
+- **One-click unsubscribe**, search operators
   (`from:` `to:` `subject:` `is:unread` `has:attachment` `before:` `after:`),
   notifications with the sender's logo, `mailto:` handling, keyboard shortcuts.
 

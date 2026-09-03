@@ -645,7 +645,7 @@ class ConversationView(Adw.NavigationPage):
     def show_multi(self, count: int) -> None:
         self.thread_id = None
         self.multi.set_title(f"{count} conversations selected")
-        self.multi.set_description("Archive, delete, flag or label them with the toolbar buttons.")
+        self.multi.set_description("Archive, delete, flag or label them with the toolbar buttons.\nCtrl-click or Shift-click adds to the selection; the Select button shows checkboxes.")
         self.stack.set_visible_child_name("multi")
 
     def show_thread(self, thread: ThreadObject, mailbox_id: str | None) -> None:

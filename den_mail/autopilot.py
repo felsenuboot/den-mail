@@ -61,6 +61,15 @@ def _run(app, steps: list[str]) -> bool:
                 action.activate(None)
         elif cmd == "group" and win:
             win.threadlist._group_action.change_state(GLib.Variant("b", arg.strip() in ("on", "1", "true")))
+        elif cmd == "select-mode" and win:
+            win.threadlist.set_selection_mode(arg.strip() in ("on", "1", "true"))
+        elif cmd == "toggle" and win:
+            win.threadlist._toggle_position(int(arg))
+        elif cmd == "fold" and win:
+            from .models.thread import SenderGroup
+
+            groups = [i for i in win.model.items if isinstance(i, SenderGroup)]
+            win.model.toggle_collapsed(groups[int(arg)].key)
         elif cmd == "scope" and win:
             win.threadlist.focus_search()
             win.threadlist.scope.set_selected(1 if arg.strip() == "all" else 0)

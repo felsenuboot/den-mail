@@ -276,30 +276,43 @@ def test_sort_options_round_trip_and_server_sorting(engine, server):
     assert senders == sorted(senders)
 
 
-def test_sender_grouping_sections(engine):
+def test_sender_grouping_rows(engine):
+    from den_mail.models.thread import SenderGroup
     from den_mail.store.sync import build_sort
     inbox = engine.roles[ROLE_INBOX]
-    key = engine.load_query(mailbox_query_spec(inbox, build_sort("sender")))
+    key = engine.load_query(mailbox_query_spec(inbox, build_sort("newest")))
     pump(lambda: any(a[0] == key for a in engine.events.get("query-updated", [])))
     q = engine.db.get_query(key)
     model = ThreadListModel(engine.db)
     model.mailbox_id = inbox
     model.set_email_ids(q["ids"], q["total"], q["complete"])
-    n = model.get_n_items()
-    assert model.sections() == [(0, n)]                  # ungrouped: one section
-    assert model.do_get_section(0) == (0, n)
+    n = len(model.threads)
+    assert model.get_n_items() == n                       # ungrouped: threads only
     model.set_grouped(True)
-    secs = model.sections()
-    assert len(secs) > 1 and secs[0][0] == 0 and secs[-1][1] == n
-    assert [s for s, _ in secs] == sorted(s for s, _ in secs)
-    for start, end in secs:
-        keys = {model.items[i].sender_key for i in range(start, end)}
-        assert len(keys) == 1                              # one sender per section
-        for i in range(start, end):
-            assert model.do_get_section(i) == (start, end)
-    # the sender sort keeps every sender in one contiguous run
-    assert len(secs) == len({o.sender_key for o in model.items})
-    assert model.do_get_section(n)[0] == n
+    groups = [i for i in model.items if isinstance(i, SenderGroup)]
+    assert len(groups) > 1 and model.get_n_items() == n + len(groups)
+    assert len(groups) == len({o.sender_key for o in model.threads})   # one group per sender
+    # groups follow the active sort: each sits where its newest thread was
+    first_seen = list(dict.fromkeys(o.sender_key for o in model.threads))
+    assert [g.key for g in groups] == first_seen
+    for g in groups:
+        pos = model.items.index(g)
+        assert [model.items[pos + 1 + k] for k in range(g.count)] == g.threads
+        assert {t.sender_key for t in g.threads} == {g.key}
+        assert g.threads == [t for t in model.threads if t.sender_key == g.key]
+    # folding a group hides its threads but keeps the row; identity survives
+    g = max(groups, key=lambda g: g.count)
+    model.toggle_collapsed(g.key)
+    assert g.collapsed and g in model.items and model.get_n_items() == n + len(groups) - g.count
+    assert model.index_of(g.threads[0].thread_id) == -1
+    model.reveal(g.threads[0].thread_id)
+    assert not g.collapsed and model.index_of(g.threads[0].thread_id) == model.items.index(g) + 1
+    # a reload keeps the fold state and the group objects
+    model.collapsed.add(g.key)
+    model.set_email_ids(q["ids"], q["total"], q["complete"])
+    assert model.groups[g.key] is g and g.collapsed
+    model.set_grouped(False)
+    assert model.get_n_items() == n
     # an empty all-mail search lists everything outside trash/junk
     spec = search_query_spec("", None, ["t", "j"])
     assert spec["filter"] == {"inMailboxOtherThan": ["t", "j"]}

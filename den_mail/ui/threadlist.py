@@ -7,7 +7,7 @@ from collections.abc import Callable
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
 from ..avatars import sender_key
-from ..models.thread import ThreadListModel, ThreadObject
+from ..models.thread import SenderGroup, ThreadListModel, ThreadObject
 from .sidebar import DRAG_PREFIX
 from .widgets import avatar, chip
 
@@ -17,11 +17,15 @@ class ThreadRow(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.avatars = avatars
         self.avatar_key: str | None = None
+        self.list_item: Gtk.ListItem | None = None
         self.add_css_class("thread-row")
         self.set_margin_top(6)
         self.set_margin_bottom(6)
         self.set_margin_start(4)
         self.set_margin_end(4)
+        self.check = Gtk.CheckButton(visible=False, valign=Gtk.Align.CENTER, can_focus=False)
+        self.check.add_css_class("selection-check")
+        self.append(self.check)
         self.avatar = avatar("?", 36)
         self.avatar.set_valign(Gtk.Align.START)
         self.append(self.avatar)
@@ -125,14 +129,27 @@ class ThreadRow(Gtk.Box):
 
 
 class SenderHeader(Gtk.Box):
-    """Section header for a group of threads from one sender."""
+    """Row for a SenderGroup: expander, logo, name, address and conversation count.
+    Clicking the row selects the whole group; the arrow folds it."""
 
-    def __init__(self, avatars):
-        super().__init__(spacing=10)
+    def __init__(self, avatars, on_toggle: Callable[[SenderGroup], None]):
+        super().__init__(spacing=8)
         self.avatars = avatars
+        self.on_toggle = on_toggle
+        self.group: SenderGroup | None = None
         self.avatar_key: str | None = None
         self.email: str | None = None
+        self.list_item: Gtk.ListItem | None = None
+        self._handlers: list[int] = []
         self.add_css_class("sender-header")
+        self.check = Gtk.CheckButton(visible=False, valign=Gtk.Align.CENTER, can_focus=False)
+        self.check.add_css_class("selection-check")
+        self.append(self.check)
+        self.expander = Gtk.Button(icon_name="pan-down-symbolic", has_frame=False, tooltip_text="Fold this sender")
+        self.expander.add_css_class("expander")
+        self.expander.set_valign(Gtk.Align.CENTER)
+        self.expander.connect("clicked", lambda *_: self.group is not None and self.on_toggle(self.group))
+        self.append(self.expander)
         self.avatar = avatar("?", 24)
         self.append(self.avatar)
         self.name = Gtk.Label(xalign=0, ellipsize=3, hexpand=True)
@@ -146,14 +163,37 @@ class SenderHeader(Gtk.Box):
         self.count.add_css_class("count-chip")
         self.append(self.count)
 
-    def bind(self, obj: ThreadObject, n: int) -> None:
-        self.email = obj.sender_email or None
+    def bind(self, group: SenderGroup) -> None:
+        self.unbind()
+        self.group = group
+        for prop in ("name", "email", "count", "unread", "collapsed"):
+            self._handlers.append(group.connect(f"notify::{prop}", lambda *_: self._sync()))
+        self._sync()
+
+    def unbind(self) -> None:
+        if self.group is not None:
+            for hid in self._handlers:
+                self.group.disconnect(hid)
+        self._handlers = []
+        self.group = None
+
+    def _sync(self) -> None:
+        g = self.group
+        if g is None:
+            return
+        self.email = g.email or None
         self.avatar_key = sender_key(self.email)
-        self.avatar.set_text(obj.sender_name or "?")
-        self.name.set_label(obj.sender_name)
+        self.avatar.set_text(g.name or "?")
+        self.name.set_label(g.name)
         self.address.set_label(self.email or "")
-        self.address.set_visible(bool(self.email) and self.email.lower() != obj.sender_name.lower())
-        self.count.set_label(str(n))
+        self.address.set_visible(bool(self.email) and self.email.lower() != g.name.lower())
+        self.count.set_label(f"{g.unread} / {g.count}" if g.unread else str(g.count))
+        if g.unread:
+            self.name.add_css_class("unread")
+        else:
+            self.name.remove_css_class("unread")
+        self.expander.set_icon_name("pan-end-symbolic" if g.collapsed else "pan-down-symbolic")
+        self.expander.set_tooltip_text("Unfold this sender" if g.collapsed else "Fold this sender")
         self.refresh_avatar()
 
     def refresh_avatar(self) -> None:
@@ -192,6 +232,9 @@ class ThreadList(Adw.NavigationPage):
         header.set_title_widget(self.title_widget)
         self.search_button = Gtk.ToggleButton(icon_name="system-search-symbolic", tooltip_text="Search (Ctrl+F)")
         header.pack_end(self.search_button)
+        self.select_button = Gtk.ToggleButton(icon_name="fm-select-symbolic", tooltip_text="Select conversations")
+        self.select_button.connect("toggled", lambda b: self.set_selection_mode(b.get_active()))
+        header.pack_start(self.select_button)
         self.sort_button = Gtk.MenuButton(icon_name="fm-sort-symbolic", tooltip_text="Sort",
                                           menu_model=self._build_sort_menu())
         header.pack_end(self.sort_button)
@@ -227,11 +270,8 @@ class ThreadList(Adw.NavigationPage):
         factory.connect("bind", self._bind_row)
         factory.connect("unbind", self._unbind_row)
         self.listview = Gtk.ListView(model=self.selection, factory=factory)
-        self._header_factory = Gtk.SignalListItemFactory()
-        self._header_factory.connect("setup", self._setup_header)
-        self._header_factory.connect("bind", self._bind_header)
-        self._header_factory.connect("unbind", self._unbind_header)
-        self.set_grouped(model.grouped)
+        self._selected_groups: set[SenderGroup] = set()
+        self._syncing_selection = False
         self.listview.add_css_class("thread-list")
         self.listview.add_css_class("navigation-sidebar")
         self.listview.connect("activate", self._on_activate)
@@ -257,30 +297,112 @@ class ThreadList(Adw.NavigationPage):
         self.loading.set_child(Adw.Spinner())
         self.stack.add_named(self.loading, "loading")
         view.set_content(self.stack)
+        self.action_bar = self._build_action_bar()
+        view.add_bottom_bar(self.action_bar)
+        self.selection_mode = False
+        click = Gtk.GestureClick(button=1)
+        click.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        click.connect("pressed", self._on_click_in_selection_mode)
+        self.listview.add_controller(click)
         self.set_child(view)
         self._want_top = False
         model.connect("items-changed", self._on_items_changed)
         model.connect("notify::loading", lambda *_: self._update_empty())
 
+    # ------------------------------------------------------ selection mode
+
+    def _build_action_bar(self) -> Gtk.ActionBar:
+        bar = Gtk.ActionBar(revealed=False)
+        bar.add_css_class("selection-bar")
+        self.selection_count = Gtk.Label(label="0 selected")
+        self.selection_count.add_css_class("dim-label")
+        bar.pack_start(self.selection_count)
+        all_btn = Gtk.Button(label="All", action_name="win.select-all", tooltip_text="Select all (Ctrl+A)")
+        bar.pack_start(all_btn)
+        for icon, action, tip in (("fm-archive-symbolic", "win.archive", "Archive (e)"),
+                                  ("user-trash-symbolic", "win.trash", "Delete (#)"),
+                                  ("fm-junk-symbolic", "win.junk", "Spam (!)"),
+                                  ("fm-mail-read-symbolic", "win.mark-read", "Mark as read (Shift+I)"),
+                                  ("fm-mail-unread-symbolic", "win.mark-unread", "Mark as unread (Shift+U)"),
+                                  ("fm-star-symbolic", "win.flag", "Flag (s)"),
+                                  ("fm-tag-symbolic", "win.labels", "Labels (l)"),
+                                  ("folder-symbolic", "win.move", "Move to (v)")):
+            bar.pack_end(Gtk.Button(icon_name=icon, action_name=action, tooltip_text=tip))
+        return bar
+
+    def set_selection_mode(self, on: bool) -> None:
+        """Checkboxes on every row, plain clicks toggle, bulk actions in a bottom bar."""
+        if on == self.selection_mode:
+            return
+        self.selection_mode = on
+        self.select_button.set_active(on)
+        self.action_bar.set_revealed(on)
+        for w in (*self._rows, *self._headers):
+            w.check.set_visible(on)
+        self._sync_checks()
+
+    def _sync_checks(self) -> None:
+        n = len(self.selected_threads())
+        self.selection_count.set_label(f"{n} selected")
+        if not self.selection_mode:
+            return
+        sel = self.selection
+        for w in self._rows:
+            if w.list_item is not None:
+                w.check.set_active(sel.is_selected(w.list_item.get_position()))
+        for w in self._headers:
+            if w.group is not None and w.group.threads:
+                selected = self.selected_threads()
+                w.check.set_active(all(t in selected for t in w.group.threads))
+
+    def _toggle_position(self, position: int) -> None:
+        item = self.model.get_item(position)
+        if item is None:
+            return
+        if isinstance(item, SenderGroup):
+            selected = self.selected_threads()
+            if all(t in selected for t in item.threads):
+                self._syncing_selection = True
+                try:
+                    self.selection.unselect_item(position)
+                    if not item.collapsed:
+                        self.selection.unselect_range(position + 1, len(item.threads))
+                finally:
+                    self._syncing_selection = False
+                self._selected_groups.discard(item)
+                self._on_selection_changed()
+            else:
+                self.selection.select_item(position, False)
+        elif self.selection.is_selected(position):
+            self.selection.unselect_item(position)
+        else:
+            self.selection.select_item(position, False)
+
+    def _on_click_in_selection_mode(self, gesture, _n, x, y) -> None:
+        if not self.selection_mode:
+            return
+        widget = self.listview.pick(x, y, Gtk.PickFlags.DEFAULT)
+        w = widget
+        while w is not None and not isinstance(w, (ThreadRow, SenderHeader)):
+            if isinstance(w, Gtk.Button):   # expander and checkbox keep their own behaviour
+                return
+            w = w.get_parent()
+        if w is None or w.list_item is None:
+            return
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+        self._toggle_position(w.list_item.get_position())
+
     # ------------------------------------------------------------ grouping
 
     def set_grouped(self, grouped: bool) -> None:
-        """Show a header per sender (the model must be sorted by sender)."""
+        """Show a row per sender above its threads, in the order of the active sort."""
         self.model.set_grouped(grouped)
-        self.listview.set_header_factory(self._header_factory if grouped else None)
 
-    def _setup_header(self, _f, header: Gtk.ListHeader) -> None:
-        header.set_child(SenderHeader(self.avatars))
+    def _toggle_group(self, group: SenderGroup) -> None:
+        self.model.toggle_collapsed(group.key)
 
-    def _bind_header(self, _f, header: Gtk.ListHeader) -> None:
-        widget = header.get_child()
-        obj = header.get_item()
-        if obj is not None:
-            widget.bind(obj, header.get_end() - header.get_start())
-        self._headers.add(widget)
-
-    def _unbind_header(self, _f, header: Gtk.ListHeader) -> None:
-        self._headers.discard(header.get_child())
+    def fold_all(self, collapsed: bool) -> None:
+        self.model.set_all_collapsed(collapsed)
 
     # ------------------------------------------------------------ sort
 
@@ -323,13 +445,9 @@ class ThreadList(Adw.NavigationPage):
         try:
             if group is not None:
                 self._group_action.set_state(GLib.Variant("b", group))
-            grouped = self._group_action.get_state().get_boolean()
-            # grouping needs the sender sort, so the other choices are locked while it is on
-            self._sort_action.set_state(GLib.Variant("s", "sender" if grouped else key))
-            self._flagged_action.set_state(GLib.Variant("b", False if grouped else flagged_first))
-            self._unread_action.set_state(GLib.Variant("b", False if grouped else unread_first))
-            for a in (self._sort_action, self._flagged_action, self._unread_action):
-                a.set_enabled(not grouped)
+            self._sort_action.set_state(GLib.Variant("s", key))
+            self._flagged_action.set_state(GLib.Variant("b", flagged_first))
+            self._unread_action.set_state(GLib.Variant("b", unread_first))
         finally:
             self._setting_sort = False
 
@@ -350,27 +468,67 @@ class ThreadList(Adw.NavigationPage):
                 w.refresh_avatar()
 
     def _setup_row(self, _f, list_item: Gtk.ListItem) -> None:
-        row = ThreadRow(self.avatars)
-        list_item.set_child(row)
+        # One widget per list item that can show either a thread or a sender group.
+        stack = Gtk.Stack(hhomogeneous=False, vhomogeneous=False)
+        row, header = ThreadRow(self.avatars), SenderHeader(self.avatars, self._toggle_group)
+        stack.add_named(row, "thread")
+        stack.add_named(header, "group")
+        for w in (row, header):
+            w.list_item = list_item
+            w.check.connect("toggled", self._on_check_toggled, w)
+        list_item.set_child(stack)
         drag = Gtk.DragSource(actions=Gdk.DragAction.MOVE | Gdk.DragAction.COPY)
         drag.connect("prepare", self._on_drag_prepare, list_item)
         drag.connect("drag-begin", self._on_drag_begin, list_item)
-        row.add_controller(drag)
+        stack.add_controller(drag)
 
     def _bind_row(self, _f, list_item: Gtk.ListItem) -> None:
-        row = list_item.get_child()
-        row.bind(list_item.get_item())
-        self._rows.add(row)
+        stack = list_item.get_child()
+        item = list_item.get_item()
+        if isinstance(item, SenderGroup):
+            header = stack.get_child_by_name("group")
+            header.bind(item)
+            stack.set_visible_child(header)
+            self._headers.add(header)
+            w = header
+        else:
+            row = stack.get_child_by_name("thread")
+            row.bind(item)
+            stack.set_visible_child(row)
+            self._rows.add(row)
+            w = row
+        w.check.set_visible(self.selection_mode)
+        if self.selection_mode:
+            self._syncing_checks = True
+            try:
+                pos = list_item.get_position()
+                w.check.set_active(self.selection.is_selected(pos) if isinstance(item, ThreadObject)
+                                   else all(t in self.selected_threads() for t in item.threads))
+            finally:
+                self._syncing_checks = False
 
     def _unbind_row(self, _f, list_item: Gtk.ListItem) -> None:
-        row = list_item.get_child()
+        stack = list_item.get_child()
+        row, header = stack.get_child_by_name("thread"), stack.get_child_by_name("group")
         row.unbind()
+        header.unbind()
         self._rows.discard(row)
+        self._headers.discard(header)
+
+    def _on_check_toggled(self, check: Gtk.CheckButton, w) -> None:
+        if getattr(self, "_syncing_checks", False) or w.list_item is None:
+            return
+        pos = w.list_item.get_position()
+        if check.get_active() != self.selection.is_selected(pos) or isinstance(w, SenderHeader):
+            self._toggle_position(pos)
 
     def _on_drag_prepare(self, _source, _x, _y, list_item: Gtk.ListItem):
-        obj: ThreadObject = list_item.get_item()
+        obj = list_item.get_item()
         selected = self.selected_threads()
-        if obj not in selected:
+        if isinstance(obj, SenderGroup):
+            if not any(t in selected for t in obj.threads):
+                selected = list(obj.threads)
+        elif obj not in selected:
             selected = [obj]
         ids = [eid for t in selected for eid in t.email_ids]
         return Gdk.ContentProvider.new_for_value(DRAG_PREFIX + ",".join(ids))
@@ -381,7 +539,7 @@ class ThreadList(Adw.NavigationPage):
 
     # ------------------------------------------------------- selection
 
-    def selected_threads(self) -> list[ThreadObject]:
+    def _selected_items(self) -> list:
         out = []
         bitset = self.selection.get_selection()
         ok, it, value = Gtk.BitsetIter.init_first(bitset)
@@ -392,19 +550,65 @@ class ThreadList(Adw.NavigationPage):
             ok, value = it.next()
         return out
 
+    def selected_threads(self) -> list[ThreadObject]:
+        """Selected threads in list order; a selected group stands for all of
+        its threads (its visible rows are selected too, hidden ones implied)."""
+        out: list[ThreadObject] = []
+        seen: set[str] = set()
+        for item in self._selected_items():
+            threads = item.threads if isinstance(item, SenderGroup) else [item]
+            for t in threads:
+                if t.thread_id not in seen:
+                    seen.add(t.thread_id)
+                    out.append(t)
+        return out
+
     def _on_selection_changed(self, *_) -> None:
+        if self._syncing_selection:
+            return
+        groups = {i for i in self._selected_items() if isinstance(i, SenderGroup)}
+        newly = groups - self._selected_groups
+        self._selected_groups = groups
+        if newly:
+            # a freshly selected sender row takes its visible threads along
+            self._syncing_selection = True
+            try:
+                for group in newly:
+                    if not group.collapsed:
+                        pos = self.model.items.index(group)
+                        self.selection.select_range(pos + 1, len(group.threads), False)
+            finally:
+                self._syncing_selection = False
+        self._syncing_checks = True
+        try:
+            self._sync_checks()
+        finally:
+            self._syncing_checks = False
         self.on_selection(self.selected_threads())
 
     def _on_activate(self, _view, position: int) -> None:
         item = self.model.get_item(position)
-        if item is not None:
+        if isinstance(item, SenderGroup):
+            self._toggle_group(item)
+        elif item is not None:
             self.on_activate(item)
 
     def _on_right_click(self, gesture, _n, x, y) -> None:
         widget = self.listview.pick(x, y, Gtk.PickFlags.DEFAULT)
-        while widget is not None and not isinstance(widget, ThreadRow):
+        while widget is not None and not isinstance(widget, (ThreadRow, SenderHeader)):
             widget = widget.get_parent()
-        if widget is None or widget.obj is None:
+        if widget is None:
+            return
+        if isinstance(widget, SenderHeader):
+            group = widget.group
+            if group is None or not group.threads:
+                return
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+            if not all(t in self.selected_threads() for t in group.threads):
+                self.selection.select_item(self.model.items.index(group), True)
+            self.on_context_menu(group.threads[0], int(x), int(y))
+            return
+        if widget.obj is None:
             return
         gesture.set_state(Gtk.EventSequenceState.CLAIMED)
         obj = widget.obj
@@ -423,15 +627,31 @@ class ThreadList(Adw.NavigationPage):
         popover.popup()
 
     def select_thread(self, thread_id: str) -> None:
+        self.model.reveal(thread_id)
         idx = self.model.index_of(thread_id)
         if idx >= 0:
             self.selection.select_item(idx, True)
             self.listview.scroll_to(idx, Gtk.ListScrollFlags.NONE, None)
 
-    def select_position(self, position: int) -> None:
-        if 0 <= position < self.model.get_n_items():
-            self.selection.select_item(position, True)
-            self.listview.scroll_to(position, Gtk.ListScrollFlags.FOCUS, None)
+    def select_position(self, position: int, step: int = 0) -> None:
+        """Select the row at position; with a step, skip sender rows in that direction
+        (keyboard navigation moves between conversations, not groups)."""
+        n = self.model.get_n_items()
+        if not 0 <= position < n:
+            return
+        if step and isinstance(self.model.get_item(position), SenderGroup):
+            probe = position
+            while 0 <= probe < n and isinstance(self.model.get_item(probe), SenderGroup):
+                probe += step
+            if not 0 <= probe < n:   # ran off the end: look the other way
+                probe = position
+                while 0 <= probe < n and isinstance(self.model.get_item(probe), SenderGroup):
+                    probe -= step
+            if not 0 <= probe < n:
+                return
+            position = probe
+        self.selection.select_item(position, True)
+        self.listview.scroll_to(position, Gtk.ListScrollFlags.FOCUS, None)
 
     def select_all(self) -> None:
         self.selection.select_all()

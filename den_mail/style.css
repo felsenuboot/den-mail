@@ -25,13 +25,16 @@
 .thread-list row {
   padding: 2px 6px;
 }
-.thread-list header {
-  padding: 0;
-}
 .sender-header {
-  padding: 8px 12px 6px 12px;
-  border-bottom: 1px solid alpha(currentColor, 0.1);
-  background: alpha(currentColor, 0.04);
+  padding: 4px 8px 4px 0;
+}
+.sender-header .heading.unread {
+  font-weight: 700;
+}
+.sender-header .expander {
+  min-width: 20px;
+  min-height: 20px;
+  padding: 2px;
 }
 .thread-row .participants {
   font-weight: 500;
@@ -212,3 +215,10 @@ image.label-color-11 { color: #a51d2d; } .chip.label-color-11 { background: alph
 .state-disabled { color: @warning_color; }
 .state-deleted { color: @error_color; }
 .state-pending { color: alpha(currentColor, 0.6); }
+
+.selection-bar {
+  padding: 2px 6px;
+}
+.selection-check {
+  margin-right: 2px;
+}

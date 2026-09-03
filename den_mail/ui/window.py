@@ -371,7 +371,7 @@ class MainWindow(Adw.ApplicationWindow):
             pos = min(self._pending_select_position, self.model.get_n_items() - 1)
             self._pending_select_position = None
             if pos >= 0:
-                self.threadlist.select_position(pos)
+                self.threadlist.select_position(pos, step=1)
         elif selected_ids and not any(t in self.model.by_thread for t in selected_ids):
             self.conversation.clear()
 
@@ -513,22 +513,15 @@ class MainWindow(Adw.ApplicationWindow):
         return self.sort
 
     def _current_sort(self) -> list[dict]:
-        if self.config.get("group_by_sender", False):
-            return build_sort("sender")
         s = self._sort_for_mailbox(self.current_mailbox if not self.threadlist.search_active else None)
         return build_sort(s.get("key", "newest"), bool(s.get("flagged_first")), bool(s.get("unread_first")))
 
     def _on_sort_changed(self, key: str, flagged_first: bool, unread_first: bool, group: bool = False) -> None:
         if group != bool(self.config.get("group_by_sender", False)):
-            # Only the grouping toggle changed: it is a global view setting, not a per-mailbox sort.
+            # Only the grouping toggle changed: a global view setting, applied client-side.
             self.config.set("group_by_sender", group)
             self.threadlist.set_grouped(group)
-            s = self._sort_for_mailbox(self.current_mailbox if not self.threadlist.search_active else None)
-            self.threadlist.set_sort(s["key"], bool(s["flagged_first"]), bool(s["unread_first"]), group)
-            if self.threadlist.search_active:
-                self.threadlist._fire_search()
-            elif self.current_mailbox:
-                self._load_mailbox(self.current_mailbox)
+            self.threadlist.scroll_to_top()
             return
         choice = {"key": key, "flagged_first": flagged_first, "unread_first": unread_first}
         if self.current_mailbox and not self.threadlist.search_active:
@@ -599,7 +592,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _move_selection(self, delta: int) -> None:
         pos = self.threadlist.selected_position()
         target = 0 if pos < 0 else pos + delta
-        self.threadlist.select_position(target)
+        self.threadlist.select_position(target, step=delta or 1)
 
     def _selected_email_ids(self) -> list[str]:
         return [eid for t in self.selected for eid in t.email_ids]
@@ -663,7 +656,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.model.remove_threads(thread_ids)
         if visible & thread_ids:
             self.conversation.clear()
-            self.threadlist.select_position(min(pos, self.model.get_n_items() - 1))
+            self.threadlist.select_position(min(pos, self.model.get_n_items() - 1), step=1)
 
     def _after_action(self, record: UndoRecord | None) -> None:
         if record is None:
