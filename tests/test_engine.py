@@ -274,3 +274,32 @@ def test_sort_options_round_trip_and_server_sorting(engine, server):
     pump(lambda: any(a[0] == key for a in engine.events.get("query-updated", [])))
     senders = [(engine.db.get_email(i)["from"][0].get("name") or "").lower() for i in engine.db.get_query(key)["ids"]]
     assert senders == sorted(senders)
+
+
+def test_sender_grouping_sections(engine):
+    from den_mail.store.sync import build_sort
+    inbox = engine.roles[ROLE_INBOX]
+    key = engine.load_query(mailbox_query_spec(inbox, build_sort("sender")))
+    pump(lambda: any(a[0] == key for a in engine.events.get("query-updated", [])))
+    q = engine.db.get_query(key)
+    model = ThreadListModel(engine.db)
+    model.mailbox_id = inbox
+    model.set_email_ids(q["ids"], q["total"], q["complete"])
+    n = model.get_n_items()
+    assert model.sections() == [(0, n)]                  # ungrouped: one section
+    assert model.do_get_section(0) == (0, n)
+    model.set_grouped(True)
+    secs = model.sections()
+    assert len(secs) > 1 and secs[0][0] == 0 and secs[-1][1] == n
+    assert [s for s, _ in secs] == sorted(s for s, _ in secs)
+    for start, end in secs:
+        keys = {model.items[i].sender_key for i in range(start, end)}
+        assert len(keys) == 1                              # one sender per section
+        for i in range(start, end):
+            assert model.do_get_section(i) == (start, end)
+    # the sender sort keeps every sender in one contiguous run
+    assert len(secs) == len({o.sender_key for o in model.items})
+    assert model.do_get_section(n)[0] == n
+    # an empty all-mail search lists everything outside trash/junk
+    spec = search_query_spec("", None, ["t", "j"])
+    assert spec["filter"] == {"inMailboxOtherThan": ["t", "j"]}

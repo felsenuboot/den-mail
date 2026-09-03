@@ -59,6 +59,11 @@ def _run(app, steps: list[str]) -> bool:
                 log.warning("autopilot: no action %s", arg)
             else:
                 action.activate(None)
+        elif cmd == "group" and win:
+            win.threadlist._group_action.change_state(GLib.Variant("b", arg.strip() in ("on", "1", "true")))
+        elif cmd == "scope" and win:
+            win.threadlist.focus_search()
+            win.threadlist.scope.set_selected(1 if arg.strip() == "all" else 0)
         elif cmd == "compose" and win:
             win.compose("new")
         elif cmd == "dump-compose" and win and win.compose_windows:

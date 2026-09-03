@@ -124,6 +124,43 @@ class ThreadRow(Gtk.Box):
         self.avatar.set_custom_image(texture)
 
 
+class SenderHeader(Gtk.Box):
+    """Section header for a group of threads from one sender."""
+
+    def __init__(self, avatars):
+        super().__init__(spacing=10)
+        self.avatars = avatars
+        self.avatar_key: str | None = None
+        self.email: str | None = None
+        self.add_css_class("sender-header")
+        self.avatar = avatar("?", 24)
+        self.append(self.avatar)
+        self.name = Gtk.Label(xalign=0, ellipsize=3, hexpand=True)
+        self.name.add_css_class("heading")
+        self.append(self.name)
+        self.address = Gtk.Label(xalign=0, ellipsize=3)
+        self.address.add_css_class("dim-label")
+        self.address.add_css_class("caption")
+        self.append(self.address)
+        self.count = Gtk.Label()
+        self.count.add_css_class("count-chip")
+        self.append(self.count)
+
+    def bind(self, obj: ThreadObject, n: int) -> None:
+        self.email = obj.sender_email or None
+        self.avatar_key = sender_key(self.email)
+        self.avatar.set_text(obj.sender_name or "?")
+        self.name.set_label(obj.sender_name)
+        self.address.set_label(self.email or "")
+        self.address.set_visible(bool(self.email) and self.email.lower() != obj.sender_name.lower())
+        self.count.set_label(str(n))
+        self.refresh_avatar()
+
+    def refresh_avatar(self) -> None:
+        texture = self.avatars.get(self.email) if (self.avatars and self.email) else None
+        self.avatar.set_custom_image(texture)
+
+
 class ThreadList(Adw.NavigationPage):
     def __init__(self, model: ThreadListModel,
                  on_selection: Callable[[list[ThreadObject]], None],
@@ -136,11 +173,12 @@ class ThreadList(Adw.NavigationPage):
         self.model = model
         self.avatars = avatars
         self._rows: set[ThreadRow] = set()
+        self._headers: set[SenderHeader] = set()
         if avatars is not None:
             avatars.connect("avatar-ready", self._on_avatar_ready)
             # dark logos get a light plate only on the dark theme
             Adw.StyleManager.get_default().connect(
-                "notify::dark", lambda *_: [row.refresh_avatar() for row in self._rows])
+                "notify::dark", lambda *_: [w.refresh_avatar() for w in (*self._rows, *self._headers)])
         self.on_selection = on_selection
         self.on_activate = on_activate
         self.on_search = on_search
@@ -189,6 +227,11 @@ class ThreadList(Adw.NavigationPage):
         factory.connect("bind", self._bind_row)
         factory.connect("unbind", self._unbind_row)
         self.listview = Gtk.ListView(model=self.selection, factory=factory)
+        self._header_factory = Gtk.SignalListItemFactory()
+        self._header_factory.connect("setup", self._setup_header)
+        self._header_factory.connect("bind", self._bind_header)
+        self._header_factory.connect("unbind", self._unbind_header)
+        self.set_grouped(model.grouped)
         self.listview.add_css_class("thread-list")
         self.listview.add_css_class("navigation-sidebar")
         self.listview.connect("activate", self._on_activate)
@@ -215,12 +258,33 @@ class ThreadList(Adw.NavigationPage):
         self.stack.add_named(self.loading, "loading")
         view.set_content(self.stack)
         self.set_child(view)
-        model.connect("items-changed", lambda *_: self._update_empty())
+        self._want_top = False
+        model.connect("items-changed", self._on_items_changed)
         model.connect("notify::loading", lambda *_: self._update_empty())
+
+    # ------------------------------------------------------------ grouping
+
+    def set_grouped(self, grouped: bool) -> None:
+        """Show a header per sender (the model must be sorted by sender)."""
+        self.model.set_grouped(grouped)
+        self.listview.set_header_factory(self._header_factory if grouped else None)
+
+    def _setup_header(self, _f, header: Gtk.ListHeader) -> None:
+        header.set_child(SenderHeader(self.avatars))
+
+    def _bind_header(self, _f, header: Gtk.ListHeader) -> None:
+        widget = header.get_child()
+        obj = header.get_item()
+        if obj is not None:
+            widget.bind(obj, header.get_end() - header.get_start())
+        self._headers.add(widget)
+
+    def _unbind_header(self, _f, header: Gtk.ListHeader) -> None:
+        self._headers.discard(header.get_child())
 
     # ------------------------------------------------------------ sort
 
-    on_sort_changed: Callable[[str, bool, bool], None] = lambda self, key, flagged, unread: None
+    on_sort_changed: Callable[[str, bool, bool, bool], None] = lambda self, key, flagged, unread, group: None
 
     def _build_sort_menu(self) -> Gio.Menu:
         group = Gio.SimpleActionGroup()
@@ -233,6 +297,9 @@ class ThreadList(Adw.NavigationPage):
         self._unread_action = Gio.SimpleAction.new_stateful("unread-first", None, GLib.Variant("b", False))
         self._unread_action.connect("change-state", self._on_sort_state)
         group.add_action(self._unread_action)
+        self._group_action = Gio.SimpleAction.new_stateful("group-by-sender", None, GLib.Variant("b", False))
+        self._group_action.connect("change-state", self._on_sort_state)
+        group.add_action(self._group_action)
         self.insert_action_group("sort", group)
         menu = Gio.Menu()
         section = Gio.Menu()
@@ -246,14 +313,23 @@ class ThreadList(Adw.NavigationPage):
         section.append("Flagged on top", "sort.flagged-first")
         section.append("Unread on top", "sort.unread-first")
         menu.append_section(None, section)
+        section = Gio.Menu()
+        section.append("Group by sender", "sort.group-by-sender")
+        menu.append_section(None, section)
         return menu
 
-    def set_sort(self, key: str, flagged_first: bool, unread_first: bool) -> None:
+    def set_sort(self, key: str, flagged_first: bool, unread_first: bool, group: bool | None = None) -> None:
         self._setting_sort = True
         try:
-            self._sort_action.set_state(GLib.Variant("s", key))
-            self._flagged_action.set_state(GLib.Variant("b", flagged_first))
-            self._unread_action.set_state(GLib.Variant("b", unread_first))
+            if group is not None:
+                self._group_action.set_state(GLib.Variant("b", group))
+            grouped = self._group_action.get_state().get_boolean()
+            # grouping needs the sender sort, so the other choices are locked while it is on
+            self._sort_action.set_state(GLib.Variant("s", "sender" if grouped else key))
+            self._flagged_action.set_state(GLib.Variant("b", False if grouped else flagged_first))
+            self._unread_action.set_state(GLib.Variant("b", False if grouped else unread_first))
+            for a in (self._sort_action, self._flagged_action, self._unread_action):
+                a.set_enabled(not grouped)
         finally:
             self._setting_sort = False
 
@@ -263,14 +339,15 @@ class ThreadList(Adw.NavigationPage):
             return
         self.on_sort_changed(self._sort_action.get_state().get_string(),
                              self._flagged_action.get_state().get_boolean(),
-                             self._unread_action.get_state().get_boolean())
+                             self._unread_action.get_state().get_boolean(),
+                             self._group_action.get_state().get_boolean())
 
     # ------------------------------------------------------------ rows
 
     def _on_avatar_ready(self, _service, key: str) -> None:
-        for row in self._rows:
-            if row.avatar_key == key:
-                row.refresh_avatar()
+        for w in (*self._rows, *self._headers):
+            if w.avatar_key == key:
+                w.refresh_avatar()
 
     def _setup_row(self, _f, list_item: Gtk.ListItem) -> None:
         row = ThreadRow(self.avatars)
@@ -396,6 +473,15 @@ class ThreadList(Adw.NavigationPage):
 
     def scroll_to_top(self) -> None:
         self.scrolled.get_vadjustment().set_value(0)
+        # The list is usually empty at this point; when the rows land, GTK keeps
+        # its anchor row at the top edge, which hides that row's section header.
+        self._want_top = True
+
+    def _on_items_changed(self, model, position: int, removed: int, added: int) -> None:
+        self._update_empty()
+        if self._want_top and added and model.get_n_items() == added:
+            self._want_top = False
+            GLib.idle_add(lambda: self.scrolled.get_vadjustment().set_value(0) or False)
 
     # ---------------------------------------------------------- search
 
@@ -411,9 +497,11 @@ class ThreadList(Adw.NavigationPage):
         return False
 
     def _on_search_mode(self, *_) -> None:
-        if not self.search_bar.get_search_mode() and self.search_entry.get_text():
+        if not self.search_bar.get_search_mode() and (self.search_entry.get_text() or self.scope.get_selected() == 1):
             self.search_entry.set_text("")
-            self._fire_search()
+            self.scope.set_selected(0)   # back to the mailbox (also re-fires the query)
+            if not self.search_entry.get_text():
+                self._fire_search()
 
     def focus_search(self) -> None:
         self.search_bar.set_search_mode(True)
@@ -421,4 +509,6 @@ class ThreadList(Adw.NavigationPage):
 
     @property
     def search_active(self) -> bool:
-        return bool(self.search_entry.get_text().strip())
+        """True while the list shows a search or the whole account instead of a mailbox."""
+        return bool(self.search_entry.get_text().strip()) or (
+            self.search_bar.get_search_mode() and self.scope.get_selected() == 1)

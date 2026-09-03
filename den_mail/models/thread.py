@@ -4,9 +4,23 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from gi.repository import Gio, GLib, GObject
+import bisect
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gio, GLib, GObject, Gtk  # noqa: E402
 
 from ..store.db import Database, ThreadSummary
+
+
+def sender_group_key(addr: dict | None) -> str:
+    """Grouping key for a From address: the display name, else the address,
+    lowercased -- the same value the JMAP "from" sort comparator orders by,
+    so groups are contiguous in a sender-sorted query."""
+    if not addr:
+        return ""
+    return (addr.get("name") or addr.get("email") or "").strip().lower()
 
 
 def format_date(iso: str) -> str:
@@ -53,6 +67,8 @@ class ThreadObject(GObject.Object):
     has_attachment = GObject.Property(type=bool, default=False)
     is_draft = GObject.Property(type=bool, default=False)
     labels_text = GObject.Property(type=str, default="")
+    sender_name = GObject.Property(type=str, default="")
+    sender_email = GObject.Property(type=str, default="")
 
     def __init__(self, summary: ThreadSummary):
         super().__init__()
@@ -65,7 +81,11 @@ class ThreadObject(GObject.Object):
         self.summary = summary
         self.labels = labels
         labels_text = "\x1f".join(f"{n}:{c}" for n, c in labels)
+        first = summary.from_addresses[0] if summary.from_addresses else {}
+        self.sender_key = sender_group_key(first)
         for prop, value in (
+            ("sender_name", first.get("name") or first.get("email") or "(unknown sender)"),
+            ("sender_email", first.get("email") or ""),
             ("email_id", summary.email_id),
             ("subject", summary.subject or "(no subject)"),
             ("participants", ", ".join(summary.participants) or "(unknown sender)"),
@@ -87,8 +107,11 @@ class ThreadObject(GObject.Object):
         return list(self.summary.email_ids)
 
 
-class ThreadListModel(GObject.Object, Gio.ListModel):
-    """Ordered list of ThreadObjects for one query; objects keep identity by thread id."""
+class ThreadListModel(GObject.Object, Gio.ListModel, Gtk.SectionModel):
+    """Ordered list of ThreadObjects for one query; objects keep identity by thread id.
+
+    With `grouped` set, consecutive threads from the same sender form a section
+    (Gtk.SectionModel), which the list view renders with a header per sender."""
 
     __gtype_name__ = "FmThreadListModel"
 
@@ -104,6 +127,46 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
         self.mailbox_id: str | None = None
         self.trash_junk: set[str] = set()
         self.label_namer = lambda mailbox_ids: []
+        self.grouped = False
+        self._section_starts: list[int] = []   # start index of every section
+
+    # Gtk.SectionModel
+    def set_grouped(self, grouped: bool) -> None:
+        if grouped == self.grouped:
+            return
+        self.grouped = grouped
+        self._compute_sections()
+        if self.items:
+            self.sections_changed(0, len(self.items))
+
+    def _compute_sections(self) -> None:
+        starts: list[int] = []
+        if self.grouped:
+            last = object()
+            for i, o in enumerate(self.items):
+                if o.sender_key != last:
+                    starts.append(i)
+                    last = o.sender_key
+        self._section_starts = starts
+
+    def sections(self) -> list[tuple[int, int]]:
+        """(start, end) of every section, for tests and headers."""
+        n = len(self.items)
+        if not self.grouped:
+            return [(0, n)] if n else []
+        starts = self._section_starts
+        return [(s, starts[i + 1] if i + 1 < len(starts) else n) for i, s in enumerate(starts)]
+
+    def do_get_section(self, position):
+        n = len(self.items)
+        if position >= n:
+            return n, GLib.MAXUINT32
+        if not self.grouped:
+            return 0, n
+        i = bisect.bisect_right(self._section_starts, position) - 1
+        start = self._section_starts[i]
+        end = self._section_starts[i + 1] if i + 1 < len(self._section_starts) else n
+        return start, end
 
     # Gio.ListModel
     def do_get_item_type(self):
@@ -162,6 +225,7 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
         removed = len(old) - prefix - suffix
         added = len(new_items) - prefix - suffix
         self.items = new_items
+        self._compute_sections()
         if removed or added:
             self.items_changed(prefix, removed, added)
 

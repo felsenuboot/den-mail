@@ -203,7 +203,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.model.label_namer = self._label_names
         self.threadlist = ThreadList(self.model, self._on_selection, self._on_activate_thread, self._on_search,
                                      self._on_load_more, lambda: self.engine.sync_now(), avatars=self.avatars)
-        self.threadlist.set_sort(self.sort["key"], self.sort["flagged_first"], self.sort["unread_first"])
+        self.threadlist.set_sort(self.sort["key"], self.sort["flagged_first"], self.sort["unread_first"],
+                                 bool(self.config.get("group_by_sender", False)))
+        self.threadlist.set_grouped(bool(self.config.get("group_by_sender", False)))
         self.threadlist.on_sort_changed = self._on_sort_changed
         self.threadlist.on_context_menu = self._on_thread_context_menu
         self.conversation = ConversationView(self.db, self.engine, self.tree, self.config, self._compose_from,
@@ -464,7 +466,10 @@ class MainWindow(Adw.ApplicationWindow):
     def _update_list_title(self) -> None:
         if self.threadlist.search_active:
             total = self.model.total
-            self.threadlist.set_title("Search", f"{total} result{'s' if total != 1 else ''}")
+            if self.threadlist.search_entry.get_text().strip():
+                self.threadlist.set_title("Search", f"{total} result{'s' if total != 1 else ''}")
+            else:
+                self.threadlist.set_title("All mail", f"{total} conversations")
             return
         mb = self.current_mailbox
         if mb is None:
@@ -476,10 +481,12 @@ class MainWindow(Adw.ApplicationWindow):
         self.threadlist.set_title(live.name, sub)
 
     def _on_search(self, text: str, scope: str) -> None:
-        if not text:
+        if not text and scope == "mailbox":
             if self.current_mailbox:
                 self._load_mailbox(self.current_mailbox)
             return
+        # An empty query over all mail lists everything outside Trash and Spam,
+        # which is how "group by sender" works across the whole account.
         if self.query_key:
             self.engine.release_query(self.query_key)
         mailbox_id = self.current_mailbox.id if (scope == "mailbox" and self.current_mailbox) else None
@@ -491,7 +498,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.threadlist.set_empty_text("No results", "Try different words, or search all mail.")
         self.query_key = self.engine.load_query(search_query_spec(text, mailbox_id, self.engine.trash_junk_ids(),
                                                                   self._current_sort()))
-        self.threadlist.set_title("Search", "Searching…")
+        self.threadlist.set_title("All mail" if not text else "Search", "Loading…" if not text else "Searching…")
+        self.threadlist.scroll_to_top()
 
     def _sort_for_mailbox(self, mb: MailboxObject | None) -> dict:
         """Per-mailbox sort: local override, else Fastmail's own per-mailbox `sort`, else the global choice."""
@@ -505,10 +513,23 @@ class MainWindow(Adw.ApplicationWindow):
         return self.sort
 
     def _current_sort(self) -> list[dict]:
+        if self.config.get("group_by_sender", False):
+            return build_sort("sender")
         s = self._sort_for_mailbox(self.current_mailbox if not self.threadlist.search_active else None)
         return build_sort(s.get("key", "newest"), bool(s.get("flagged_first")), bool(s.get("unread_first")))
 
-    def _on_sort_changed(self, key: str, flagged_first: bool, unread_first: bool) -> None:
+    def _on_sort_changed(self, key: str, flagged_first: bool, unread_first: bool, group: bool = False) -> None:
+        if group != bool(self.config.get("group_by_sender", False)):
+            # Only the grouping toggle changed: it is a global view setting, not a per-mailbox sort.
+            self.config.set("group_by_sender", group)
+            self.threadlist.set_grouped(group)
+            s = self._sort_for_mailbox(self.current_mailbox if not self.threadlist.search_active else None)
+            self.threadlist.set_sort(s["key"], bool(s["flagged_first"]), bool(s["unread_first"]), group)
+            if self.threadlist.search_active:
+                self.threadlist._fire_search()
+            elif self.current_mailbox:
+                self._load_mailbox(self.current_mailbox)
+            return
         choice = {"key": key, "flagged_first": flagged_first, "unread_first": unread_first}
         if self.current_mailbox and not self.threadlist.search_active:
             overrides = dict(self.config.get("mailbox_sort", {}) or {})
