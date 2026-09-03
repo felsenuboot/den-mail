@@ -9,9 +9,9 @@ from gi.repository import Adw, Gio, GLib, Gtk
 
 from ..html.compose import (
     email_body_text,
+    format_address_list,
     forward_body,
     forward_subject,
-    format_address_list,
     parse_address_list,
     reply_body,
     reply_subject,
@@ -39,7 +39,7 @@ def _find_descendant(widget: Gtk.Widget, cls: type) -> Gtk.Widget | None:
 class ComposeWindow(Adw.Window):
     def __init__(self, parent: Gtk.Window, engine, db, identities: list[dict], mode: str = "new",
                  source: dict | None = None, mailto: dict | None = None,
-                 on_closed: Callable[["ComposeWindow"], None] | None = None,
+                 on_closed: Callable[[ComposeWindow], None] | None = None,
                  preferred_identity_id: str | None = None, default_identity_email: str | None = None,
                  config=None):
         super().__init__(application=parent.get_application(), default_width=820, default_height=680,
@@ -112,7 +112,7 @@ class ComposeWindow(Adw.Window):
         self.wildcard_row.connect("changed", self._mark_dirty)
         fields.append(self.wildcard_row)
 
-        search = lambda prefix: db.search_addresses(prefix)  # noqa: E731
+        search = db.search_addresses
         self.to = Adw.EntryRow(title="To")
         self.to.connect("changed", self._mark_dirty)
         self._to_completion = AddressCompletion(self.to, search)

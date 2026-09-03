@@ -69,7 +69,8 @@ EMAIL_LIST_PROPERTIES = [
 ]
 
 # Everything needed to display and reply to a message.
-EMAIL_BODY_PROPERTIES = EMAIL_LIST_PROPERTIES + [
+EMAIL_BODY_PROPERTIES = [
+    *EMAIL_LIST_PROPERTIES,
     "sender",
     "bodyStructure",
     "textBody",
@@ -104,7 +105,7 @@ class Session:
     raw: dict = field(default_factory=dict)
 
     @classmethod
-    def from_json(cls, data: dict) -> "Session":
+    def from_json(cls, data: dict) -> Session:
         primary = data.get("primaryAccounts", {})
         mail_account = primary.get(CAP_MAIL)
         if not mail_account:

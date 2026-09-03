@@ -30,7 +30,7 @@ if not os.environ.get("DEN_MAIL_NO_WEBKIT"):
     os.environ.setdefault("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
     try:
         gi.require_version("WebKit", "6.0")
-        from gi.repository import WebKit  # noqa: E402
+        from gi.repository import WebKit
 
         HAVE_WEBKIT = True
     except (ValueError, ImportError):
@@ -41,7 +41,7 @@ CID_SCHEME = "fmcid"
 # (email_id, cid) -> callback(bytes|None, mime|None); set by the window
 CidResolver = Callable[[str, str, Callable[[bytes | None, str | None], None]], None]
 
-_context: "WebKit.WebContext | None" = None
+_context: WebKit.WebContext | None = None
 _session = None
 _resolver: CidResolver | None = None
 
@@ -154,7 +154,6 @@ if HAVE_WEBKIT:
             uri = action.get_request().get_uri()
             if uri and not uri.startswith((CID_SCHEME, "about:")):
                 open_uri(uri, self.get_root() if isinstance(self.get_root(), Gtk.Window) else None)
-            return None
 
         def _on_decide_policy(self, _view, decision, decision_type):
             # Links (including target=_blank ones, which arrive as NEW_WINDOW_ACTION) open in the
@@ -172,10 +171,9 @@ if HAVE_WEBKIT:
                         open_uri(uri, self.get_root() if isinstance(self.get_root(), Gtk.Window) else None)
                     return True
                 return False
-            if decision_type == WebKit.PolicyDecisionType.RESPONSE:
-                if not decision.is_mime_type_supported():
-                    decision.ignore()
-                    return True
+            if decision_type == WebKit.PolicyDecisionType.RESPONSE and not decision.is_mime_type_supported():
+                decision.ignore()
+                return True
             return False
 
 

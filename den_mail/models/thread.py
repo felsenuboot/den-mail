@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from gi.repository import Gio, GLib, GObject
+from gi.repository import Gio, GObject
 
 from ..avatars import registrable_domain
 from ..store.db import Database, ThreadSummary
@@ -35,10 +35,10 @@ def format_date(iso: str) -> str:
     if not iso:
         return ""
     try:
-        dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone()
+        dt = datetime.fromisoformat(iso).astimezone()
     except ValueError:
         return iso
-    now = datetime.now(timezone.utc).astimezone()
+    now = datetime.now(UTC).astimezone()
     if dt.date() == now.date():
         return dt.strftime("%H:%M")
     if (now - dt).days < 7 and dt.year == now.year:
@@ -52,7 +52,7 @@ def format_date_long(iso: str) -> str:
     if not iso:
         return ""
     try:
-        dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone()
+        dt = datetime.fromisoformat(iso).astimezone()
     except ValueError:
         return iso
     return dt.strftime("%a, %-d %b %Y, %H:%M")

@@ -47,7 +47,8 @@ svg = [
     "</svg>",
     "",
 ]
-open("data/io.github.felsenuboot.DenMail.svg", "w").write("\n".join(svg))
+with open("data/io.github.felsenuboot.DenMail.svg", "w") as f:
+    f.write("\n".join(svg))
 
 sym = '''<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
@@ -55,5 +56,6 @@ sym = '''<?xml version="1.0" encoding="UTF-8"?>
   <path d="M3 4.5l5 4.5 5-4.5" fill="none" stroke="#2e3436" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
 '''
-open("data/io.github.felsenuboot.DenMail-symbolic.svg", "w").write(sym)
+with open("data/io.github.felsenuboot.DenMail-symbolic.svg", "w") as f:
+    f.write(sym)
 print("wrote app icon and symbolic")

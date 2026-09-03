@@ -52,10 +52,10 @@ NAMED = {
 }
 
 HEX_RE = re.compile(r"#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b")
-RGB_RE = re.compile(r"rgba?\(\s*([0-9.]+%?)\s*[, ]\s*([0-9.]+%?)\s*[, ]\s*([0-9.]+%?)\s*(?:[,/]\s*([0-9.]+%?)\s*)?\)", re.I)
-NAMED_RE = re.compile(r"(?<![\w-])(" + "|".join(sorted(NAMED, key=len, reverse=True)) + r")(?![\w-])", re.I)
+RGB_RE = re.compile(r"rgba?\(\s*([0-9.]+%?)\s*[, ]\s*([0-9.]+%?)\s*[, ]\s*([0-9.]+%?)\s*(?:[,/]\s*([0-9.]+%?)\s*)?\)", re.IGNORECASE)
+NAMED_RE = re.compile(r"(?<![\w-])(" + "|".join(sorted(NAMED, key=len, reverse=True)) + r")(?![\w-])", re.IGNORECASE)
 DECL_RE = re.compile(r"([a-zA-Z-]+)\s*:\s*([^;{}]+)")
-URL_RE = re.compile(r"url\([^)]*\)", re.I)
+URL_RE = re.compile(r"url\([^)]*\)", re.IGNORECASE)
 
 
 TEXT_MIN_L = 0.62  # text (incl. links) must stay readable on the dark ground
@@ -67,8 +67,8 @@ def flip_lightness(r: float, g: float, b: float, text: bool | None = None) -> tu
     Extremes are pulled in slightly so pure white becomes dark grey, not black.
     `text=True` guarantees a readable (light) result, `text=False` a dark one;
     mid-lightness colours such as pure blue would otherwise survive unchanged."""
-    h, l, s = colorsys.rgb_to_hls(r, g, b)
-    new_l = 0.92 - 0.84 * l
+    h, lightness, s = colorsys.rgb_to_hls(r, g, b)
+    new_l = 0.92 - 0.84 * lightness
     new_l = min(0.92, max(0.08, new_l))
     if text is True:
         new_l = max(new_l, TEXT_MIN_L)
@@ -78,7 +78,7 @@ def flip_lightness(r: float, g: float, b: float, text: bool | None = None) -> tu
 
 
 def _hex(r: float, g: float, b: float) -> str:
-    return "#{:02x}{:02x}{:02x}".format(round(r * 255), round(g * 255), round(b * 255))
+    return f"#{round(r * 255):02x}{round(g * 255):02x}{round(b * 255):02x}"
 
 
 TEXT_PROPS = {"color", "text-decoration-color", "caret-color", "-webkit-text-fill-color", "fill", "stroke"}
@@ -160,7 +160,7 @@ def flip_attr(value: str, attr: str = "bgcolor") -> str:
         return value
     if not v.startswith("#") and not v.lower().startswith(("rgb", "hsl")) and v.lower() not in NAMED:
         v = "#" + v if re.fullmatch(r"[0-9a-fA-F]{6}", v) else v
-    return flip_color_value(v, True if attr in TEXT_ATTRS else False)
+    return flip_color_value(v, attr in TEXT_ATTRS)
 
 
 def declares_dark_support(html: str) -> bool:

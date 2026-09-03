@@ -8,17 +8,17 @@ import gi
 import pytest
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import GLib  # noqa: E402
+from gi.repository import GLib
 
-from den_mail.config import Config  # noqa: E402
-from den_mail.jmap.client import JMAPClient  # noqa: E402
-from den_mail.jmap.types import KW_SEEN, ROLE_ARCHIVE, ROLE_INBOX, ROLE_TRASH  # noqa: E402
-from den_mail.models.thread import ThreadListModel  # noqa: E402
-from den_mail.store import actions  # noqa: E402
-from den_mail.store.db import Database  # noqa: E402
-from den_mail.store.sync import SyncEngine, mailbox_query_spec, search_query_spec  # noqa: E402
+from den_mail.config import Config
+from den_mail.jmap.client import JMAPClient
+from den_mail.jmap.types import KW_SEEN, ROLE_ARCHIVE, ROLE_INBOX, ROLE_TRASH
+from den_mail.models.thread import ThreadListModel
+from den_mail.store import actions
+from den_mail.store.db import Database
+from den_mail.store.sync import SyncEngine, mailbox_query_spec, search_query_spec
 
-from .fake_server import FakeJMAPServer  # noqa: E402
+from .fake_server import FakeJMAPServer
 
 
 def pump(condition, timeout: float = 10.0) -> None:

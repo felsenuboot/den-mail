@@ -5,7 +5,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from den_mail.models.mailbox import MailboxTree  # noqa: E402
+from den_mail.models.mailbox import MailboxTree
 
 
 def _mb(i, name, parent=None, role=None, hidden=0):

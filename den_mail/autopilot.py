@@ -122,7 +122,7 @@ def _run(app, steps: list[str]) -> bool:
             return False
         else:
             log.warning("autopilot: unknown step %r", step)
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("autopilot step %r failed", step)
     GLib.timeout_add(delay, _run, app, steps)
     return False

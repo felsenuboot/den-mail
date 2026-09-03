@@ -7,25 +7,26 @@ feature can be switched off in Preferences.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
 import re
-import socket
 import threading
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from time import time
+from typing import ClassVar
 
 import cairo
 import gi
 
 gi.require_version("GdkPixbuf", "2.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject  # noqa: E402
+from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject
 
-from .config import cache_dir  # noqa: E402
+from .config import cache_dir
 
 log = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ def registrable_domain(domain: str) -> str:
 
 
 class AvatarService(GObject.Object):
-    __gsignals__ = {"avatar-ready": (GObject.SignalFlags.RUN_FIRST, None, (str,))}
+    __gsignals__: ClassVar[dict] = {"avatar-ready": (GObject.SignalFlags.RUN_FIRST, None, (str,))}
 
     def __init__(self, config):
         super().__init__()
@@ -272,12 +273,13 @@ class AvatarService(GObject.Object):
     def _download(url: str) -> bytes | None:
         req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "image/*,*/*;q=0.5"})
         try:
-            with urllib.request.urlopen(req, timeout=8) as resp:
+            # candidates are built from https:// URLs only (BIMI record or the sender domain)
+            with urllib.request.urlopen(req, timeout=8) as resp:  # nosec B310
                 ctype = (resp.headers.get("Content-Type") or "").lower()
                 if "text/html" in ctype:
                     return None
                 return resp.read(MAX_BYTES + 1)[:MAX_BYTES]
-        except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError, ValueError):
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError, ValueError):
             return None
 
     @staticmethod
@@ -288,10 +290,8 @@ class AvatarService(GObject.Object):
             loader.write(data)
             loader.close()
         except GLib.Error:
-            try:
+            with contextlib.suppress(GLib.Error):
                 loader.close()
-            except GLib.Error:
-                pass
             return None
         pixbuf = loader.get_pixbuf()
         if pixbuf is None or pixbuf.get_width() < MIN_SIZE or pixbuf.get_height() < MIN_SIZE:

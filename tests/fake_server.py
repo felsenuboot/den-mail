@@ -7,7 +7,6 @@ Then:            DEN_MAIL_SESSION_URL=<url> DEN_MAIL_TOKEN=fake-token den-mail
 
 from __future__ import annotations
 
-import base64
 import json
 import random
 import re
@@ -15,7 +14,7 @@ import threading
 import time
 import uuid
 import zlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -28,7 +27,7 @@ CAP_MASKED = "https://www.fastmail.com/dev/maskedemail"
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _iso(dt: datetime) -> str:
@@ -135,8 +134,8 @@ class FakeData:
     def add_email(self, *, frm, to, subject, text=None, html=None, mailboxes, keywords=None, when=None,
                   thread=None, cc=None, attachments=None, inline_png=False, in_reply_to=None, headers=None) -> dict:
         eid = self.new_id("M")
-        when = when or datetime.now(timezone.utc)
-        parts, values, text_body, html_body, atts = [], {}, [], [], []
+        when = when or datetime.now(UTC)
+        values, text_body, html_body, atts = {}, [], [], []
         if text is not None:
             values["1"] = {"value": text, "isEncodingProblem": False, "isTruncated": False}
             text_body.append({"partId": "1", "type": "text/plain", "size": len(text), "name": None, "cid": None,
@@ -163,7 +162,7 @@ class FakeData:
             "messageId": [msg_id], "inReplyTo": [in_reply_to] if in_reply_to else None,
             "references": [in_reply_to] if in_reply_to else None,
             "from": [frm], "sender": None, "to": to, "cc": cc, "bcc": None, "replyTo": None, "subject": subject,
-            "preview": re.sub(r"\s+", " ", text or re.sub(r"<[^>]+>", " ", re.sub(r"<(style|script)[^>]*>.*?</\1>", " ", html or "", flags=re.S | re.I))).strip()[:200],
+            "preview": re.sub(r"\s+", " ", text or re.sub(r"<[^>]+>", " ", re.sub(r"<(style|script)[^>]*>.*?</\1>", " ", html or "", flags=re.DOTALL | re.IGNORECASE))).strip()[:200],
             "hasAttachment": any(a["disposition"] == "attachment" for a in atts),
             "textBody": text_body, "htmlBody": html_body, "attachments": atts, "bodyValues": values,
             "bodyStructure": {"partId": None, "type": "multipart/mixed", "subParts": text_body + html_body + atts},
@@ -196,7 +195,7 @@ class FakeData:
             "id3": {"id": "id3", "name": "Felix", "email": "*@example.org", "replyTo": None, "bcc": None,
                     "textSignature": "", "htmlSignature": "", "mayDelete": False},
         }
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for i, (state, dom, desc) in enumerate([
             ("enabled", "https://shop.example", "Online shop"),
             ("disabled", "https://forum.example", "Old forum account"),
@@ -886,7 +885,7 @@ class Dispatcher:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server: "FakeJMAPServer"
+    server: FakeJMAPServer
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):  # quiet
@@ -1026,7 +1025,7 @@ class FakeJMAPServer(ThreadingHTTPServer):
             "state": "s1",
         }
 
-    def start(self) -> "FakeJMAPServer":
+    def start(self) -> FakeJMAPServer:
         self._thread = threading.Thread(target=self.serve_forever, name="fake-jmap", daemon=True)
         self._thread.start()
         return self

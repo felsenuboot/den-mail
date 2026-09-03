@@ -7,9 +7,9 @@ Everything that knows about mailboxes and emails lives in the store package.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
-import socket
 import time
 import urllib.error
 import urllib.parse
@@ -165,12 +165,10 @@ class JMAPClient:
                     retry_after = 30.0
                 raise RateLimited(retry_after) from e
             body = ""
-            try:
+            with contextlib.suppress(Exception):  # the body is only decoration for the error
                 body = e.read(2000).decode("utf-8", "replace")
-            except Exception:  # noqa: BLE001
-                pass
             raise TransportError(f"HTTP {e.code} for {url}: {body[:300]}") from e
-        except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError) as e:
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as e:
             raise TransportError(f"{e.__class__.__name__}: {e}") from e
 
     # --------------------------------------------------------------- session
@@ -238,8 +236,7 @@ class JMAPClient:
         url = url.replace("{accountId}", urllib.parse.quote(session.account_id, safe=""))
         url = url.replace("{blobId}", urllib.parse.quote(blob_id, safe=""))
         url = url.replace("{name}", urllib.parse.quote(name or "blob", safe=""))
-        url = url.replace("{type}", urllib.parse.quote(content_type or "application/octet-stream", safe=""))
-        return url
+        return url.replace("{type}", urllib.parse.quote(content_type or "application/octet-stream", safe=""))
 
     def download(self, blob_id: str, name: str = "blob", content_type: str | None = None) -> bytes:
         with self._http(self.download_url(blob_id, name, content_type), timeout=max(self.timeout, 300)) as resp:

@@ -8,7 +8,7 @@ import os
 import gi
 
 gi.require_version("Secret", "1")
-from gi.repository import Secret  # noqa: E402
+from gi.repository import Secret
 
 log = logging.getLogger(__name__)
 

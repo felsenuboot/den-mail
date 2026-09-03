@@ -8,7 +8,8 @@ from gi.repository import Adw, Gtk
 
 from .widgets import open_uri
 
-TOKEN_URL = "https://app.fastmail.com/settings/security/tokens"
+# a URL, not a secret (Bandit B105)
+TOKEN_URL = "https://app.fastmail.com/settings/security/tokens"  # nosec B105
 
 
 class LoginPage(Adw.Bin):

@@ -94,7 +94,8 @@ class Database:
             c = self.conn()
             for table in ("mailboxes", "emails", "email_mailboxes", "threads", "identities", "masked_emails",
                           "query_cache", "addresses"):
-                c.execute(f"DELETE FROM {table}")
+                # table names come from the literal tuple above (Bandit B608)
+                c.execute(f"DELETE FROM {table}")  # nosec B608
             c.execute("DELETE FROM meta WHERE key LIKE 'state:%'")
 
     # ------------------------------------------------------------------ meta
@@ -236,7 +237,8 @@ class Database:
         c = self.conn()
         for i in range(0, len(ids), 500):
             chunk = ids[i:i + 500]
-            q = f"SELECT json FROM emails WHERE id IN ({','.join('?' * len(chunk))})"
+            # only "?" placeholders are interpolated (Bandit B608)
+            q = f"SELECT json FROM emails WHERE id IN ({','.join('?' * len(chunk))})"  # nosec B608
             for row in c.execute(q, chunk):
                 e = json.loads(row["json"])
                 out[e["id"]] = e

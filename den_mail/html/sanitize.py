@@ -21,9 +21,9 @@ DROP_TAG_KEEP_CONTENT = {"form", "html", "body", "head", "meta", "link", "base",
                          "svg", "math", "video", "audio", "source", "track", "picture", "canvas", "frame", "frameset"}
 VOID = {"br", "hr", "img", "area", "col", "wbr"}
 URL_ATTRS = {"src", "background", "poster", "srcset", "longdesc"}
-REMOTE_RE = re.compile(r"^\s*(https?:)?//", re.I)
-CSS_URL_RE = re.compile(r"url\(\s*(['\"]?)\s*(https?:)?//[^)]*\)", re.I)
-CSS_IMPORT_RE = re.compile(r"@import[^;]*;", re.I)
+REMOTE_RE = re.compile(r"^\s*(https?:)?//", re.IGNORECASE)
+CSS_URL_RE = re.compile(r"url\(\s*(['\"]?)\s*(https?:)?//[^)]*\)", re.IGNORECASE)
+CSS_IMPORT_RE = re.compile(r"@import[^;]*;", re.IGNORECASE)
 BLOCKED_PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
 
 BASE_CSS = """
@@ -71,7 +71,7 @@ class _Sanitizer(HTMLParser):
     def _fix_url(self, attr: str, value: str) -> str | None:
         v = value.strip()
         low = v.lower()
-        if low.startswith("javascript:") or low.startswith("vbscript:"):
+        if low.startswith(("javascript:", "vbscript:")):
             return None
         if low.startswith("cid:"):
             cid = v[4:].strip("<>")
@@ -105,10 +105,9 @@ class _Sanitizer(HTMLParser):
             if value is None:
                 parts.append(f" {escape(n)}")
                 continue
-            if n == "srcset":
-                if not self.allow_remote and REMOTE_RE.search(value):
-                    self.has_remote = True
-                    continue
+            if n == "srcset" and not self.allow_remote and REMOTE_RE.search(value):
+                self.has_remote = True
+                continue
             if n in URL_ATTRS:
                 fixed = self._fix_url(n, value)
                 if fixed is None:

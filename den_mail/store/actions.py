@@ -51,7 +51,7 @@ class UndoRecord:
     description: str
     originals: dict[str, tuple[dict, dict]]  # email_id -> (keywords, mailboxIds)
 
-    def to_action(self) -> "RestoreAction":
+    def to_action(self) -> RestoreAction:
         return RestoreAction(self)
 
 

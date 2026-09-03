@@ -7,7 +7,7 @@ from collections.abc import Callable
 import gi
 
 gi.require_version("Graphene", "1.0")
-from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk
 
 from ..avatars import sender_key
 from ..models.thread import SenderGroup, ThreadListModel, ThreadObject

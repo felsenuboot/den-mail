@@ -11,7 +11,7 @@ from .. import secrets
 from ..avatars import AvatarService
 from ..config import Config, database_path
 from ..jmap.client import AuthError, JMAPClient, JMAPError
-from ..jmap.types import KW_FLAGGED, KW_SEEN, ROLE_ARCHIVE, ROLE_DRAFTS, ROLE_INBOX, ROLE_JUNK, ROLE_TRASH
+from ..jmap.types import KW_FLAGGED, ROLE_ARCHIVE, ROLE_DRAFTS, ROLE_INBOX, ROLE_JUNK, ROLE_TRASH
 from ..models.mailbox import MailboxObject, MailboxTree
 from ..models.thread import ThreadListModel, ThreadObject
 from ..store import actions
@@ -19,7 +19,6 @@ from ..store.actions import UndoRecord
 from ..store.db import Database
 from ..store.sync import SyncEngine, build_sort, mailbox_query_spec, parse_sort, search_query_spec
 from .compose import ComposeWindow
-from .thread_window import ThreadWindow
 from .conversation import ConversationView
 from .identities import IdentitiesDialog
 from .labels import MailboxPickerPopover
@@ -28,6 +27,7 @@ from .masked import MaskedEmailDialog
 from .message_body import set_cid_resolver
 from .preferences import PreferencesDialog
 from .sidebar import Sidebar
+from .thread_window import ThreadWindow
 from .threadlist import ThreadList
 from .widgets import confirm, text_prompt
 
@@ -346,11 +346,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_mailboxes_changed(self, _engine) -> None:
         self.tree.update(self.db.get_mailboxes())
         self.sidebar.apply_expansion()
-        if self.current_mailbox is None:
-            inbox = self.tree.by_role(ROLE_INBOX)
-            if inbox is not None:
-                self.sidebar.select_mailbox(inbox.id)
-        elif self.tree.get(self.current_mailbox.id) is None:
+        if self.current_mailbox is None or self.tree.get(self.current_mailbox.id) is None:
             inbox = self.tree.by_role(ROLE_INBOX)
             if inbox is not None:
                 self.sidebar.select_mailbox(inbox.id)
@@ -621,7 +617,7 @@ class MainWindow(Adw.ApplicationWindow):
         mb = self.current_mailbox
         if kind == "archive":
             act = actions.archive(ids, roles, mb.id if mb and not mb.is_system else None)
-            removes_from_list = mb is not None and mb.role in (ROLE_INBOX,) or (mb is not None and not mb.is_system)
+            removes_from_list = mb is not None and (mb.role == ROLE_INBOX or not mb.is_system)
         elif kind == "trash":
             if mb and mb.role == ROLE_TRASH:
                 confirm(self, "Delete permanently?", "These messages will be removed for good.", "Delete", True,
@@ -748,7 +744,7 @@ class MainWindow(Adw.ApplicationWindow):
         labels.sort()
         out = [(name, color) for _key, name, color in labels]
         if len(out) > 3:
-            out = out[:2] + [(f"+{len(out) - 2}", -1)]
+            out = [*out[:2], (f"+{len(out) - 2}", -1)]
         return out
 
     # ------------------------------------------------------------ labels

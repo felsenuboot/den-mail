@@ -202,10 +202,10 @@ class AddressCompletion:
         if keyval == Gdk.KEY_Up:
             self._set_active(self._active - 1)
             return True
-        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab):
-            if 0 <= self._active < len(self._rows):
-                self._on_pick(self.listbox, self._rows[self._active])
-                return True
+        if (keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab)
+                and 0 <= self._active < len(self._rows)):
+            self._on_pick(self.listbox, self._rows[self._active])
+            return True
         return False
 
     def _hide_if_unfocused(self) -> bool:

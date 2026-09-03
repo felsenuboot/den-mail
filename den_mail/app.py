@@ -9,11 +9,11 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
-from . import APP_ID, APP_NAME, VERSION  # noqa: E402
-from .config import Config  # noqa: E402
-from .ui.window import MainWindow  # noqa: E402
+from . import APP_ID, APP_NAME, VERSION
+from .config import Config
+from .ui.window import MainWindow
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 

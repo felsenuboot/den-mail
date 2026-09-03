@@ -32,8 +32,7 @@ def text_to_html(text: str) -> str:
         while stripped.startswith(">"):
             level += 1
             stripped = stripped[1:]
-            if stripped.startswith(" "):
-                stripped = stripped[1:]
+            stripped = stripped.removeprefix(" ")
         set_depth(level)
         esc = escape(stripped, quote=False)
         esc = URL_RE.sub(lambda m: f'<a href="{m.group(1)}">{m.group(1)}</a>', esc)
@@ -64,7 +63,7 @@ def _fmt_date(iso: str | None) -> str:
     if not iso:
         return ""
     try:
-        dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone()
+        dt = datetime.fromisoformat(iso).astimezone()
         return dt.strftime("%a, %d %b %Y at %H:%M")
     except ValueError:
         return iso
@@ -95,12 +94,12 @@ def forward_body(email: dict, signature: str = "") -> str:
 
 def reply_subject(subject: str | None) -> str:
     s = (subject or "").strip()
-    return s if re.match(r"^(re|aw|sv|antw)\s*:", s, re.I) else f"Re: {s}"
+    return s if re.match(r"^(re|aw|sv|antw)\s*:", s, re.IGNORECASE) else f"Re: {s}"
 
 
 def forward_subject(subject: str | None) -> str:
     s = (subject or "").strip()
-    return s if re.match(r"^(fwd?|wg)\s*:", s, re.I) else f"Fwd: {s}"
+    return s if re.match(r"^(fwd?|wg)\s*:", s, re.IGNORECASE) else f"Fwd: {s}"
 
 
 def parse_address_list(text: str) -> list[dict]:

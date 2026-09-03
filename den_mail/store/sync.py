@@ -16,7 +16,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from gi.repository import GLib, GObject
 
@@ -104,7 +104,8 @@ def parse_sort(sort: list[dict] | None) -> tuple[str, bool, bool]:
 
 
 def query_key(spec: dict) -> str:
-    return hashlib.sha1(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:16]
+    # a cache key, not a security hash
+    return hashlib.sha1(json.dumps(spec, sort_keys=True).encode(), usedforsecurity=False).hexdigest()[:16]
 
 
 def mailbox_query_spec(mailbox_id: str, sort: list[dict] | None = None) -> dict:
@@ -163,17 +164,17 @@ def search_query_spec(text: str, mailbox_id: str | None, trash_junk: list[str],
 
 
 class _Job:
-    __slots__ = ("prio", "seq", "fn", "name")
+    __slots__ = ("fn", "name", "prio", "seq")
 
     def __init__(self, prio: int, seq: int, fn: Callable[[], None], name: str):
         self.prio, self.seq, self.fn, self.name = prio, seq, fn, name
 
-    def __lt__(self, other: "_Job") -> bool:
+    def __lt__(self, other: _Job) -> bool:
         return (self.prio, self.seq) < (other.prio, other.seq)
 
 
 class SyncEngine(GObject.Object):
-    __gsignals__ = {
+    __gsignals__: ClassVar[dict] = {
         "mailboxes-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "emails-changed": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
         "emails-destroyed": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
@@ -257,7 +258,7 @@ class SyncEngine(GObject.Object):
             except TransportError as e:
                 log.warning("network error during %s: %s", job.name, e)
                 self._set_online(False, str(e))
-            except Exception as e:  # noqa: BLE001 - keep the worker alive whatever happens
+            except Exception as e:
                 log.exception("job %s failed", job.name)
                 self._emit("sync-status", "error", f"{job.name}: {e}")
             finally:
@@ -620,7 +621,7 @@ class SyncEngine(GObject.Object):
             return
         self.enqueue(PRIO_LOAD, lambda: self._job_fetch_body(email_id), "body")
 
-    _body_properties: list[str] = list(EMAIL_BODY_PROPERTIES)
+    _body_properties: ClassVar[list[str]] = list(EMAIL_BODY_PROPERTIES)
 
     def _job_fetch_body(self, email_id: str) -> None:
         acc = self.client.session.account_id

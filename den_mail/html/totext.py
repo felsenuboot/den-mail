@@ -85,9 +85,8 @@ class _Converter(HTMLParser):
             self.pre += 1
             if self.markup:
                 self._open("tt")
-        elif tag == "td" or tag == "th":
-            if not self.at_line_start:
-                self._emit("\t")
+        elif tag in ("td", "th") and not self.at_line_start:
+            self._emit("\t")
         if self.markup:
             if tag in ("b", "strong"):
                 self._open("b")

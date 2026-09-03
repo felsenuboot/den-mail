@@ -1,0 +1,75 @@
+# Lint, security lint and the test suite. Nothing here needs a display: the
+# tests run against the in-process fake JMAP server (tests/fake_server.py)
+# and never open a window, so a plain Ubuntu runner with the distro's GTK
+# bindings is enough.
+#
+# Robustness choices, same as in felsenuboot/snip-pin:
+# - actions are pinned to commit SHAs (the tag is in the comment) and the
+#   tool versions are pinned, so an upstream release cannot turn master red
+# - one job per tool, so one failing never hides the others
+# - the token is read-only and a newer push cancels an older run
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ruff:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
+        with:
+          version: "0.16.5"
+          args: check .
+
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: pipx run --spec shellcheck-py==0.11.0.1 shellcheck install.sh bin/den-mail
+
+  bandit:
+    name: Bandit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # security lint for Python; the allow-list lives in pyproject.toml and
+      # in per-line "nosec" comments that each state why
+      - run: pipx run --spec bandit[toml]==1.9.2 bandit -q -c pyproject.toml -r den_mail data
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # the same GObject introspection stack the app needs at runtime, from
+      # the distro so the bindings match the system GTK; WebKit is optional
+      # and the text renderer is used when it is missing
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3-gi python3-pytest gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 gir1.2-gdkpixbuf-2.0
+      - run: python3 -m pytest -q
+        env:
+          DEN_MAIL_NO_WEBKIT: "1"

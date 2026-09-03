@@ -5,7 +5,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from den_mail.launch import new_window_argv  # noqa: E402
+from den_mail.launch import new_window_argv
 
 URL = "https://example.com/x?a=1&b=2"
 

@@ -21,6 +21,20 @@ den_mail = ["style.css", "icons/**/*.svg"]
 
 [tool.ruff]
 line-length = 110
+# Explicit rule set so local runs and CI agree regardless of Ruff's defaults.
+[tool.ruff.lint]
+# Security rules (S*) are left to Bandit, which runs as its own CI job.
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "PIE", "RET", "FURB", "EXE", "YTT", "BLE"]
+ignore = [
+  "E501",  # line length is enforced by `line-length` above
+  "E402",  # gi.require_version() must run before the gi.repository imports
+]
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["BLE001"]
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = ["B110"]   # deliberate try/except/pass in cleanup paths, each carries a noqa reason
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -7,6 +7,7 @@ the sync engine, which compares them with what it has and fetches deltas.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import threading
@@ -29,7 +30,7 @@ def _abort_response(resp) -> None:
     try:
         sock = resp.fp.raw._sock  # http.client wraps the socket in a BufferedReader
         sock.shutdown(socket.SHUT_RDWR)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 - best-effort unblock of a reader thread
         pass
 
 
@@ -92,10 +93,8 @@ class PushListener(threading.Thread):
                 with self._lock:
                     self._resp = None
                 _abort_response(resp)
-                try:
+                with contextlib.suppress(Exception):  # closing a dead stream
                     resp.close()
-                except Exception:  # noqa: BLE001
-                    pass
                 self._set_status(False)
             if self._stop.wait(backoff):
                 return
@@ -121,7 +120,7 @@ class PushListener(threading.Thread):
             if line.startswith(":"):
                 continue  # comment / keep-alive
             field, _, value = line.partition(":")
-            value = value[1:] if value.startswith(" ") else value
+            value = value.removeprefix(" ")
             if field == "event":
                 event_type = value
             elif field == "data":

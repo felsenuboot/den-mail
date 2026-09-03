@@ -49,7 +49,7 @@ class UnsubscribePlan:
             return self.mailto or ""
         return urllib.parse.urlsplit(self.url or "").hostname or (self.url or "")
 
-    def fallback(self) -> "UnsubscribePlan | None":
+    def fallback(self) -> UnsubscribePlan | None:
         """The plan without its primary method, for retrying after a failure."""
         if self.kind == "one-click":
             rest = UnsubscribePlan(mailto=self.mailto, subject=self.subject, body=self.body, page=self.page)
@@ -88,7 +88,7 @@ def parse_list_unsubscribe(header: str | None, post_header: str | None) -> Unsub
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D401 - urllib hook
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
 
 

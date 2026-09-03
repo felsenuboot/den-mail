@@ -4,23 +4,24 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import ClassVar
 
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
+from .. import launch
 from ..avatars import sender_key
 from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full
 from ..models.thread import ThreadObject, format_date_long
-from .message_body import MessageBody
-from .. import launch
 from ..unsubscribe import parse_list_unsubscribe
-from .widgets import avatar, chip, confirm, human_size, open_uri, toast
+from .message_body import MessageBody
+from .widgets import avatar, confirm, human_size, open_uri, toast
 
 
 class AttachmentChip(Gtk.Button):
     """One attachment: click opens it, right-click offers Open / Save as / Show in folder."""
 
-    def __init__(self, att: dict, on_open: Callable[[dict, "AttachmentChip"], None],
-                 on_save: Callable[[dict], None], on_folder: Callable[[dict, "AttachmentChip"], None]):
+    def __init__(self, att: dict, on_open: Callable[[dict, AttachmentChip], None],
+                 on_save: Callable[[dict], None], on_folder: Callable[[dict, AttachmentChip], None]):
         super().__init__()
         self.att = att
         self.add_css_class("attachment-chip")
@@ -87,7 +88,7 @@ def default_app_name(att: dict) -> str | None:
 
 
 class MessageCard(Gtk.Box):
-    def __init__(self, view: "ConversationView", email: dict, expanded: bool):
+    def __init__(self, view: ConversationView, email: dict, expanded: bool):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.view = view
         self.email = email
@@ -266,7 +267,7 @@ class MessageCard(Gtk.Box):
 
     def show_body(self, full: dict) -> None:
         self.body_loaded = True
-        self.email = {**self.email, **{k: v for k, v in full.items() if k not in ("bodyValues",)}}
+        self.email = {**self.email, **{k: v for k, v in full.items() if k != "bodyValues"}}
         self._fill_details()
         self.loading.set_visible(False)
         values = full.get("bodyValues") or {}
@@ -510,7 +511,7 @@ class ConversationView(Adw.NavigationPage):
 
     # ----------------------------------------------------------- unsubscribe
 
-    UNSUBSCRIBE_HEADERS = ["header:List-Unsubscribe:asRaw", "header:List-Unsubscribe-Post:asRaw"]
+    UNSUBSCRIBE_HEADERS: ClassVar[list[str]] = ["header:List-Unsubscribe:asRaw", "header:List-Unsubscribe-Post:asRaw"]
 
     def unsubscribe(self, email_id: str) -> None:
         card = self.cards.get(email_id)

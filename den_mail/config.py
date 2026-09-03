@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 import logging
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -130,7 +130,7 @@ class Config:
         addr = email.strip().lower()
         if addr:
             data = self.unsubscribed()
-            data[addr] = datetime.now(timezone.utc).date().isoformat()
+            data[addr] = datetime.now(UTC).date().isoformat()
             self.set("unsubscribed", data)
 
     # ------------------------------------------------- favourite identities
