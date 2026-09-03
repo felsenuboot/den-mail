@@ -136,6 +136,7 @@ automatically.
 
 Some symbolic icons come from the
 [Adwaita icon theme](https://gitlab.gnome.org/GNOME/adwaita-icon-theme)
-(CC BY-SA 3.0 / LGPL). The app icon uses Fastmail's brand blue.
+(CC BY-SA 3.0 / LGPL). The app icon uses Fastmail's brand blue; the 伝
+calligraphy in the tour is set in [Yuji Syuku](https://github.com/Kinutafontfactory/Yuji) (OFL).
 
 MIT licence, see [LICENSE](LICENSE).

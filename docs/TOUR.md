@@ -1,8 +1,6 @@
 # Den Mail tour
 
-Every picture here comes from the fake account the test suite uses
-(`tests/fake_server.py`), captured headlessly at 1280×720 in the dark theme.
-Real accounts look the same, with your own mail in it.
+<p align="center"><img src="../data/den-calligraphy.png" width="150" alt="伝"></p>
 
 ## Reading mail
 
@@ -73,8 +71,3 @@ Masked Email addresses can be created, described, disabled and deleted.
 ## Preferences
 
 ![Preferences](../data/screenshots/preferences.png)
-
-## Making these
-
-`docs/DEVELOPMENT.md` explains the autopilot and the headless cage session
-used to produce these captures without touching the desktop.
