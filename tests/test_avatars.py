@@ -77,18 +77,19 @@ def test_luminance_tells_dark_from_light_logos(service):
     assert service._luminance(ghost) == 1.0
 
 
-def test_plate_puts_logo_on_white_background(service):
-    logo = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 20, 10)
-    logo.fill(0x102040FF)  # dark blue, the kind that vanishes on a dark theme
+def test_plate_makes_a_round_badge_with_a_white_ring(service):
+    logo = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 20, 20)
+    logo.fill(0x102040FF)  # a solid dark square, like Vercel's
     plate = service._plate(logo, size=128)
     assert (plate.get_width(), plate.get_height()) == (128, 128)
-    px = plate.get_pixels()
-    stride = plate.get_rowstride()
+    px, stride = plate.get_pixels(), plate.get_rowstride()
 
     def at(x, y):
         o = y * stride + x * 4
-        return tuple(px[o:o + 4])
+        return tuple(px[o:o + 3])
 
-    assert at(2, 2) == (255, 255, 255, 255)        # corner stays white
-    assert at(64, 64)[:3] == (0x10, 0x20, 0x40)    # logo centred on the plate
-    assert at(64, 20) == (255, 255, 255, 255)      # aspect ratio kept: no logo above centre band
+    assert at(64, 64) == (0x10, 0x20, 0x40)   # logo fills the inner disc
+    assert at(64, 3) == (255, 255, 255)       # white ring at the rim
+    assert at(108, 20) == (255, 255, 255)     # ring also on the diagonal: corner clipped away
+    assert at(103, 25) == (0x10, 0x20, 0x40)  # just inside the ring the logo is there
+    assert plate.get_pixels()[3] == 0         # outside the disc is transparent

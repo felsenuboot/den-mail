@@ -8,6 +8,7 @@ feature can be switched off in Preferences.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import socket
 import threading
@@ -17,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from time import time
 
+import cairo
 import gi
 
 gi.require_version("GdkPixbuf", "2.0")
@@ -245,18 +247,26 @@ class AvatarService(GObject.Object):
         return total / weight if weight else 1.0
 
     @staticmethod
-    def _plate(pixbuf, size: int = TARGET_SIZE, inset: float = 0.14):
-        """Centre the logo on a white plate.  Used only for dark logos on the
-        dark theme (Lufthansa, banks...), which otherwise disappear."""
-        plate = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, size, size)
-        plate.fill(0xFFFFFFFF)
-        inner = size * (1 - 2 * inset)
-        scale = min(inner / pixbuf.get_width(), inner / pixbuf.get_height())
-        w, h = max(1, round(pixbuf.get_width() * scale)), max(1, round(pixbuf.get_height() * scale))
-        ox, oy = (size - w) / 2, (size - h) / 2
-        pixbuf.composite(plate, round(ox), round(oy), w, h, ox, oy, scale, scale,
-                         GdkPixbuf.InterpType.BILINEAR, 255)
-        return plate
+    def _plate(pixbuf, size: int = TARGET_SIZE, ring: float = 0.08):
+        """Round badge for dark logos on the dark theme: the logo clipped to a
+        disc, with a thin white ring around it so it stands out (a square
+        logo such as Vercel's must not end up as a square inside a circle)."""
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
+        cr = cairo.Context(surface)
+        r = size / 2
+        cr.arc(r, r, r, 0, 2 * math.pi)
+        cr.set_source_rgb(1, 1, 1)
+        cr.fill()
+        inner = r * (1 - ring)
+        cr.arc(r, r, inner, 0, 2 * math.pi)
+        cr.clip()
+        scale = 2 * inner / max(pixbuf.get_width(), pixbuf.get_height())
+        cr.translate(r - pixbuf.get_width() * scale / 2, r - pixbuf.get_height() * scale / 2)
+        cr.scale(scale, scale)
+        Gdk.cairo_set_source_pixbuf(cr, pixbuf, 0, 0)
+        cr.paint()
+        surface.flush()
+        return Gdk.pixbuf_get_from_surface(surface, 0, 0, size, size)
 
     @staticmethod
     def _download(url: str) -> bytes | None:
