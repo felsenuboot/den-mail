@@ -275,7 +275,7 @@ class MessageCard(Gtk.Box):
         html, text, truncated = content.html, content.text, content.truncated
         policy = self.view.config.get("load_remote_images", "ask")
         trusted = self.view.config.is_trusted(self.sender_email)
-        self.has_html = content.has_html
+        self.has_html = content.html is not None   # the sun toggle applies to any HTML view, pictures included
         self.light_toggle.set_visible(self.has_html and self.view.style_manager.get_dark())
         self.unsubscribe_plan = parse_list_unsubscribe(full.get("header:List-Unsubscribe:asRaw"),
                                                        full.get("header:List-Unsubscribe-Post:asRaw"))
