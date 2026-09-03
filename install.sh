@@ -14,6 +14,13 @@ sed "s|^Exec=.*|Exec=$BIN/fastmail-gtk %u|" "$HERE/data/$APP.desktop" > "$APPS/$
 chmod 644 "$APPS/$APP.desktop"
 install -m644 "$HERE/data/$APP.svg" "$ICONS/scalable/apps/$APP.svg"
 install -m644 "$HERE/data/$APP-symbolic.svg" "$ICONS/symbolic/apps/$APP-symbolic.svg"
+# Fixed-size PNGs for docks/taskbars that do not rasterise SVG themselves.
+if command -v magick >/dev/null 2>&1; then
+  for s in 16 22 24 32 48 64 96 128 256 512; do
+    mkdir -p "$ICONS/${s}x${s}/apps"
+    magick -background none "$HERE/data/$APP.svg" -resize "${s}x${s}" "$ICONS/${s}x${s}/apps/$APP.png"
+  done
+fi
 cp "$HERE/data/$APP.svg" "$HERE/fastmail_gtk/icons/hicolor/scalable/apps/$APP.svg"
 gtk4-update-icon-cache -q -t -f "$ICONS" 2>/dev/null || gtk-update-icon-cache -q -t -f "$ICONS" 2>/dev/null || true
 update-desktop-database -q "$APPS" 2>/dev/null || true
