@@ -124,7 +124,7 @@ def disc(c):
 
 
 def envelope(c):
-    """Landscape envelope: flat chevrons on the flap, four-point seal at the tip."""
+    """Landscape envelope: lit flap, darker body, darkest lower fold, corner dot."""
     x0, y0, x1, y1 = 8, 24, 120, 116   # top surface bounds
     rr = 8
     tip_y = 78                          # where the flap meets
@@ -138,13 +138,9 @@ def envelope(c):
         poly([(x0, y1), (64, tip_y - 4), (x1, y1)], c["profile"], extra='clip-path="url(#env)"'),
         # flap, lighter than the body (lit from above)
         poly([(x0, y0), (x1, y0), (64, tip_y)], c["rim"], extra='clip-path="url(#env)"'),
-        # seal: flat four-point star at the flap tip
-        poly(star4(64, tip_y, 16, 5), c["star"]),
+        # small flat dot in the top-right corner
+        f'<circle cx="104" cy="40" r="8" fill="{c["star"]}"/>',
     ]
-    # three flat chevrons, centred on the flap
-    h, t, gap, n = 20, 10, 6, 3
-    width = (n - 1) * (t + gap) + t + h / 2
-    body += chevrons(c, 64 - width / 2, 30, h, t, gap, n=n, r=0.5, profile=0)
     return svg(body)
 
 
