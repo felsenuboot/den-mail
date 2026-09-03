@@ -152,6 +152,8 @@ class FastmailApp(Adw.Application):
 
 
 def main_entry() -> int:
+    import setproctitle
+    setproctitle.setproctitle("den-mail")
     logging.basicConfig(level=logging.DEBUG if os.environ.get("DEN_MAIL_DEBUG") else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     app = FastmailApp()
