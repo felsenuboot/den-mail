@@ -19,25 +19,16 @@ PROFILE = 4          # height of the front profile below the top surface
 # combination id from combinations.json plus a darker Wada blue for the
 # front profile and a light Wada colour for the chevrons.
 COMBOS = {
-    # top = envelope body, profile = front profile, rim = lit flap,
-    # light = chevrons, star = seal.  Each combination id is real; the
-    # flap shade is the nearest lighter Wada tone of the same hue.
-    "green": dict(  # combination 284: Apricot Yellow + Sea Green + Dusky Green
-        top="#004f46", profile="#112f2c", rim="#00b49b",
-        light="#ffffff", star="#ffdd00",
-        label="#284 Dusky Green / Sea Green / Apricot Yellow"),
-    "purple": dict(  # combination 253: Lemon Yellow + Cotinga Purple
-        top="#501345", profile="#1e0e3f", rim="#642d5e",
-        light="#ffffff", star="#f8ed43",
-        label="#253 Cotinga Purple / Violet Red / Lemon Yellow"),
-    "wine": dict(  # combination 124: Pale Burnt Lake + Yellow Ocher, Ivory Buff via 266
-        top="#802626", profile="#4b3317", rim="#a84222",
-        light="#ebd3a2", star="#e2b540",
-        label="#124 Pale Burnt Lake / Brick Red / Yellow Ocher / Ivory Buff"),
-    "olive": dict(  # combination 310: Sulpher Yellow + Olive + Deep Slate Olive, Yellow Ocher via 96
-        top="#837e31", profile="#253122", rim="#a6a159",
-        light="#f5ecc2", star="#e2b540",
-        label="#310 Olive / Olive Yellow / Sulpher Yellow / Yellow Ocher"),
+    # flap = lit top triangle, side = left/right triangles, fold = bottom
+    # triangle, profile = 4px front edge, dot = corner dot.
+    "fastmail": dict(  # Fastmail brand ramp (--brand-color-blue-* on fastmail.com)
+        flap="#3385c6", side="#0067b9", fold="#245d8a", profile="#194262",
+        dot="#ffc107",
+        label="Fastmail blue-80 / blue-100 / blue-130 / blue-150, yellow #ffc107"),
+    "wada-blue": dict(  # Wada: Blue, Helvetia Blue, Vandar Poel's Blue, Dark Tyrian Blue, Yellow (combination 22/154)
+        flap="#006eb8", side="#005b8d", fold="#064f6e", profile="#12354e",
+        dot="#fff200",
+        label="Wada Blue / Helvetia Blue / Vandar Poel's Blue / Dark Tyrian Blue / Yellow"),
 }
 
 
@@ -123,28 +114,32 @@ def disc(c):
     return svg(body)
 
 
-def envelope(c):
-    """Landscape envelope: lit flap, darker body, darkest lower fold, corner dot."""
+def envelope(c, dot=(106, 70)):
+    """Minimal envelope: four flat triangles meeting exactly at the centre,
+    a 4px front profile and a small dot clear of the seams."""
     x0, y0, x1, y1 = 8, 24, 120, 116   # top surface bounds
     rr = 8
-    tip_y = 78                          # where the flap meets
+    cx, cy = 64, (y0 + y1) // 2         # the one point all four triangles share
     body = [
+        f'<clipPath id="env"><rect x="{x0}" y="{y0}" width="{x1 - x0}" height="{y1 - y0}" rx="{rr}"/></clipPath>',
         # front profile
         f'<rect x="{x0}" y="{y0 + PROFILE}" width="{x1 - x0}" height="{y1 - y0}" rx="{rr}" fill="{c["profile"]}"/>',
-        # envelope body
-        f'<rect x="{x0}" y="{y0}" width="{x1 - x0}" height="{y1 - y0}" rx="{rr}" fill="{c["top"]}"/>',
-        # lower V fold, a shade darker than the body
-        f'<clipPath id="env"><rect x="{x0}" y="{y0}" width="{x1 - x0}" height="{y1 - y0}" rx="{rr}"/></clipPath>',
-        poly([(x0, y1), (64, tip_y - 4), (x1, y1)], c["profile"], extra='clip-path="url(#env)"'),
-        # flap, lighter than the body (lit from above)
-        poly([(x0, y0), (x1, y0), (64, tip_y)], c["rim"], extra='clip-path="url(#env)"'),
-        # small flat dot in the top-right corner
-        f'<circle cx="104" cy="40" r="8" fill="{c["star"]}"/>',
+        '<g clip-path="url(#env)">',
+        poly([(x0, y0), (cx, cy), (x0, y1)], c["side"]),          # left
+        poly([(x1, y0), (cx, cy), (x1, y1)], c["side"]),          # right
+        poly([(x0, y1), (cx, cy), (x1, y1)], c["fold"]),          # bottom fold
+        poly([(x0, y0), (x1, y0), (cx, cy)], c["flap"]),          # lit flap
+        '</g>',
+        # dot placed fully inside one triangle, clear of every seam
+        f'<circle cx="{dot[0]}" cy="{dot[1]}" r="8" fill="{c["dot"]}"/>',
     ]
     return svg(body)
 
 
-CONCEPTS = {"envelope": envelope}
+CONCEPTS = {
+    "envelope": envelope,                                   # dot on the right panel
+    "envelope-flapdot": lambda c: envelope(c, dot=(88, 36)),  # dot high in the flap
+}
 
 
 def main():
