@@ -99,11 +99,18 @@ def new_window_argv(commandline: str, target: str) -> list[str] | None:
     return argv
 
 
+def commandline_for(argv: list[str]) -> str:
+    """Exec-style command line for GAppInfo. GLib expands desktop-entry field codes over the whole
+    string before shell-parsing it, so a literal '%' (percent-encoded URLs!) must be doubled."""
+    return " ".join(shlex.quote(a).replace("%", "%%") for a in argv)
+
+
 def _spawn(argv: list[str], parent: Gtk.Widget | None) -> bool:
     try:
         display = parent.get_display() if parent is not None else Gdk.Display.get_default()
-        info = Gio.AppInfo.create_from_commandline(" ".join(shlex.quote(a) for a in argv), None,
-                                                   Gio.AppInfoCreateFlags.NONE)
+        # SUPPORTS_STARTUP_NOTIFICATION makes GLib hand the browser an xdg-activation token
+        info = Gio.AppInfo.create_from_commandline(commandline_for(argv), None,
+                                                   Gio.AppInfoCreateFlags.SUPPORTS_STARTUP_NOTIFICATION)
         return info.launch([], display.get_app_launch_context() if display else None)
     except GLib.Error as e:
         log.warning("could not run %s: %s", argv[0], e.message)

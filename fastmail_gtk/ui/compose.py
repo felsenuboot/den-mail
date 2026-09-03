@@ -61,6 +61,7 @@ class ComposeWindow(Adw.Window):
         shortlist = [i for i in self.all_identities if i.id in favs or i.email.lower() == primary]
         self.identities = shortlist if favs and shortlist else list(self.all_identities)
         self.showing_all = len(self.identities) == len(self.all_identities)
+        self._current_identity: IdentityObject | None = None  # last real (non-sentinel) From choice
         self.mode = mode
         self.source = source
         self.on_closed = on_closed
@@ -245,6 +246,11 @@ class ComposeWindow(Adw.Window):
         ctrl.add_shortcut(Gtk.Shortcut.new(Gtk.ShortcutTrigger.parse_string("<Control>w"),
                                            Gtk.CallbackAction.new(lambda *_: (self.close(), True)[1])))
         self.add_controller(ctrl)
+        # Ctrl+Q would otherwise reach the application's quit accelerator and skip the draft prompt
+        first = Gtk.ShortcutController(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        first.add_shortcut(Gtk.Shortcut.new(Gtk.ShortcutTrigger.parse_string("<Control>q"),
+                                            Gtk.CallbackAction.new(lambda *_: (self.close(), True)[1])))
+        self.add_controller(first)
 
     def _identity_strings(self) -> list[str]:
         strings = [i.display for i in self.identities]
@@ -259,11 +265,13 @@ class ComposeWindow(Adw.Window):
             self.from_row.set_enable_search(len(self.identities) > 6)
             if select is not None and select in self.identities:
                 self.from_row.set_selected(self.identities.index(select))
+                self._current_identity = select
+                self._sync_wildcard_row(select)
         finally:
             self._rebuilding = False
 
     def _show_all_identities(self) -> None:
-        current = self._identity()
+        current = self._current_identity or self.identities[0]  # the row itself points at the sentinel now
         self.identities = list(self.all_identities)
         self.showing_all = True
         self._rebuild_identity_list(current)
@@ -283,8 +291,12 @@ class ComposeWindow(Adw.Window):
     def _identity(self) -> IdentityObject:
         idx = self.from_row.get_selected()
         if idx >= len(self.identities):  # the "Show all…" sentinel or an invalid position
-            idx = 0
+            return self._current_identity or self.identities[0]
         return self.identities[idx]
+
+    def _sync_wildcard_row(self, ident: IdentityObject) -> None:
+        self.wildcard_row.set_visible(ident.is_wildcard)
+        self.wildcard_row.set_title(f"Address at @{ident.domain} (local part)" if ident.is_wildcard else "")
 
     def _on_identity_changed(self) -> None:
         if getattr(self, "_rebuilding", False):
@@ -294,13 +306,14 @@ class ComposeWindow(Adw.Window):
             GLib.idle_add(self._reopen_from_list)
             return
         ident = self._identity()
-        self.wildcard_row.set_visible(ident.is_wildcard)
-        self.wildcard_row.set_title(f"Address at @{ident.domain} (local part)" if ident.is_wildcard else "")
+        self._current_identity = ident
+        self._sync_wildcard_row(ident)
         self._mark_dirty()
 
     def _select_identity_for(self, addresses: list[str]) -> None:
         for addr in addresses:
-            for ident in self.all_identities:
+            # exact identities before wildcards, whatever the (favourites-first) display order
+            for ident in sorted(self.all_identities, key=lambda i: i.is_wildcard):
                 if ident.matches(addr):
                     self._ensure_identity_visible(ident)
                     self.from_row.set_selected(self.identities.index(ident))

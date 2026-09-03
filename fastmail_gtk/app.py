@@ -53,6 +53,15 @@ class FastmailApp(Adw.Application):
         self.config = Config()
         self.window: MainWindow | None = None
 
+    def _quit(self, *_) -> None:
+        win = getattr(self, "window", None)
+        if win is not None:
+            for w in list(win.compose_windows):
+                w.close()  # may show the "Save draft?" dialog and stay open
+            if win.compose_windows:
+                return
+        self.quit()
+
     def do_startup(self) -> None:
         Adw.Application.do_startup(self)
         css = Gtk.CssProvider()
@@ -67,7 +76,7 @@ class FastmailApp(Adw.Application):
         apply_color_scheme(self.config)
         self._log_theme_state("at startup")
         GLib.timeout_add_seconds(5, lambda: (self._log_theme_state("5s later"), False)[1])
-        for name, cb in (("about", self._about), ("quit", lambda *_: self.quit()), ("activate", lambda *_: self.activate())):
+        for name, cb in (("about", self._about), ("quit", self._quit), ("activate", lambda *_: self.activate())):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", cb)
             self.add_action(action)

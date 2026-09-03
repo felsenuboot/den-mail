@@ -31,3 +31,26 @@ def test_new_window_argv_unknown_apps_and_garbage():
     assert new_window_argv("pinta %F", URL) is None
     assert new_window_argv("", URL) is None
     assert new_window_argv("firefox 'unterminated %u", URL) is None
+
+
+def test_commandline_survives_glib_field_code_expansion(tmp_path):
+    """GLib treats the command line as an Exec entry; '%20' must reach the browser intact."""
+    import time
+
+    from gi.repository import Gio
+
+    from fastmail_gtk.launch import commandline_for
+
+    out = tmp_path / "argv.txt"
+    stub = tmp_path / "stub.sh"
+    stub.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "' + str(out) + '"\n')
+    stub.chmod(0o755)
+    argv = [str(stub), "--class=%", "https://example.com/a%20b?x=%3D1&y=100%25", "file:///tmp/My%20File.pdf",
+            "plain arg"]
+    info = Gio.AppInfo.create_from_commandline(commandline_for(argv), None, Gio.AppInfoCreateFlags.NONE)
+    assert info.launch([], None)
+    deadline = time.monotonic() + 5
+    while not out.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    time.sleep(0.1)
+    assert out.read_text().splitlines() == argv[1:]

@@ -841,7 +841,13 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_close_request(self, *_) -> bool:
         w, h = self.get_default_size()
         self.config.set("window", {"width": w, "height": h, "maximized": self.is_maximized()})
-        return False
+        # Secondary windows keep the application alive, so closing the main window closes them too;
+        # a compose window with an unsaved draft asks first and keeps the session open meanwhile.
+        for win in list(self.thread_windows):
+            win.close()
+        for win in list(self.compose_windows):
+            win.close()
+        return bool(self.compose_windows)
 
     def shutdown(self) -> None:
         for w in list(self.compose_windows):

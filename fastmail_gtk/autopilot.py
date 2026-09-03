@@ -64,6 +64,8 @@ def _run(app, steps: list[str]) -> bool:
         elif cmd == "dump-compose" and win and win.compose_windows:
             cw = win.compose_windows[-1]
             log.info("compose From entries: %s (selected: %s)", cw._identity_strings(), cw._identity().display)
+        elif cmd == "from-select" and win and win.compose_windows:
+            win.compose_windows[-1].from_row.set_selected(int(arg))
         elif cmd == "from-popup" and win and win.compose_windows:
             from gi.repository import Gtk
 
