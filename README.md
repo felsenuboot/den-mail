@@ -7,7 +7,7 @@ A native Fastmail client for the GNOME desktop: GTK4, libadwaita and JMAP.
 Three panes, labels that nest, push updates, offline reading, and every alias
 you own in the From field.
 
-![Walkthrough: inbox, group by sender, fold, select, search, compose](data/screenshots/tour.gif)
+![The inbox with a newsletter open, dark theme](data/screenshots/inbox-dark.png)
 
 > [!NOTE]
 > **This app was written mostly by an AI.** Nearly all of the code was produced
@@ -35,12 +35,12 @@ you own in the From field.
   (`from:` `to:` `subject:` `is:unread` `has:attachment` `before:` `after:`),
   notifications with the sender's logo, `mailto:` handling, keyboard shortcuts.
 
-| Group by sender | Selection mode |
+| Light and dark theme | Group by sender |
 | --- | --- |
-| ![The list grouped by sender](data/screenshots/group-sender.png) | ![Selection mode with the bulk action bar](data/screenshots/selection.png) |
+| ![Half light, half dark](data/screenshots/theme-split.png) | ![The list grouped by sender](data/screenshots/group-sender.png) |
 
-More screenshots, with the light theme, search, compose and the dialogs, are in
-the [tour](docs/TOUR.md).
+More screenshots, with search, compose, the dialogs and a clip of the
+group-and-archive workflow, are in the [tour](docs/TOUR.md).
 
 ## Install
 

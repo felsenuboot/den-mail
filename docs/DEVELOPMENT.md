@@ -72,5 +72,6 @@ a comment above saying why; Ruff's rule set is pinned in `pyproject.toml`.
 
 The images in `data/screenshots/` and `docs/TOUR.md` are made from the fake
 account in a headless cage session (see above): one autopilot script per
-picture, `grim` inside the session, and `magick` to assemble the GIF from a
-handful of frames. Regenerate them after UI changes so the tour stays honest.
+picture, `grim` inside the session, and `magick` to assemble a GIF from a handful
+of frames (only for a workflow that a still cannot show) or to split a light
+and a dark capture diagonally. Regenerate them after UI changes so the tour stays honest.

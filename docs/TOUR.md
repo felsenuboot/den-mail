@@ -4,8 +4,6 @@ Every picture here comes from the fake account the test suite uses
 (`tests/fake_server.py`), captured headlessly at 1280×720 in the dark theme.
 Real accounts look the same, with your own mail in it.
 
-![Walkthrough: inbox, group by sender, fold, select, search, compose](../data/screenshots/tour.gif)
-
 ## Reading mail
 
 Three panes: folders and labels, the conversation list, the open conversation.
@@ -15,10 +13,11 @@ images stay blocked until you allow them for that message or trust the sender.
 
 ![The inbox with a newsletter open](../data/screenshots/inbox-dark.png)
 
-The light theme, same view. Dark mode adapts light-coloured HTML mail; the sun
-button in the message header switches a message back to its original colours.
+The same view in both themes. Dark mode adapts light-coloured HTML mail; the
+sun button in the message header switches a message back to its original
+colours.
 
-![The inbox in the light theme](../data/screenshots/inbox-light.png)
+![The inbox, split diagonally between the light and the dark theme](../data/screenshots/theme-split.png)
 
 ## Grouping and bulk actions
 
@@ -28,6 +27,11 @@ to select the whole group, use the arrow to fold it, and the button in the
 header folds or unfolds everything.
 
 ![The list grouped by sender, two groups folded](../data/screenshots/group-sender.png)
+
+Cleaning out one sender in four steps: group, fold everything, tick the
+sender, archive. Undo is in the toast.
+
+![Group by sender, fold all, select a sender, archive](../data/screenshots/group-archive.gif)
 
 The **Select** button turns on checkboxes and a bar with the bulk actions.
 Outside that mode, Ctrl-click and Shift-click extend the selection as usual.
