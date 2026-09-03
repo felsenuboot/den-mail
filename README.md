@@ -25,6 +25,18 @@ A native Fastmail client for GNOME, built on JMAP, GTK4 and libadwaita.
 - Sender logos from BIMI records or favicons, coloured labels, light/dark theme
 - Desktop notifications for new mail, `mailto:` handler, keyboard shortcuts
 
+> **Status and disclaimer.** This is a personal project, written largely with
+> Claude Code and reviewed by a human, but not audited. It works on my machine
+> (Arch, Hyprland, a regular Fastmail account). Use at your own risk; there is
+> no warranty. Issues and pull requests are welcome. The project is not
+> affiliated with or endorsed by Fastmail.
+
+**Security notes.** The API token is stored in the system keyring (libsecret)
+and only ever sent to the JMAP session URL you sign in with. HTML mail is
+sanitised before it reaches WebKitGTK (scripts, frames and forms removed,
+JavaScript disabled), remote content stays blocked until you allow it or trust
+the sender, and attachments are downloaded on request only.
+
 ## Requirements
 
 Arch Linux package names; other distributions have equivalents.
