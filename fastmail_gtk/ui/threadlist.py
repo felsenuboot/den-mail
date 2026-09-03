@@ -189,6 +189,15 @@ class ThreadList(Adw.NavigationPage):
         self.listview.add_css_class("thread-list")
         self.listview.add_css_class("navigation-sidebar")
         self.listview.connect("activate", self._on_activate)
+        right = Gtk.GestureClick(button=3)
+        right.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        right.connect("pressed", self._on_right_click)
+        self.listview.add_controller(right)
+        press = Gtk.GestureLongPress()
+        press.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        press.connect("pressed", lambda g, x, y: self._on_right_click(g, 1, x, y))
+        self.listview.add_controller(press)
+        self.on_context_menu: Callable[[ThreadObject, int, int], None] = lambda t, x, y: None
         self.scrolled = Gtk.ScrolledWindow(child=self.listview, vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
         self.scrolled.get_vadjustment().connect("value-changed", self._on_scroll)
 
@@ -310,6 +319,28 @@ class ThreadList(Adw.NavigationPage):
         item = self.model.get_item(position)
         if item is not None:
             self.on_activate(item)
+
+    def _on_right_click(self, gesture, _n, x, y) -> None:
+        widget = self.listview.pick(x, y, Gtk.PickFlags.DEFAULT)
+        while widget is not None and not isinstance(widget, ThreadRow):
+            widget = widget.get_parent()
+        if widget is None or widget.obj is None:
+            return
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+        obj = widget.obj
+        if obj not in self.selected_threads():
+            self.select_thread(obj.thread_id)
+        self.on_context_menu(obj, int(x), int(y))
+
+    def popup_menu(self, menu: Gio.MenuModel, x: int, y: int) -> None:
+        popover = Gtk.PopoverMenu.new_from_model(menu)
+        popover.set_parent(self.listview)
+        popover.set_has_arrow(False)
+        popover.connect("closed", lambda p: GLib.idle_add(lambda: (p.unparent(), False)[1]))
+        rect = Gdk.Rectangle()
+        rect.x, rect.y, rect.width, rect.height = x, y, 1, 1
+        popover.set_pointing_to(rect)
+        popover.popup()
 
     def select_thread(self, thread_id: str) -> None:
         idx = self.model.index_of(thread_id)

@@ -78,6 +78,12 @@ def _run(app, steps: list[str]) -> bool:
                 if mb.name.lower() == arg.lower():
                     win.sidebar.show_context_menu(mb, 100, 200)
                     break
+        elif cmd == "thread-menu" and win:
+            idx = int(arg)
+            win.threadlist.select_position(idx)
+            item = win.model.get_item(idx)
+            if item is not None:
+                win._on_thread_context_menu(item, 200, 80 + idx * 73)
         elif cmd == "maximize" and win:
             win.maximize()
         elif cmd == "quit":

@@ -205,6 +205,7 @@ class MainWindow(Adw.ApplicationWindow):
                                      self._on_load_more, lambda: self.engine.sync_now(), avatars=self.avatars)
         self.threadlist.set_sort(self.sort["key"], self.sort["flagged_first"], self.sort["unread_first"])
         self.threadlist.on_sort_changed = self._on_sort_changed
+        self.threadlist.on_context_menu = self._on_thread_context_menu
         self.conversation = ConversationView(self.db, self.engine, self.tree, self.config, self._compose_from,
                                              self._email_action, avatars=self.avatars)
         self.conversation.on_remove_label = lambda mid: self._label_toggle(self.tree.get(mid), False)
@@ -266,6 +267,77 @@ class MainWindow(Adw.ApplicationWindow):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", lambda _a, _p, fn=fn: self.engine and fn())
             self.add_action(action)
+        # Parameterised actions used by the conversation context menu.
+        for name, fn in (
+            ("find-sender", self._find_sender),
+            ("toggle-label", lambda mid: self._label_toggle(self.tree.get(mid), not self._selection_has_label(mid))),
+            ("move-to", lambda mid: self.tree.get(mid) and self._move_to(self.tree.get(mid))),
+        ):
+            action = Gio.SimpleAction.new(name, GLib.VariantType.new("s"))
+            action.connect("activate", lambda _a, p, fn=fn: self.engine and fn(p.get_string()))
+            self.add_action(action)
+
+    # ------------------------------------------------------ context menu
+
+    def _selection_has_label(self, mailbox_id: str) -> bool:
+        return all(mailbox_id in t.summary.mailbox_ids for t in self.selected) if self.selected else False
+
+    def _find_sender(self, email: str) -> None:
+        self.threadlist.scope.set_selected(1)
+        self.threadlist.focus_search()
+        self.threadlist.search_entry.set_text(f"from:{email}")
+
+    def _on_thread_context_menu(self, thread: ThreadObject, x: int, y: int) -> None:
+        threads = self.selected or [thread]
+        many = len(threads) > 1
+        sender = thread.summary.from_addresses[0] if thread.summary.from_addresses else {}
+        menu = Gio.Menu()
+        top = Gio.Menu()
+        if not many:
+            top.append("Open in new window", "win.open")
+            if sender.get("email"):
+                item = Gio.MenuItem.new(f"Find all conversations with {sender.get('name') or sender['email']}", None)
+                item.set_action_and_target_value("win.find-sender", GLib.Variant("s", sender["email"]))
+                top.append_item(item)
+        menu.append_section(None, top)
+        if not many:
+            reply = Gio.Menu()
+            reply.append("Reply", "win.reply")
+            reply.append("Reply to all", "win.reply-all")
+            reply.append("Forward", "win.forward")
+            menu.append_section(None, reply)
+        organise = Gio.Menu()
+        organise.append("Archive", "win.archive")
+        organise.append("Delete", "win.trash")
+        labels = Gio.Menu()
+        for mb in self.tree.labels():
+            has = self._selection_has_label(mb.id)
+            item = Gio.MenuItem.new(("● " if has else "   ") + "    " * mb.depth + mb.name, None)
+            item.set_action_and_target_value("win.toggle-label", GLib.Variant("s", mb.id))
+            labels.append_item(item)
+        organise.append_submenu("Labels", labels)
+        move = Gio.Menu()
+        for mb in self.tree.all():
+            item = Gio.MenuItem.new("    " * mb.depth + mb.name, None)
+            item.set_action_and_target_value("win.move-to", GLib.Variant("s", mb.id))
+            move.append_item(item)
+        organise.append_submenu("Move to", move)
+        menu.append_section(None, organise)
+        state = Gio.Menu()
+        unread = any(t.unread for t in threads)
+        state.append("Mark as read" if unread else "Mark as unread", "win.mark-read" if unread else "win.mark-unread")
+        flagged = all(t.flagged for t in threads)
+        state.append("Unflag" if flagged else "Flag", "win.flag")
+        menu.append_section(None, state)
+        danger = Gio.Menu()
+        if self.current_mailbox and self.current_mailbox.role == ROLE_JUNK:
+            danger.append("Not spam", "win.not-junk")
+        else:
+            danger.append("Report spam", "win.junk")
+        if self.current_mailbox and self.current_mailbox.role == ROLE_TRASH:
+            danger.append("Delete permanently", "win.delete-permanently")
+        menu.append_section(None, danger)
+        self.threadlist.popup_menu(menu, x, y)
 
     # ------------------------------------------------------- engine events
 
