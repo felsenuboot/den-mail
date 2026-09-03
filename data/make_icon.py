@@ -1,88 +1,59 @@
-"""App icon per the GNOME HIG app-icon guidelines, generated so the geometry stays exact.
+#!/usr/bin/env python3
+"""Generate the app icon: a minimal envelope in Fastmail's brand blues.
 
-* 128x128 canvas, 2 px grid, 8 px margins: top surface from y=8, bottom of the front profile on
-  the y=120 baseline like the standard GNOME icons.
-* "Not flat": each shape is a top surface (GNOME Blue 3) with a 4 px front profile below it
-  (Blue 5), light straight from above, flat colours, no shadows outside the silhouette.
-* Metaphor: a right-pointing triangle followed by two chevrons that are exact parallel offsets of
-  the triangle's slanted edges (uniform gaps), i.e. a message being passed on.
-* The symbolic variant uses the same metaphor on the 16 px grid with 2 px strokes.
+Follows the GNOME HIG app-icon conventions: 128 px canvas on a 2 px grid,
+content between y=24 and the baseline y=120, flat colours without
+gradients, a top surface plus a 4 px darker front profile, no shadow
+outside the silhouette.
+
+The envelope is four flat triangles that meet at exactly one centre point
+(lit flap, two side panels, darker bottom fold) with a small yellow dot on
+the right panel, placed clear of every seam.  The colours are the
+--brand-color-* ramp from fastmail.com's stylesheet.
+
+The symbolic variant is a 2 px-stroke envelope outline on the 16 px grid.
 """
-import math
 
-# GNOME palette (developer.gnome.org/hig/reference/palette.html)
-TOP = "#3584e4"      # Blue 3: top surface
-FRONT = "#1a5fb4"    # Blue 5: front profile
-CLOUD = "#1c71d8"    # Blue 4: faint cloud on the triangle
+FLAP = "#3385c6"     # blue-80
+SIDE = "#0067b9"     # blue-100, the brand blue
+FOLD = "#245d8a"     # blue-130
+PROFILE_C = "#194262"  # blue-150
+DOT = "#ffc107"      # brand yellow
 
-PROFILE = 4          # front profile height (2 detail units)
-R = 4.0              # corner radius
-Y0, Y1 = 8.0, 116.0  # top surface; profile reaches the 120 baseline
-X0 = 11.0            # flat left edge of the triangle
-W = 44.0             # triangle width (apex at X0 + W)
-GAP, T = 8.0, 16.0   # gap between shapes and chevron thickness (perpendicular distances)
-
-cy = (Y0 + Y1) / 2
-half = (Y1 - Y0) / 2
-L = math.hypot(W, half)
-ux, uy = W / L, half / L        # direction of the upper edge (top-left -> apex)
-k = L / half                    # horizontal shift per unit of perpendicular offset (1/sin)
+PROFILE = 4          # front profile height
+X0, Y0, X1, Y1 = 8, 24, 120, 116   # top surface bounds
+RX = 8               # corner radius
+CX, CY = 64, (Y0 + Y1) // 2       # the point all four triangles share
+DOT_AT, DOT_R = (106, 70), 8
 
 
-def x_on_offset_line(d, y):
-    """x of the slanted edge offset outward by d, at height y (the lower edge mirrors the upper)."""
-    if y > cy:
-        y = Y0 + Y1 - y
-    px, py = X0 + d * uy, Y0 - d * ux  # upper edge (X0, Y0) + s*u, outward normal (uy, -ux)
-    return px + (y - py) / uy * ux
+def poly(pts, fill):
+    return f'<polygon points="{" ".join(f"{x},{y}" for x, y in pts)}" fill="{fill}"/>'
 
 
-def chevron(d_in, d_out, r):
-    """Band between offsets d_in and d_out, inset by r (the rounding stroke adds it back)."""
-    di, do = d_in + r, d_out - r
-    yt, yb = Y0 + r, Y1 - r
-    return [(x_on_offset_line(di, yt), yt), (X0 + W + k * di, cy), (x_on_offset_line(di, yb), yb),
-            (x_on_offset_line(do, yb), yb), (X0 + W + k * do, cy), (x_on_offset_line(do, yt), yt)]
-
-
-def triangle(r):
-    xl = X0 + r
-    px, py = X0 - r * uy, Y0 + r * ux  # upper edge offset inward by r
-    yt = py + (xl - px) / ux * uy
-    return [(xl, yt), (X0 + W - k * r, cy), (xl, Y1 - (yt - Y0))]
-
-
-def poly(pts, fill, dy=0.0):
-    p = " ".join(f"{x:.2f},{y + dy:.2f}" for x, y in pts)
-    return f'<polygon points="{p}" fill="{fill}" stroke="{fill}" stroke-width="{2 * R}" stroke-linejoin="round"/>'
-
-
-shapes = [triangle(R), chevron(GAP, GAP + T, R), chevron(2 * GAP + T, 2 * (GAP + T), R)]
-right = X0 + W + k * 2 * (GAP + T)
-shift = round((128 - (right + X0)) / 2)
-shapes = [[(x + shift, y) for x, y in s] for s in shapes]
-tri = shapes[0]
-tx = X0 + shift
-cloud = (f'<g fill="{CLOUD}"><circle cx="{tx + 15:.1f}" cy="{cy + 8:.1f}" r="9"/>'
-         f'<circle cx="{tx + 25:.1f}" cy="{cy + 2:.1f}" r="11"/><circle cx="{tx + 35:.1f}" cy="{cy + 9:.1f}" r="7"/>'
-         f'<rect x="{tx + 8:.1f}" y="{cy + 6:.1f}" width="34" height="11" rx="5"/></g>')
-tri_pts = " ".join(f"{x:.2f},{y:.2f}" for x, y in tri)
-
-svg = ['<?xml version="1.0" encoding="UTF-8"?>',
-       '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">',
-       f'  <defs><clipPath id="tri"><polygon points="{tri_pts}" stroke="{TOP}" stroke-width="{2 * R}" '
-       'stroke-linejoin="round"/></clipPath></defs>']
-svg += ["  " + poly(s, FRONT, PROFILE) for s in shapes]          # front profiles first
-svg += ["  " + poly(s, TOP) for s in shapes]                     # top surfaces
-svg += [f'  <g clip-path="url(#tri)">{cloud}</g>', "</svg>", ""]
+rect = f'x="{X0}" y="{Y0}" width="{X1 - X0}" height="{Y1 - Y0}" rx="{RX}"'
+svg = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">',
+    f'  <defs><clipPath id="env"><rect {rect}/></clipPath></defs>',
+    f'  <rect x="{X0}" y="{Y0 + PROFILE}" width="{X1 - X0}" height="{Y1 - Y0}" rx="{RX}" fill="{PROFILE_C}"/>',
+    '  <g clip-path="url(#env)">',
+    "    " + poly([(X0, Y0), (CX, CY), (X0, Y1)], SIDE),
+    "    " + poly([(X1, Y0), (CX, CY), (X1, Y1)], SIDE),
+    "    " + poly([(X0, Y1), (CX, CY), (X1, Y1)], FOLD),
+    "    " + poly([(X0, Y0), (X1, Y0), (CX, CY)], FLAP),
+    "  </g>",
+    f'  <circle cx="{DOT_AT[0]}" cy="{DOT_AT[1]}" r="{DOT_R}" fill="{DOT}"/>',
+    "</svg>",
+    "",
+]
 open("data/io.github.felsenuboot.FastmailGtk.svg", "w").write("\n".join(svg))
 
 sym = '''<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
-  <path d="M1 3.5v9a1 1 0 0 0 1.6.8l5-4.5a1 1 0 0 0 0-1.6l-5-4.5A1 1 0 0 0 1 3.5z" fill="#2e3436"/>
-  <path d="M9 4l4 4-4 4" fill="none" stroke="#2e3436" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M12 4l3 4-3 4" fill="none" stroke="#2e3436" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+  <rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="#2e3436" stroke-width="2"/>
+  <path d="M3 4.5l5 4.5 5-4.5" fill="none" stroke="#2e3436" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
 '''
 open("data/io.github.felsenuboot.FastmailGtk-symbolic.svg", "w").write(sym)
-print("extent x %.0f..%.0f, top %.0f, baseline %.0f" % (X0 + shift, right + shift, Y0, Y1 + PROFILE))
+print("wrote app icon and symbolic")
