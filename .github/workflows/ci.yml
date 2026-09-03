@@ -69,7 +69,7 @@ jobs:
       - run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            python3-gi python3-pytest gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 gir1.2-gdkpixbuf-2.0
+            python3-gi python3-gi-cairo python3-pytest gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 gir1.2-gdkpixbuf-2.0
       - run: python3 -m pytest -q
         env:
           DEN_MAIL_NO_WEBKIT: "1"

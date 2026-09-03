@@ -45,7 +45,7 @@ WebKitGTK 6.0.
 # Arch
 sudo pacman -S --needed python-gobject gtk4 libadwaita libsecret webkitgtk-6.0
 # Fedora: python3-gobject gtk4 libadwaita libsecret webkitgtk6.0
-# Debian/Ubuntu: python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 gir1.2-webkit-6.0
+# Debian/Ubuntu: python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 gir1.2-webkit-6.0
 
 git clone https://github.com/felsenuboot/den-mail.git
 cd den-mail
