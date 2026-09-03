@@ -17,14 +17,18 @@ def human_size(n: int | None) -> str:
 
 
 def open_uri(uri: str, parent: Gtk.Window | None = None) -> None:
-    Gtk.UriLauncher(uri=uri).launch(parent, None, lambda launcher, res: _finish_launch(launcher, res))
+    Gtk.UriLauncher(uri=uri).launch(parent, None, lambda launcher, res: _finish_launch(launcher, res, parent, uri))
 
 
-def _finish_launch(launcher, res) -> None:
+def _finish_launch(launcher, res, parent, uri: str) -> None:
     try:
         launcher.launch_finish(res)
-    except GLib.Error:
-        pass
+    except GLib.Error as e:
+        import logging
+
+        logging.getLogger(__name__).warning("could not open %s: %s", uri, e.message)
+        if parent is not None:
+            toast(parent, f"Could not open link: {e.message}", 6)
 
 
 def copy_text(widget: Gtk.Widget, text: str) -> None:

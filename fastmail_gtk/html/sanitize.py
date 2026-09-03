@@ -125,8 +125,6 @@ class _Sanitizer(HTMLParser):
             elif n == "target":
                 continue
             parts.append(f' {escape(n)}="{escape(value, quote=True)}"')
-        if tag == "a":
-            parts.append(' target="_blank" rel="noopener noreferrer"')
         return "".join(parts)
 
     # --- parser callbacks

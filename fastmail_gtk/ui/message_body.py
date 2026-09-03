@@ -107,6 +107,7 @@ if HAVE_WEBKIT:
             self._pending = 0
             self.connect("load-changed", self._on_load_changed)
             self.connect("decide-policy", self._on_decide_policy)
+            self.connect("create", self._on_create)  # never open WebKit child windows
             self.connect("context-menu", lambda *_: True)
             self.connect("notify::estimated-load-progress", lambda *_: self._schedule_measure())
 
@@ -149,13 +150,25 @@ if HAVE_WEBKIT:
             if height > 0 and abs(height - self.get_size_request()[1]) > 2:
                 self.set_size_request(-1, min(height + 4, 20000))
 
+        def _on_create(self, _view, action):
+            uri = action.get_request().get_uri()
+            if uri and not uri.startswith((CID_SCHEME, "about:")):
+                open_uri(uri, self.get_root() if isinstance(self.get_root(), Gtk.Window) else None)
+            return None
+
         def _on_decide_policy(self, _view, decision, decision_type):
-            if decision_type == WebKit.PolicyDecisionType.NAVIGATION_ACTION:
+            # Links (including target=_blank ones, which arrive as NEW_WINDOW_ACTION) open in the
+            # system browser; only the initial load_html navigation is allowed inside the view.
+            if decision_type in (WebKit.PolicyDecisionType.NAVIGATION_ACTION,
+                                 WebKit.PolicyDecisionType.NEW_WINDOW_ACTION):
                 action = decision.get_navigation_action()
-                if action.get_navigation_type() == WebKit.NavigationType.LINK_CLICKED or action.is_user_gesture():
+                is_link = (action.get_navigation_type() == WebKit.NavigationType.LINK_CLICKED
+                           or action.is_user_gesture()
+                           or decision_type == WebKit.PolicyDecisionType.NEW_WINDOW_ACTION)
+                if is_link:
                     uri = action.get_request().get_uri()
                     decision.ignore()
-                    if uri and not uri.startswith(CID_SCHEME):
+                    if uri and not uri.startswith((CID_SCHEME, "about:")):
                         open_uri(uri, self.get_root() if isinstance(self.get_root(), Gtk.Window) else None)
                     return True
                 return False
