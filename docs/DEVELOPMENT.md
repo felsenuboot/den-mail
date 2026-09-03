@@ -52,3 +52,18 @@ See [ARCHITECTURE.md](../ARCHITECTURE.md) for the layering (JMAP transport,
 SQLite cache and sync worker, models, UI). Ideas and open questions are on the
 [issue tracker](https://github.com/felsenuboot/den-mail/issues); the inbox
 cleanup roadmap is #15.
+
+## Checks
+
+CI (`.github/workflows/ci.yml`) runs Ruff, ShellCheck, Bandit and the test
+suite; CodeQL runs separately. The same commands locally:
+
+```
+pipx run --spec ruff==0.16.5 ruff check .
+pipx run --spec shellcheck-py==0.11.0.1 shellcheck install.sh bin/den-mail
+pipx run --spec "bandit[toml]==1.9.2" bandit -q -c pyproject.toml -r den_mail data
+.venv/bin/python -m pytest -q
+```
+
+Bandit findings that are false positives get a `# nosec Bxxx` on the line and
+a comment above saying why; Ruff's rule set is pinned in `pyproject.toml`.

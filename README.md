@@ -1,5 +1,8 @@
 # <img src="data/io.github.felsenuboot.DenMail.svg" width="40" alt=""> Den Mail
 
+[![CI](https://github.com/felsenuboot/den-mail/actions/workflows/ci.yml/badge.svg)](https://github.com/felsenuboot/den-mail/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/felsenuboot/den-mail/actions/workflows/codeql.yml/badge.svg)](https://github.com/felsenuboot/den-mail/actions/workflows/codeql.yml)
+
 A native Fastmail client for the GNOME desktop: GTK4, libadwaita and JMAP.
 Three panes, labels that nest, push updates, offline reading, and every alias
 you own in the From field.
