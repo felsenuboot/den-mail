@@ -90,6 +90,44 @@ class AvatarService(GObject.Object):
         self._pool.submit(self._fetch, key)
         return None
 
+    def cached_path(self, email: str | None) -> Path | None:
+        """Path of the cached logo file for the sender's domain, if any."""
+        if not self.enabled:
+            return None
+        key = sender_key(email)
+        if key is None:
+            return None
+        path = self.dir / f"{key}.png"
+        return path if path.exists() else None
+
+    def when_ready(self, email: str | None, done, timeout_ms: int = 3000) -> None:
+        """Call done(path_or_None) once the sender's logo is cached, after
+        at most timeout_ms.  Used for notifications, which cannot be
+        updated after the fact."""
+        path = self.cached_path(email)
+        if path is not None or not self.enabled or sender_key(email) is None:
+            done(path)
+            return
+        key = sender_key(email)
+        state = {"fired": False}
+
+        def finish(*_):
+            if state["fired"]:
+                return
+            state["fired"] = True
+            self.disconnect(handler)
+            GLib.source_remove(timer)
+            done(self.cached_path(email))
+
+        def on_ready(_svc, ready_key):
+            if ready_key == key:
+                finish()
+
+        handler = self.connect("avatar-ready", on_ready)
+        timer = GLib.timeout_add(timeout_ms, finish)
+        if self.get(email) is not None:  # was already in memory
+            finish()
+
     # ------------------------------------------------------------ worker
 
     def _fetch(self, key: str) -> None:
@@ -112,8 +150,7 @@ class AvatarService(GObject.Object):
         self._mem[key] = texture
         with self._lock:
             self._pending.discard(key)
-        if texture is not None:
-            self.emit("avatar-ready", key)
+        self.emit("avatar-ready", key)
         return False
 
     def _load_cached(self, key: str):

@@ -400,13 +400,21 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_new_mail(self, _engine, emails: list[dict]) -> None:
         if not self.config.get("notify_new_mail", True) or self.is_active():
             return
-        app = self.get_application()
         for e in emails[:5]:
             sender = (e.get("from") or [{}])[0]
-            n = Gio.Notification.new(sender.get("name") or sender.get("email") or "New mail")
-            n.set_body(e.get("subject") or "(no subject)")
-            n.set_default_action("app.activate")
-            app.send_notification(f"mail-{e['id']}", n)
+            # Wait briefly for the sender's logo so the notification can carry it.
+            self.avatars.when_ready(sender.get("email"), lambda path, e=e, s=sender: self._notify(e, s, path))
+
+    def _notify(self, e: dict, sender: dict, icon_path) -> None:
+        app = self.get_application()
+        if app is None:
+            return
+        n = Gio.Notification.new(sender.get("name") or sender.get("email") or "New mail")
+        n.set_body(e.get("subject") or "(no subject)")
+        if icon_path is not None:
+            n.set_icon(Gio.FileIcon.new(Gio.File.new_for_path(str(icon_path))))
+        n.set_default_action("app.activate")
+        app.send_notification(f"mail-{e['id']}", n)
 
     def _resolve_cid(self, email_id: str, cid: str, done) -> None:
         body = self.db.get_email_body(email_id) if self.db else None
