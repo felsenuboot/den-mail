@@ -4,8 +4,8 @@
   font-weight: 700;
   padding: 1px 7px;
   border-radius: 999px;
-  background: alpha(@accent_bg_color, 0.18);
-  color: @accent_color;
+  background: @accent_bg_color;
+  color: @accent_fg_color;
 }
 .section-row {
   margin-top: 10px;
@@ -49,7 +49,8 @@
   font-weight: 600;
   padding: 0 6px;
   border-radius: 999px;
-  background: alpha(currentColor, 0.12);
+  background: alpha(currentColor, 0.15);
+  color: @window_fg_color;
 }
 .thread-row .label-chips {
   font-size: 0.78em;
