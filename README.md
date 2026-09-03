@@ -14,6 +14,9 @@ A native Fastmail client for GNOME, built on JMAP, GTK4 and libadwaita.
 - Compose, reply, reply-all, forward, drafts with autosave, attachments
 - Send from any identity, including wildcard `*@yourdomain` identities; star
   your favourites so the From list stays short
+- **Links and attachments** open in the system browser or default app. On Hyprland you can choose
+  (Preferences → Reading) to open pages in a new browser window on the current workspace or to jump to
+  the browser's workspace instead of the default "new tab somewhere"
 - Masked Email management (create, block, restore, delete)
 - Search with `from:`, `to:`, `subject:`, `is:unread`, `is:flagged`,
   `has:attachment`, `before:`/`after:` operators, scoped to a mailbox or all mail
@@ -77,6 +80,15 @@ looks light. Accent colours always come from your desktop.
 Label colours are not available through Fastmail's JMAP API (the web client uses
 an internal API), so the app assigns stable colours per label; right-click a
 label → Colour to choose your own.
+
+### Opening links on Hyprland
+
+Hyprland does not switch to a browser that merely gained a tab on another workspace. "Open links and
+attachments" in Preferences → Reading offers two remedies: *New browser window on this workspace*
+starts the default browser with its new-window switch (Firefox/Zen/Chromium families, Epiphany,
+Falkon, qutebrowser), and *Switch to the browser's workspace* focuses the browser's most recently used
+window through `hyprctl` after the launch (Lua dispatch syntax on Hyprland ≥ 0.56, classic syntax
+before). Other apps are unaffected; they open new windows on the current workspace anyway.
 
 ## Development
 

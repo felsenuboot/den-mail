@@ -60,8 +60,10 @@ class FastmailApp(Adw.Application):
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
                                                   Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         Gtk.IconTheme.get_for_display(Gdk.Display.get_default()).add_search_path(os.path.join(HERE, "icons"))
+        from . import launch
         from .ui.preferences import apply_color_scheme
 
+        launch.configure(self.config)
         apply_color_scheme(self.config)
         self._log_theme_state("at startup")
         GLib.timeout_add_seconds(5, lambda: (self._log_theme_state("5s later"), False)[1])

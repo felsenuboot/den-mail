@@ -24,6 +24,18 @@ AUTOSAVE_SECONDS = 30
 SHOW_ALL = "Show all identities…"
 
 
+def _find_descendant(widget: Gtk.Widget, cls: type) -> Gtk.Widget | None:
+    child = widget.get_first_child()
+    while child is not None:
+        if isinstance(child, cls):
+            return child
+        found = _find_descendant(child, cls)
+        if found is not None:
+            return found
+        child = child.get_next_sibling()
+    return None
+
+
 class ComposeWindow(Adw.Window):
     def __init__(self, parent: Gtk.Window, engine, db, identities: list[dict], mode: str = "new",
                  source: dict | None = None, mailto: dict | None = None,
@@ -247,6 +259,13 @@ class ComposeWindow(Adw.Window):
         self.showing_all = True
         self._rebuild_identity_list(current)
 
+    def _reopen_from_list(self) -> bool:
+        """Picking "Show all identities…" closed the row's list; open it again on the full list."""
+        popover = _find_descendant(self.from_row, Gtk.Popover)
+        if popover is not None:
+            popover.popup()
+        return False
+
     def _ensure_identity_visible(self, ident: IdentityObject) -> None:
         if ident not in self.identities:
             self.identities = [i for i in self.all_identities if i in self.identities or i is ident]
@@ -263,6 +282,7 @@ class ComposeWindow(Adw.Window):
             return
         if not self.showing_all and self.from_row.get_selected() == len(self.identities):
             self._show_all_identities()
+            GLib.idle_add(self._reopen_from_list)
             return
         ident = self._identity()
         self.wildcard_row.set_visible(ident.is_wildcard)

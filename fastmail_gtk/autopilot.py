@@ -64,6 +64,13 @@ def _run(app, steps: list[str]) -> bool:
         elif cmd == "dump-compose" and win and win.compose_windows:
             cw = win.compose_windows[-1]
             log.info("compose From entries: %s (selected: %s)", cw._identity_strings(), cw._identity().display)
+        elif cmd == "from-popup" and win and win.compose_windows:
+            from gi.repository import Gtk
+
+            from .ui.compose import _find_descendant
+
+            popover = _find_descendant(win.compose_windows[-1].from_row, Gtk.Popover)
+            popover.popup()
         elif cmd in ("masked", "identities", "preferences") and win:
             win.lookup_action(cmd).activate(None)
         elif cmd == "resize" and win:

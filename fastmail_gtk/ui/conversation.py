@@ -11,6 +11,7 @@ from ..avatars import sender_key
 from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full
 from ..models.thread import ThreadObject, format_date_long
 from .message_body import MessageBody
+from .. import launch
 from .widgets import avatar, chip, human_size, open_uri, toast
 
 
@@ -625,18 +626,16 @@ class ConversationView(Adw.NavigationPage):
         if chip:
             chip.set_busy(True)
 
-        def finish_launch(launcher, res) -> None:
+        def launched(error: str | None) -> None:
             if chip:
                 chip.set_busy(False)
-            try:
-                launcher.launch_finish(res)
-            except GLib.Error as e:
-                toast(self, f"Could not open {name}: {e.message}", 6)
+            if error:
+                toast(self, f"Could not open {name}: {error}", 6)
                 return
             toast(self, f"Opened {name} in {app}" if app else f"Opened {name}", 4)
 
         def opened(path: Path) -> None:
-            Gtk.FileLauncher(file=Gio.File.new_for_path(str(path))).launch(self.get_root(), None, finish_launch)
+            launch.open_file(path, att.get("type"), self.get_root(), launched)
 
         def failed(message: str) -> None:
             if chip:
