@@ -75,7 +75,9 @@ class ComposeWindow(Adw.Window):
         fields.set_margin_bottom(6)
 
         self.identity_list = Gtk.StringList.new([i.display for i in self.identities])
-        self.from_row = Adw.ComboRow(title="From", model=self.identity_list,
+        # use-subtitle shows the selected identity under "From" (instead of an ellipsised label on the
+        # right); use-markup must be off because addresses contain "<…>".
+        self.from_row = Adw.ComboRow(title="From", model=self.identity_list, use_subtitle=True, use_markup=False,
                                      enable_search=len(self.identities) > 6,
                                      expression=Gtk.PropertyExpression.new(Gtk.StringObject, None, "string"))
         self.from_row.set_list_factory(self._identity_factory())
@@ -220,8 +222,6 @@ class ComposeWindow(Adw.Window):
 
     def _on_identity_changed(self) -> None:
         ident = self._identity()
-        # The subtitle is markup, so "<address>" must be escaped (use_subtitle would not).
-        self.from_row.set_subtitle(GLib.markup_escape_text(ident.display))
         self.wildcard_row.set_visible(ident.is_wildcard)
         self.wildcard_row.set_title(f"Address at @{ident.domain} (local part)" if ident.is_wildcard else "")
         self._mark_dirty()
