@@ -10,12 +10,13 @@ you own in the From field.
 ![The inbox with a newsletter open, dark theme](data/screenshots/inbox-dark.png)
 
 > [!NOTE]
-> **This app was written mostly by an AI.** Nearly all of the code was produced
-> by Claude Code (Anthropic's coding agent) under my direction. I read and test
-> what it writes and use the app daily, but nobody has audited it. It works on
-> my machine: Arch Linux, Hyprland, a regular Fastmail account. Use it at your
+> **Status and disclaimer.** This is a personal project, written largely with
+> Claude Code and reviewed by a human, but not audited. It works on my machine
+> (Arch, Hyprland, Premium Fastmail Account). Use at your own risk; there is no warranty.
+> Issues and pull requests are welcome. Use it at your
 > own risk; there is no warranty of any kind. Issues and pull requests are
 > welcome. This project is not affiliated with or endorsed by Fastmail.
+
 
 ## Features
 
