@@ -1229,14 +1229,14 @@ class MainWindow(Adw.ApplicationWindow):
     def rename_label(self, mb: MailboxObject) -> None:
         text_prompt(self, "Rename label", "", mb.name, "Rename",
                     lambda name: self.engine.mailbox_set(update={mb.id: {"name": name}},
-                                                         on_error=lambda m: self._toast(f"Rename failed: {m}")))
+                                                         on_error=lambda m: self._toast(f"Could not rename: {m}")))
 
     def delete_label(self, mb: MailboxObject) -> None:
         confirm(self, f"Delete “{mb.name}”?",
                 "Conversations keep their other labels; messages only in this label move to Archive.",
                 "Delete", True,
                 lambda: self.engine.mailbox_set(destroy=[mb.id],
-                                                on_error=lambda m: self._toast(f"Delete failed: {m}")))
+                                                on_error=lambda m: self._toast(f"Could not delete: {m}")))
 
     def refresh_mailbox(self, mb: MailboxObject) -> None:
         """Sync now and re-run the mailbox query from scratch (bypassing queryChanges)."""

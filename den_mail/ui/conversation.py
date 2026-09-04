@@ -1143,7 +1143,7 @@ class ConversationView(Adw.NavigationPage):
         def failed(message: str) -> None:
             if chip:
                 chip.set_busy(False)
-            toast(self, f"Download failed: {message}", 6)
+            toast(self, f"Could not download: {message}", 6)
 
         self.engine.fetch_blob(att["blobId"], name, att.get("type"), opened, failed)
 
@@ -1164,7 +1164,7 @@ class ConversationView(Adw.NavigationPage):
             Gtk.FileLauncher(file=Gio.File.new_for_path(str(path))).open_containing_folder(self.get_root(), None, done)
 
         self.engine.fetch_blob(att["blobId"], name, att.get("type"), fetched,
-                               lambda m: (chip and chip.set_busy(False), toast(self, f"Download failed: {m}", 6)))
+                               lambda m: (chip and chip.set_busy(False), toast(self, f"Could not download: {m}", 6)))
 
     def save_attachment(self, att: dict) -> None:
         dialog = Gtk.FileDialog(initial_name=att.get("name") or "attachment")
@@ -1180,6 +1180,6 @@ class ConversationView(Adw.NavigationPage):
                 toast(self, f"Saved {target.get_basename()}")
 
             self.engine.fetch_blob(att["blobId"], att.get("name") or "attachment", att.get("type"), fetched,
-                                   lambda m: toast(self, f"Download failed: {m}"))
+                                   lambda m: toast(self, f"Could not download: {m}"))
 
         dialog.save(self.get_root(), None, on_chosen)

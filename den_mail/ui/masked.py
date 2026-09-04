@@ -142,13 +142,13 @@ class MaskedEmailDialog(Adw.Dialog):
 
     def _set_state(self, m: dict, state: str) -> bool:
         self.engine.masked_set(update={m["id"]: {"state": state}},
-                               on_error=lambda msg: toast(self, f"Change failed: {msg}"))
+                               on_error=lambda msg: toast(self, f"Could not apply the change: {msg}"))
         return False
 
     def _destroy(self, m: dict) -> None:
         confirm(self, "Delete permanently?", f"{m.get('email')} will be removed for good.", "Delete", True,
                 lambda: self.engine.masked_set(destroy=[m["id"]],
-                                               on_error=lambda msg: toast(self, f"Delete failed: {msg}")))
+                                               on_error=lambda msg: toast(self, f"Could not delete: {msg}")))
 
     # ------------------------------------------------------- create / edit
 
@@ -177,7 +177,7 @@ class MaskedEmailDialog(Adw.Dialog):
             if prefix.get_text().strip():
                 obj["emailPrefix"] = prefix.get_text().strip().lower()
             self.engine.masked_set(create=obj, on_done=self._created,
-                                   on_error=lambda msg: toast(self, f"Could not create: {msg}"))
+                                   on_error=lambda msg: toast(self, f"Could not create the address: {msg}"))
 
         dlg.connect("response", on_response)
         dlg.present(self)

@@ -686,7 +686,7 @@ class ComposeWindow(Adw.Window):
                 self.destroy()
 
         def failed(message: str) -> None:
-            toast(self, f"Draft not saved: {message}")
+            toast(self, f"Could not save the draft: {message}")
 
         self.engine.save_draft(email, self.draft_id, done, failed)
 
