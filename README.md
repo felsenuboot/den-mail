@@ -33,7 +33,8 @@ offline and follows changes as they happen.
 - 🔍 **Search.** Operators for sender, subject, state, label, folder and date.
 - 🗂️ **Categories.** Every message is sorted locally into Primary, Transactions,
   Security, Updates, Newsletters, Lists or Promotions from its headers, sender
-  and wording; a chip on the row and a filter in the list header.
+  and wording; a chip on the row and a filter in the list header. Correct one
+  and the app learns from it.
 - 👓 **Views.** Newsletters, Transactions, Security, Updates, Never read and
   Big attachments in the sidebar, answered from the local cache in an instant.
 - 🚪 **Screener.** Optionally hold mail from first-time senders outside the
@@ -92,7 +93,9 @@ installing anything. Where the GObject stack is installed system-wide,
 
 On first start the app asks for a Fastmail API token: create one under
 *Settings → Privacy & Security → API tokens* with the Mail, Submission and
-Masked Email scopes. It is kept in your keyring and only ever sent to Fastmail.
+Masked Email scopes; add Contacts and the address book completes recipients
+and shows contact photos. It is kept in your keyring and only ever sent to
+Fastmail.
 
 Something off? See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 

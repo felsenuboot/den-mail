@@ -182,6 +182,10 @@ class MainWindow(Adw.ApplicationWindow):
         e.connect("cache-reset", lambda _e: self._reload_current())
         e.connect("identities-changed", lambda _e: setattr(self, "identities", self.db.get_identities()))
         e.connect("rules-applied", lambda _e, hits: rules.bump_hits(self.config, hits))
+        # Contact photos (#14) and completion (#4) come from the address book in the cache.
+        self.avatars.contact_photo = self.db.contact_photo_for
+        self.avatars.download_blob = e.fetch_blob
+        e.connect("contacts-changed", lambda _e: self._on_contacts_changed())
         set_cid_resolver(self._resolve_cid)
         e.start()
         self.stack.set_visible_child_name("main")
@@ -335,6 +339,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("find-sender", self._find_sender),
             ("sender-rule", self.sender_rule),
             ("screen-allow", lambda addr: self.screener_decide(addr, True)),
+            ("categorise", self.categorise),
             ("screen-block", lambda addr: self.screener_decide(addr, False)),
             ("toggle-label", lambda mid: self._label_toggle(self.tree.get(mid), not self._selection_has_label(mid))),
             ("move-to", lambda mid: self.tree.get(mid) and self._move_to(self.tree.get(mid))),
@@ -401,6 +406,21 @@ class MainWindow(Adw.ApplicationWindow):
 
         prompt_sender_rule(self, self.tree, self.config, sender, done)
 
+    def categorise(self, category: str) -> None:
+        """"Categorise as…" (#23): the user's word on the selected conversations, kept over
+        the rules and used to train the learned layer."""
+        ids = self._selected_email_ids()
+        if not ids or category not in CATEGORY_NAMES:
+            return
+        self.db.set_category(ids, category)
+        self.model.refresh_threads(ids)
+        for t in self.selected:
+            if t.thread_id == self.conversation.thread_id:
+                self.conversation.refresh_thread(t)
+        self.engine.retrain_bayes()
+        self._schedule_view_refresh()
+        self._toast(f"Sorted into {CATEGORY_NAMES[category]}; the app learns from it")
+
     def _on_thread_context_menu(self, thread: ThreadObject, x: int, y: int) -> None:
         threads = self.selected or [thread]
         many = len(threads) > 1
@@ -444,6 +464,13 @@ class MainWindow(Adw.ApplicationWindow):
             item.set_action_and_target_value("win.move-to", GLib.Variant("s", mb.id))
             move.append_item(item)
         organise.append_submenu("Move to", move)
+        categories = Gio.Menu()
+        current = {t.category for t in threads}
+        for cat, name in CATEGORY_NAMES.items():
+            item = Gio.MenuItem.new(("● " if current == {cat} else "   ") + name, None)
+            item.set_action_and_target_value("win.categorise", GLib.Variant("s", cat))
+            categories.append_item(item)
+        organise.append_submenu("Categorise as", categories)
         menu.append_section(None, organise)
         state = Gio.Menu()
         unread = any(t.unread for t in threads)
@@ -605,6 +632,13 @@ class MainWindow(Adw.ApplicationWindow):
             self._schedule_view_refresh()
         elif self.current_mailbox is not None and self.current_mailbox.is_view:
             self._goto_role(ROLE_INBOX)
+
+    def _on_contacts_changed(self) -> None:
+        self.avatars.forget_contacts()
+        for row in list(self.threadlist._rows):
+            row.refresh_avatar()
+        for card in self.conversation.cards.values():
+            card.refresh_avatar()
 
     def _on_sync_status(self, _engine, status: str, message: str) -> None:
         self.threadlist.set_syncing(status == "syncing")
@@ -1222,6 +1256,7 @@ class MainWindow(Adw.ApplicationWindow):
                           on_screener=self.set_screener,
                           on_open=lambda name: self.lookup_action(name).activate(None),
                           rules_count=len(rules.load_rules(self.config)),
+                          contact_count=self.db.contact_count() if self.db else 0,
                           )
         if page:
             self.preferences_dialog.set_visible_page_name(page)

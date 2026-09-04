@@ -66,13 +66,13 @@ class PreferencesDialog(Adw.PreferencesDialog):
                  on_sidebar_views: Callable[[bool], None] | None = None,
                  on_screener: Callable[[bool], None] | None = None,
                  on_open: Callable[[str], None] | None = None,
-                 rules_count: int = 0):
+                 rules_count: int = 0, contact_count: int = 0):
         """`on_open(action)` activates a window action such as "cleanup" or "rules"."""
         super().__init__(title="Preferences")
         self.config = config
         self.add(self._general_page(config, on_manage_identities))
         self.add(self._inbox_page(config, on_sidebar_views, on_screener, on_open, rules_count))
-        self.add(self._account_page(config, session, on_sign_out, on_clear_cache))
+        self.add(self._account_page(config, session, on_sign_out, on_clear_cache, contact_count))
 
     # ------------------------------------------------------------- General
 
@@ -163,7 +163,7 @@ class PreferencesDialog(Adw.PreferencesDialog):
 
     # ------------------------------------------------------------- Account
 
-    def _account_page(self, config, session, on_sign_out, on_clear_cache) -> Adw.PreferencesPage:
+    def _account_page(self, config, session, on_sign_out, on_clear_cache, contact_count: int = 0) -> Adw.PreferencesPage:
         page = Adw.PreferencesPage(title="Account", icon_name="avatar-default-symbolic", name="account")
 
         sync = Adw.PreferencesGroup(title="Sync & notifications")
@@ -179,6 +179,12 @@ class PreferencesDialog(Adw.PreferencesDialog):
         account = Adw.PreferencesGroup(title="Account")
         if session:
             account.add(Adw.ActionRow(title="Signed in as", subtitle=session.username))
+            contacts = getattr(session, "has_contacts", False)
+            account.add(Adw.ActionRow(
+                title="Address book",
+                subtitle=(f"{contact_count} contact{'s' if contact_count != 1 else ''} from Fastmail Contacts, for "
+                          "completion and photos" if contacts else
+                          "The token has no Contacts scope; completion uses the addresses in cached mail")))
             caps = Adw.ExpanderRow(title="Server capabilities", subtitle="What this token's session advertises")
             for uri in sorted(session.capabilities):
                 caps.add_row(Adw.ActionRow(title=uri))

@@ -92,6 +92,16 @@ chip (Primary shows none), and the funnel in the list header narrows the list
 to one category; the list keeps loading pages until enough of that category is
 on screen.
 
+When the rules get one wrong, right-click the conversation and choose
+*Categorise as…*: your word is kept over the rules, and after a few such
+corrections the app learns from them. The learned layer only speaks where
+the rules were unsure (a message sorted into Primary for lack of signals,
+say) and only when it is confident, and it sees what you do with a sender's
+mail (never opened, deleted unread, written back), so a "friendly" sender
+you never read stops counting as a newsletter. The message details, behind
+the header, say why a message got its category: the rule that fired, your
+choice, or what the model learned.
+
 ![Category filter menu](../data/screenshots/categories.png)
 
 ## Views
@@ -167,6 +177,15 @@ open; for rules that run on the server whether the app is open or not, the
 dialog links to Fastmail's own rules settings.
 
 ![Always for this sender](../data/screenshots/rules.png)
+
+## Address book
+
+With a token that has the Contacts scope, the app keeps your Fastmail
+address book in its cache: recipient completion offers your contacts first
+(by name or address), then the addresses seen in cached mail, and a contact
+with a photo shows it in the list and the conversation instead of the
+sender domain's logo. Without the scope nothing changes; the Account page in
+Preferences says which it is.
 
 ## Writing mail
 

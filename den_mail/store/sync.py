@@ -39,6 +39,8 @@ from ..jmap.client import (
 )
 from ..jmap.push import PushListener
 from ..jmap.types import (
+    CAP_CONTACTS,
+    CAP_CORE,
     CAP_MASKED_EMAIL,
     EMAIL_BODY_PROPERTIES,
     EMAIL_LIST_PROPERTIES,
@@ -318,6 +320,7 @@ class SyncEngine(GObject.Object):
         "auth-failed": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "cache-reset": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "rules-applied": (GObject.SignalFlags.RUN_FIRST, None, (object,)),   # {rule id: hits} (#22)
+        "contacts-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
 
     def __init__(self, client: JMAPClient, db: Database, config: Config):
@@ -457,6 +460,7 @@ class SyncEngine(GObject.Object):
         self.enqueue(PRIO_BACKFILL, self._job_seed_correspondents, "seed-correspondents")
         self.enqueue(PRIO_BACKFILL, self._job_backfill_headers, "backfill-headers")
         self.enqueue(PRIO_BACKFILL, self._job_reclassify_after_upgrade, "reclassify")
+        self.enqueue(PRIO_BACKFILL, self._job_retrain_bayes, "retrain")
 
     def _job_reclassify_after_upgrade(self) -> None:
         """A cache classified by older rules is run through the current ones once."""
@@ -467,6 +471,26 @@ class SyncEngine(GObject.Object):
         if ids:
             log.info("reclassified %d cached messages with rules %s", len(ids), RULES_VERSION)
             self._emit("emails-changed", ids)
+
+    def retrain_bayes(self) -> None:
+        """After a correction (#23): rebuild the learned model and let it look at the
+        messages the rules were unsure about."""
+        self.enqueue(PRIO_BACKGROUND, self._job_retrain_bayes, "retrain")
+
+    def _job_retrain_bayes(self) -> None:
+        corrections = self.db.corrections_count()
+        if corrections == 0 and (self.db.get_meta("bayes_corrections") or "0") == "0":
+            return   # nothing to learn from yet
+        size, n = self.db.retrain_bayes()
+        log.info("learned model: %d documents, %d corrections, %s", size, n, "ready" if self.db.bayes_ready else "silent")
+        if self.db.bayes_ready:
+            ids = self.db.unsure_ids()
+            if ids:
+                before = self.db.get_categories(ids)
+                self.db.reclassify(ids)
+                changed = [i for i, cat in self.db.get_categories(ids).items() if before.get(i) != cat]
+                if changed:
+                    self._emit("emails-changed", changed)
 
     def _job_seed_correspondents(self) -> None:
         """Once per cache: who the user has written to, from the Sent folder (#18).
@@ -532,6 +556,48 @@ class SyncEngine(GObject.Object):
         self._emit("mailboxes-changed")
         self._emit("identities-changed")
         self._emit("masked-changed")
+        self._sync_contacts(full=True)
+
+    # -------------------------------------------------------------- contacts
+
+    def _sync_contacts(self, full: bool = False) -> None:
+        """The address book (RFC 9610 ContactCard, #4): everything once, then changes.
+        Silently nothing when the token lacks the contacts scope."""
+        session = self.client.session
+        if not session or not session.has_contacts:
+            return
+        acc = session.contacts_account_id
+        using = [CAP_CORE, CAP_CONTACTS]
+        since = None if full else self.db.get_state("Contact")
+        if since:
+            req = Request()
+            c_ch = req.add("ContactCard/changes", {"accountId": acc, "sinceState": since, "maxChanges": 500})
+            c_new = req.add("ContactCard/get", {"accountId": acc, "#ids": Request.ref(c_ch, "ContactCard/changes", "/created")})
+            c_upd = req.add("ContactCard/get", {"accountId": acc, "#ids": Request.ref(c_ch, "ContactCard/changes", "/updated")})
+            try:
+                resp = self.client.send(req, using)
+                ch = resp.get(c_ch)
+                cards = resp.get(c_new)["list"] + resp.get(c_upd)["list"]
+                if cards:
+                    self.db.upsert_contacts(cards)
+                if ch.get("destroyed"):
+                    self.db.delete_contacts(ch["destroyed"])
+                self.db.set_state("Contact", ch["newState"])
+                if cards or ch.get("destroyed"):
+                    self._emit("contacts-changed")
+                return
+            except MethodError as e:
+                if e.type != "cannotCalculateChanges":
+                    log.warning("ContactCard/changes failed: %s", e)
+                    return
+        try:
+            res = self.client.call("ContactCard/get", {"accountId": acc, "ids": None}, using)
+        except MethodError as e:
+            log.warning("ContactCard/get failed: %s", e)
+            return
+        self.db.set_contacts(res["list"])
+        self.db.set_state("Contact", res["state"])
+        self._emit("contacts-changed")
 
     def reset_cache(self) -> None:
         self.db.clear_all()
@@ -671,6 +737,8 @@ class SyncEngine(GObject.Object):
             if e.type != "cannotCalculateChanges":
                 raise
             self.db.set_state("Thread", self.client.call("Thread/get", {"accountId": acc, "ids": []})["state"])
+        # --- contacts
+        self._sync_contacts()
         # --- keep visible queries current
         for key in list(self._active_queries):
             q = self.db.get_query(key)

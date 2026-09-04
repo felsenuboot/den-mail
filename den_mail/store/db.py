@@ -13,15 +13,26 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..classify import bayes
 from ..classify.rules import (
     CLASSIFY_HEADERS,
     H_LIST_UNSUBSCRIBE,
     PRIMARY,
+    SOURCE_BAYES,
     SOURCE_RULES,
     SOURCE_USER,
+    SURE,
     classify,
 )
-from ..jmap.types import KW_DRAFT, KW_FLAGGED, KW_SEEN, address_display
+from ..jmap.types import (
+    KW_DRAFT,
+    KW_FLAGGED,
+    KW_SEEN,
+    address_display,
+    contact_emails,
+    contact_name,
+    contact_photo,
+)
 
 SCHEMA_VERSION = 1
 
@@ -56,6 +67,10 @@ CREATE TABLE IF NOT EXISTS correspondents (email TEXT PRIMARY KEY, last_written 
 CREATE TABLE IF NOT EXISTS sender_deletions (
     email TEXT PRIMARY KEY, deleted INTEGER DEFAULT 0, deleted_unread INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS screener (email TEXT PRIMARY KEY, decision TEXT NOT NULL, ts REAL);
+CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT, json TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS contact_emails (email TEXT PRIMARY KEY, contact_id TEXT, name TEXT);
+CREATE TABLE IF NOT EXISTS bayes_docs (category TEXT PRIMARY KEY, docs INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS bayes_tokens (category TEXT, token TEXT, count INTEGER NOT NULL, PRIMARY KEY (category, token));
 """
 
 # Columns the sidebar views (#19) filter and sort on, added to caches from before
@@ -86,6 +101,10 @@ def view_columns(e: dict) -> tuple[int, str, str, int, int, int]:
     unsub = e.get(H_LIST_UNSUBSCRIBE)
     return (int(e.get("size") or 0), addr, name or addr, 1 if kws.get(KW_SEEN) else 0,
             1 if kws.get(KW_FLAGGED) else 0, 1 if isinstance(unsub, str) and unsub.strip() else 0)
+
+
+def sender_of(e: dict) -> str:
+    return view_columns(e)[1]
 
 
 @dataclass
@@ -127,6 +146,7 @@ class Database:
         self._sent_mailbox_id: str | None = None
         self._load_identity_cache()
         self._load_sent_mailbox()
+        self._bayes: bayes.BayesModel = self._load_bayes()
 
     @staticmethod
     def _add_view_columns(c: sqlite3.Connection) -> None:
@@ -168,7 +188,7 @@ class Database:
             c = self.conn()
             for table in ("mailboxes", "emails", "email_mailboxes", "threads", "identities", "masked_emails",
                           "query_cache", "addresses", "classification", "correspondents", "sender_deletions",
-                          "screener"):
+                          "screener", "bayes_docs", "bayes_tokens", "contacts", "contact_emails"):
                 # table names come from the literal tuple above (Bandit B608)
                 c.execute(f"DELETE FROM {table}")  # nosec B608
             c.execute("DELETE FROM meta WHERE key LIKE 'state:%'")
@@ -297,15 +317,98 @@ class Database:
     # -------------------------------------------------------- categories
 
     def _classify(self, c: sqlite3.Connection, e: dict) -> None:
-        """Store the rules' verdict; a category the user chose (source "user") stays."""
+        """Store the rules' verdict, or the learned model's where the rules were unsure
+        and the model is confident (#23); a category the user chose (source "user") stays."""
         verdict = classify(e, self.is_correspondent, self.is_own_address)
+        category, source, confidence, reason = verdict.category, SOURCE_RULES, verdict.confidence, verdict.reason
+        model = self._bayes
+        if verdict.confidence < SURE and model.ready:
+            pred = model.predict(bayes.tokens(e, self.sender_behaviour(sender_of(e), c)))
+            if pred is not None and pred.probability >= bayes.MIN_PROBABILITY and pred.category != verdict.category:
+                category, source, confidence, reason = pred.category, SOURCE_BAYES, round(pred.probability, 3), pred.reason
         c.execute(
             "INSERT INTO classification(email_id, category, source, confidence, ts, reason) VALUES (?,?,?,?,?,?)"
             " ON CONFLICT(email_id) DO UPDATE SET category=excluded.category, source=excluded.source,"
             " confidence=excluded.confidence, ts=excluded.ts, reason=excluded.reason"
             " WHERE classification.source != ?",
-            (e["id"], verdict.category, SOURCE_RULES, verdict.confidence, time.time(), verdict.reason, SOURCE_USER),
+            (e["id"], category, source, confidence, time.time(), reason, SOURCE_USER),
         )
+
+    def sender_behaviour(self, addr: str, c: sqlite3.Connection | None = None) -> dict | None:
+        """What the user does with a sender's mail, for the learned layer's tokens."""
+        addr = (addr or "").strip().lower()
+        if not addr:
+            return None
+        c = c or self.conn()
+        row = c.execute("SELECT COUNT(*) AS count, SUM(seen = 0) AS unread FROM emails WHERE from_email=?", (addr,)).fetchone()
+        deleted = c.execute("SELECT deleted_unread FROM sender_deletions WHERE email=?", (addr,)).fetchone()
+        replied = c.execute("SELECT 1 FROM correspondents WHERE email=?", (addr,)).fetchone() is not None
+        return {"count": int(row["count"] or 0), "unread": int(row["unread"] or 0),
+                "deleted_unread": int(deleted["deleted_unread"]) if deleted else 0, "replied": replied}
+
+    # ------------------------------------------------------- learned layer
+
+    def _load_bayes(self) -> bayes.BayesModel:
+        c = self.conn()
+        docs = {r["category"]: int(r["docs"]) for r in c.execute("SELECT category, docs FROM bayes_docs")}
+        rows = [(r["category"], r["token"], int(r["count"])) for r in c.execute("SELECT category, token, count FROM bayes_tokens")]
+        corrections = int(self.get_meta("bayes_corrections") or 0)
+        return bayes.BayesModel.from_rows(docs, rows, corrections)
+
+    def corrections_count(self) -> int:
+        row = self.conn().execute("SELECT COUNT(*) AS n FROM classification WHERE source=?", (SOURCE_USER,)).fetchone()
+        return int(row["n"] or 0)
+
+    def retrain_bayes(self, limit: int = 5000) -> tuple[int, int]:
+        """Rebuild the model from the user's corrections (weighted) and the rules' sure
+        verdicts (the newest `limit`), store it, and use it from now on.  Returns
+        (training documents, corrections)."""
+        with self._write_lock:
+            c = self.conn()
+            model = bayes.BayesModel()
+            corrections = 0
+            for source, weight, cond in ((SOURCE_USER, bayes.CORRECTION_WEIGHT, ""),
+                                         (SOURCE_RULES, 1, " AND cl.confidence >= ?")):
+                params: list = [source]
+                if cond:
+                    params.append(SURE)
+                params.append(limit)
+                # only "?" placeholders and the literal condition above are interpolated (Bandit B608)
+                rows = c.execute(
+                    "SELECT e.json, cl.category FROM classification cl JOIN emails e ON e.id = cl.email_id"
+                    f" WHERE cl.source = ?{cond} ORDER BY e.received_at DESC LIMIT ?", params).fetchall()  # nosec B608
+                for r in rows:
+                    e = json.loads(r["json"])
+                    model.add(r["category"], bayes.tokens(e, self.sender_behaviour(sender_of(e), c)), weight)
+                if source == SOURCE_USER:
+                    corrections = len(rows)
+            model.corrections = corrections
+            c.execute("BEGIN")
+            try:
+                c.execute("DELETE FROM bayes_docs")
+                c.execute("DELETE FROM bayes_tokens")
+                c.executemany("INSERT INTO bayes_docs(category, docs) VALUES (?,?)", list(model.docs.items()))
+                c.executemany("INSERT INTO bayes_tokens(category, token, count) VALUES (?,?,?)", model.rows())
+                c.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('bayes_corrections', ?)", (str(corrections),))
+                c.execute("COMMIT")
+            except Exception:
+                c.execute("ROLLBACK")
+                raise
+            self._bayes = model
+            return model.size, corrections
+
+    @property
+    def bayes_ready(self) -> bool:
+        return self._bayes.ready
+
+    def unsure_ids(self, limit: int = 2000) -> list[str]:
+        """Messages the rules were unsure about and the user has not decided: the ones
+        a freshly trained model may change."""
+        rows = self.conn().execute(
+            "SELECT email_id FROM classification cl JOIN emails e ON e.id = cl.email_id"
+            " WHERE cl.source != ? AND cl.confidence < ? ORDER BY e.received_at DESC LIMIT ?",
+            (SOURCE_USER, SURE, limit)).fetchall()
+        return [r["email_id"] for r in rows]
 
     def get_categories(self, ids: list[str]) -> dict[str, str]:
         out: dict[str, str] = {}
@@ -323,12 +426,13 @@ class Database:
         return dict(row) if row else None
 
     def set_category(self, email_ids: list[str], category: str, source: str = SOURCE_USER) -> None:
-        """A correction by the user (or a later learned layer) that the rules will not overwrite."""
+        """A correction by the user that the rules and the learned layer will not overwrite."""
         with self._write_lock:
             self.conn().executemany(
                 "INSERT OR REPLACE INTO classification(email_id, category, source, confidence, ts, reason)"
                 " VALUES (?,?,?,?,?,?)",
-                [(eid, category, source, 1.0, time.time(), "") for eid in email_ids])
+                [(eid, category, source, 1.0, time.time(), "your choice" if source == SOURCE_USER else "")
+                 for eid in email_ids])
 
     def reclassify(self, ids: list[str] | None = None) -> list[str]:
         """Run the rules again over the given (else all) cached messages; returns their ids."""
@@ -712,13 +816,75 @@ class Database:
         with self._write_lock:
             self.conn().execute("DELETE FROM query_cache")
 
+    # -------------------------------------------------------------- contacts
+
+    def set_contacts(self, cards: list[dict]) -> None:
+        """Replace the address book (a full ContactCard/get, #4)."""
+        with self._write_lock:
+            c = self.conn()
+            c.execute("DELETE FROM contacts")
+            c.execute("DELETE FROM contact_emails")
+            self._insert_contacts(c, cards)
+
+    def upsert_contacts(self, cards: list[dict]) -> None:
+        with self._write_lock:
+            c = self.conn()
+            for card in cards:
+                c.execute("DELETE FROM contact_emails WHERE contact_id=?", (card["id"],))
+            self._insert_contacts(c, cards)
+
+    @staticmethod
+    def _insert_contacts(c: sqlite3.Connection, cards: list[dict]) -> None:
+        for card in cards:
+            name = contact_name(card)
+            c.execute("INSERT OR REPLACE INTO contacts(id, name, json) VALUES (?,?,?)", (card["id"], name, json.dumps(card)))
+            c.executemany("INSERT OR REPLACE INTO contact_emails(email, contact_id, name) VALUES (?,?,?)",
+                          [(addr, card["id"], name) for addr in contact_emails(card)])
+
+    def delete_contacts(self, ids: list[str]) -> None:
+        with self._write_lock:
+            c = self.conn()
+            c.executemany("DELETE FROM contacts WHERE id=?", [(i,) for i in ids])
+            c.executemany("DELETE FROM contact_emails WHERE contact_id=?", [(i,) for i in ids])
+
+    def contact_count(self) -> int:
+        return int(self.conn().execute("SELECT COUNT(*) AS n FROM contacts").fetchone()["n"] or 0)
+
+    def contact_for(self, email: str | None) -> dict | None:
+        """The ContactCard of an address, if the address book has it."""
+        addr = (email or "").strip().lower()
+        if not addr:
+            return None
+        row = self.conn().execute("SELECT c.json FROM contact_emails ce JOIN contacts c ON c.id = ce.contact_id"
+                                  " WHERE ce.email=?", (addr,)).fetchone()
+        return json.loads(row["json"]) if row else None
+
+    def contact_photo_for(self, email: str | None) -> tuple[str, str, str] | None:
+        """(contact id, blobId, mediaType) of the photo of the contact behind an address."""
+        card = self.contact_for(email)
+        if not card:
+            return None
+        photo = contact_photo(card)
+        return (card["id"], photo[0], photo[1]) if photo else None
+
     # ------------------------------------------------------------- addresses
 
     def search_addresses(self, prefix: str, limit: int = 8) -> list[dict]:
+        """Completion candidates: the address book first, then addresses seen in cached mail."""
         like = f"%{prefix.lower()}%"
-        rows = self.conn().execute(
+        c = self.conn()
+        out: list[dict] = []
+        seen: set[str] = set()
+        for r in c.execute("SELECT email, name FROM contact_emails WHERE email LIKE ? OR LOWER(name) LIKE ?"
+                           " ORDER BY name, email LIMIT ?", (like, like, limit)):
+            out.append({"email": r["email"], "name": r["name"] or None})
+            seen.add(r["email"])
+        rows = c.execute(
             "SELECT email, name FROM addresses WHERE email LIKE ? OR LOWER(name) LIKE ?"
             " ORDER BY count DESC, last_seen DESC LIMIT ?",
             (like, like, limit),
         ).fetchall()
-        return [{"email": r["email"], "name": r["name"] or None} for r in rows]
+        for r in rows:
+            if r["email"] not in seen and len(out) < limit:
+                out.append({"email": r["email"], "name": r["name"] or None})
+        return out
