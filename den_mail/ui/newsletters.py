@@ -27,7 +27,7 @@ def run_unsubscribe(engine, db, email: dict, plan: UnsubscribePlan, parent: Gtk.
     def failed(message: str) -> None:
         nxt = plan.fallback()
         if nxt is None:
-            on_error(f"Unsubscribe via {plan.target} failed: {message}")
+            on_error(f"Could not unsubscribe via {plan.target}: {message}")
             return
         how = {"mailto": f"sending a message to {nxt.target}", "browser": f"opening the page at {nxt.target}"}[nxt.kind]
         if on_fallback:
