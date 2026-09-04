@@ -113,6 +113,18 @@ which queries the server for every message from the address outside Trash
 and Spam, caches the ones it never listed, and performs one action, so the
 dialog's undo covers them all.
 
+## Label suggestions
+
+`classify/labels.py` keeps one binary naive Bayes model per label (a mailbox
+without a role), trained by `Database.retrain_labels()` from the newest
+cached mail over the same tokens as the category model: a message is a
+positive for its labels and, up to a ratio, a negative for the others; a
+label needs a minimum of labelled messages before its model says anything.
+The engine rebuilds the models after bootstrap at most every few hours.
+`Database.label_suggestions(email)` returns the labels a message lacks whose
+model is confident; the conversation shows them as dashed chips with a plus
+that applies the label through the usual action (#60).
+
 ## Screener
 
 With the screener on (#24), the engine checks each created message in the

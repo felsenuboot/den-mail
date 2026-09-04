@@ -60,6 +60,7 @@ from .actions import EmailAction, RestoreAction, UndoRecord
 from .db import Database
 
 log = logging.getLogger(__name__)
+LABELS_RETRAIN_SECONDS = 6 * 3600   # how often the label models (#60) are rebuilt at most
 
 PRIO_ACTION = 0
 PRIO_LOAD = 1
@@ -329,6 +330,7 @@ class SyncEngine(GObject.Object):
         "contacts-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "outbox-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),     # queued changes came or went (#8)
         "draft-created": (GObject.SignalFlags.RUN_FIRST, None, (str, str)),  # a queued draft's local id, its server id (#61)
+        "labels-trained": (GObject.SignalFlags.RUN_FIRST, None, ()),      # the label models were rebuilt (#60)
     }
 
     def __init__(self, client: JMAPClient, db: Database, config: Config):
@@ -470,6 +472,22 @@ class SyncEngine(GObject.Object):
         self.enqueue(PRIO_BACKFILL, self._job_backfill_headers, "backfill-headers")
         self.enqueue(PRIO_BACKFILL, self._job_reclassify_after_upgrade, "reclassify")
         self.enqueue(PRIO_BACKFILL, self._job_retrain_bayes, "retrain")
+        self.enqueue(PRIO_BACKFILL, self._job_retrain_labels, "retrain-labels")
+
+    def _job_retrain_labels(self) -> None:
+        """The per-label models (#60): rebuilt after a sync that touched labels, at most every so often."""
+        if not self.config.get("label_suggestions", True):
+            return
+        last = float(self.db.get_meta("labels_trained") or 0)
+        if time.time() - last < LABELS_RETRAIN_SECONDS:
+            return
+        trained = self.db.retrain_labels()
+        self.db.set_meta("labels_trained", str(time.time()))
+        log.info("label models: %s", ", ".join(f"{k}={v}" for k, v in trained.items()) or "none ready")
+        self._emit("labels-trained")
+
+    def retrain_labels_soon(self) -> None:
+        self.enqueue(PRIO_BACKGROUND, self._job_retrain_labels, "retrain-labels")
 
     def _job_reclassify_after_upgrade(self) -> None:
         """A cache classified by older rules is run through the current ones once."""
