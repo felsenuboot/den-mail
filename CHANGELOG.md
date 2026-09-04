@@ -8,6 +8,7 @@ Unreleased changes gather at the top until they are tagged.
 
 ### Fixes
 - The lock's menu entry and shortcut only work while the lock is enabled in Preferences (off by default), enabling it asks for a passphrase or PIN first where the system prompt is unavailable, so Unlock always asks for something, and the local secret can be a PIN (#65)
+- Typing in a compose window or reading in a thread window counts as activity for the idle lock (#55)
 
 ### Features
 - schema.org data in HTML mail (orders, parcels, invoices, flight, train, hotel and event reservations) makes the message Transactions for sure and shows a summary line above the body with a copy button for the tracking or reservation number (#20)
