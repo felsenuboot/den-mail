@@ -17,11 +17,18 @@ from typing import Any
 from .. import APP_NAME, VERSION
 from .errors import LLMError
 
-DEFAULT_TIMEOUT = 120   # a local model on a laptop can take a while over a long thread
+DEFAULT_TIMEOUT = 300   # a local model on a laptop can take a while over a long thread
 
 
 def host_of(url: str) -> str:
     return urllib.parse.urlsplit(url).netloc or url
+
+
+def is_local_url(url: str) -> bool:
+    """True when the server is this machine (den_mail.llm.is_local says the same; this one
+    lives here so the providers can ask without an import cycle)."""
+    host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    return host in ("localhost", "::1") or host.startswith("127.") or host.endswith(".localhost")
 
 
 def request_json(url: str, body: dict | None = None, headers: dict | None = None,
