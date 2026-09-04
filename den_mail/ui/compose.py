@@ -608,7 +608,7 @@ class ComposeWindow(Adw.Window):
                 from ..store.actions import destroy
 
                 self.engine.perform(destroy([self.draft_id]))
-            self.destroy()
+            self._destroy_after_dialog()
 
         if self._has_content():
             confirm(self, "Discard this message?", "Unsaved changes will be lost.", "Discard", True, do_discard)
@@ -632,11 +632,19 @@ class ComposeWindow(Adw.Window):
                 self.save_draft(close=True)
             elif response == "discard":
                 self.dirty = False
-                self.destroy()
+                self._destroy_after_dialog()
 
         dlg.connect("response", on_response)
         dlg.present(self)
         return True
+
+    def _destroy_after_dialog(self) -> None:
+        """Destroy the window once the dialog that asked has closed.
+
+        Destroying it from inside the dialog's response handler aborted the app on
+        GTK 4.22 (AT-SPI updated the dialog's toplevel after the window was gone).
+        """
+        GLib.idle_add(lambda: (self.destroy(), False)[1])
 
     def destroy(self) -> None:  # type: ignore[override]
         if self._autosave:
