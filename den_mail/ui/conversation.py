@@ -11,7 +11,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gsk, Gtk
 from .. import launch
 from ..avatars import sender_key
 from ..html.body import assemble_body
-from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full
+from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full, delivered_to
 from ..models.thread import ThreadObject, format_date_long
 from ..unsubscribe import identity_for, parse_list_unsubscribe
 from .message_body import MessageBody, warm_up_renderer
@@ -276,9 +276,9 @@ class MessageCard(Gtk.Box):
                                 selectable=True)
                 row.add_css_class("caption")
                 self.details.append(row)
-        delivered = e.get("header:Delivered-To:asText")
+        delivered = delivered_to(e)
         if delivered:
-            row = Gtk.Label(label=f"Delivered-To: {delivered}", xalign=0, wrap=True, selectable=True)
+            row = Gtk.Label(label=f"Delivered to: {delivered}", xalign=0, wrap=True, selectable=True)
             row.add_css_class("caption")
             self.details.append(row)
         mid = (e.get("messageId") or [""])[0]

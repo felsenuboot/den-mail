@@ -21,6 +21,11 @@ DEN_MAIL_SESSION_URL=http://127.0.0.1:18081/session DEN_MAIL_TOKEN=fake-token \
 With `DEN_MAIL_SESSION_URL` set the app registers a non-unique GApplication,
 so it does not join a running desktop instance.
 
+Against the real account, use a separate API token for development: Fastmail
+keeps one push stream per token and closes the older one whenever a new one
+opens, so a script or second instance on the desktop's token leaves both
+reconnecting instead of receiving push.
+
 ## Scripted UI and screenshots
 
 `DEN_MAIL_AUTOPILOT="sleep 3; select 0; action win.reply"` drives the UI

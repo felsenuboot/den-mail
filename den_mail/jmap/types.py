@@ -77,6 +77,7 @@ EMAIL_BODY_PROPERTIES = [
     "htmlBody",
     "attachments",
     "bodyValues",
+    "header:X-Delivered-To:asText",  # Fastmail's delivery address; Delivered-To only on forwarded mail
     "header:Delivered-To:asText",
     "header:List-Unsubscribe:asRaw",  # Fastmail rejects :asText for this header
     "header:List-Unsubscribe-Post:asRaw",
@@ -147,6 +148,18 @@ class Session:
     def max_objects_in_get(self) -> int:
         core = self.capabilities.get(CAP_CORE, {})
         return int(core.get("maxObjectsInGet", 500))
+
+
+DELIVERED_TO_HEADERS = ("header:X-Delivered-To:asText", "header:Delivered-To:asText")
+
+
+def delivered_to(email: dict) -> str | None:
+    """The address a message was delivered to, from X-Delivered-To (Fastmail) or Delivered-To."""
+    for key in DELIVERED_TO_HEADERS:
+        value = (email.get(key) or "").strip()
+        if value:
+            return value
+    return None
 
 
 def address_display(addr: dict | None) -> str:

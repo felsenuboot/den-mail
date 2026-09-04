@@ -5,15 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .jmap.client import JMAPClient, Request
-from .jmap.types import KW_SEEN, address_display
+from .jmap.types import DELIVERED_TO_HEADERS, KW_SEEN, address_display
 from .unsubscribe import UnsubscribePlan, parse_list_unsubscribe
 
 HEADER_UNSUBSCRIBE = "header:List-Unsubscribe:asRaw"
 HEADER_POST = "header:List-Unsubscribe-Post:asRaw"
-HEADER_DELIVERED_TO = "header:Delivered-To:asText"
 # Enough to group by sender, pick an unsubscribe method and the identity to answer from.
 LIST_MAIL_PROPERTIES = ["id", "threadId", "from", "to", "cc", "receivedAt", "keywords", "mailboxIds",
-                        HEADER_UNSUBSCRIBE, HEADER_POST, HEADER_DELIVERED_TO]
+                        HEADER_UNSUBSCRIBE, HEADER_POST, *DELIVERED_TO_HEADERS]
 GET_BATCH = 500
 
 

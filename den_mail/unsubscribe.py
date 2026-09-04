@@ -9,6 +9,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from .jmap.client import USER_AGENT
+from .jmap.types import delivered_to
 
 ANGLE_RE = re.compile(r"<([^<>]+)>")
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
@@ -118,7 +119,7 @@ def identity_for(identities: list[dict], primary: str, email: dict) -> dict | No
         return None
     by_email = {(i.get("email") or "").lower(): i for i in identities}
     wildcards = [i for i in identities if (i.get("email") or "").startswith("*@")]
-    candidates = [email.get("header:Delivered-To:asText") or ""] + [
+    candidates = [delivered_to(email) or ""] + [
         a.get("email", "") for a in (email.get("to") or []) + (email.get("cc") or [])]
     for addr in (c.strip().lower() for c in candidates if c):
         if addr in by_email:

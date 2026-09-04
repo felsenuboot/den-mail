@@ -3,6 +3,11 @@
 Fastmail's push stream sends a JSON StateChange whenever any type's state
 changes.  We do not interpret the states here; we hand the `changed` map to
 the sync engine, which compares them with what it has and fetches deltas.
+
+Fastmail keeps one EventSource per API token: opening a second one (another
+instance, another machine, a script) makes the server end the first with an
+`event: close`.  Two clients on one token therefore take turns, each backing
+off a little more, so push degrades to polling every two minutes for both.
 """
 
 from __future__ import annotations
@@ -65,6 +70,9 @@ class PushListener(threading.Thread):
             if self.on_status:
                 self.on_status(connected)
 
+    # A stream that lived this long was healthy; the next drop starts the backoff afresh.
+    HEALTHY_SECONDS = 30.0
+
     def run(self) -> None:
         backoff = 1.0
         while not self._stop.is_set():
@@ -83,10 +91,12 @@ class PushListener(threading.Thread):
                 continue
             with self._lock:
                 self._resp = resp
+            opened = time.monotonic()
             try:
                 self._read_stream(resp)
-                backoff = 1.0
             except Exception as e:  # noqa: BLE001 - any read failure means reconnect
+                if time.monotonic() - opened >= self.HEALTHY_SECONDS:
+                    backoff = 1.0
                 if not self._stop.is_set():
                     log.info("push: stream ended (%s); reconnecting in %.0fs", e, backoff)
             finally:
@@ -123,6 +133,8 @@ class PushListener(threading.Thread):
             value = value.removeprefix(" ")
             if field == "event":
                 event_type = value
+                if value == "close":  # Fastmail: another connection on this token took over
+                    log.info("push: the server closed the stream (another client on the same token?)")
             elif field == "data":
                 data_lines.append(value)
             # id / retry fields are ignored

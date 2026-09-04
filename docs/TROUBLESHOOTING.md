@@ -12,5 +12,12 @@
 - **HTML mail shows up blank.** WebKit's DMA-BUF renderer is already disabled,
   which fixed this on an NVIDIA/Wayland setup. If it still happens, open an
   issue with your GPU and driver.
+- **New mail shows up minutes late.** Fastmail allows one push connection per
+  API token. A second client on the same token (another machine, a dev
+  instance, a script) kicks the first off, and the two take turns; give each
+  client its own token.
+- **Replies come from the wrong address.** The identity follows Fastmail's
+  `X-Delivered-To` header, then To and Cc. Mail forwarded in from elsewhere
+  carries the forwarding address, so pick the identity by hand there.
 - **Aliases cannot be created in the app.** Fastmail's public API does not
   allow it (only Masked Email), so the app links to the web settings.

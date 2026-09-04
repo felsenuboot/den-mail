@@ -228,6 +228,7 @@ def test_body_fetch_and_blob(engine, server):
     body = engine.db.get_email_body(ticket["id"])
     assert body["htmlBody"] and "cid:logo@fake" in body["bodyValues"]["2"]["value"]
     assert body["header:Delivered-To:asText"] == "shop@example.com"
+    assert body["header:X-Delivered-To:asText"] == "shop@example.com"
     att = next(a for a in body["attachments"] if a["disposition"] == "attachment")
     got = []
     engine.fetch_blob(att["blobId"], att["name"], att["type"], lambda p: got.append(p))

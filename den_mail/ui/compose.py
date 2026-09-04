@@ -17,6 +17,7 @@ from ..html.compose import (
     reply_subject,
     text_to_html,
 )
+from ..jmap.types import delivered_to
 from ..models.identity import IdentityObject
 from .widgets import AddressCompletion, confirm, human_size, toast
 
@@ -328,7 +329,7 @@ class ComposeWindow(Adw.Window):
         src = self.source
         signature = self.identities[0].text_signature
         if self.mode in ("reply", "reply-all") and src:
-            candidates = [src.get("header:Delivered-To:asText") or ""] + [
+            candidates = [delivered_to(src) or ""] + [
                 a.get("email", "") for a in (src.get("to") or []) + (src.get("cc") or [])]
             self._select_identity_for([c for c in candidates if c])
             signature = self._identity().text_signature

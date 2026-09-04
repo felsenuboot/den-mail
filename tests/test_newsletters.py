@@ -59,6 +59,11 @@ def test_identity_for_prefers_the_delivered_address():
     assert identity_for(identities, "me@example.org", {"to": [{"email": "Alias@example.org"}]})["id"] == "b"
     assert identity_for(identities, "me@example.org", {"header:Delivered-To:asText": "alias@example.org",
                                                        "to": [{"email": "me@example.org"}]})["id"] == "b"
+    # Fastmail writes X-Delivered-To, in whatever case the sender used
+    assert identity_for(identities, "me@example.org", {"header:X-Delivered-To:asText": "ALIAS@Example.org",
+                                                       "to": [{"email": "me@example.org"}]})["id"] == "b"
+    wild = identity_for(identities, "me@example.org", {"header:X-Delivered-To:asText": "Shop@wild.example.org"})
+    assert wild["id"] == "w" and wild["email"] == "shop@wild.example.org"
     wild = identity_for(identities, "me@example.org", {"to": [{"email": "shop@wild.example.org"}]})
     assert wild["id"] == "w" and wild["email"] == "shop@wild.example.org"
     assert identity_for(identities, "me@example.org", {"to": [{"email": "nobody@else.org"}]})["id"] == "a"

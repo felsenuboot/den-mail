@@ -314,7 +314,7 @@ class FakeData:
                        mailboxes=[inbox, receipts], keywords={"$seen": True, "$flagged": True},
                        when=t - timedelta(days=1, hours=2), inline_png=True,
                        attachments=[("ticket.pdf", "application/pdf", b"%PDF-1.4 fake ticket\n%%EOF")],
-                       headers={"Delivered-To": "shop@example.com"})
+                       headers={"X-Delivered-To": "shop@example.com", "Delivered-To": "shop@example.com"})
         # GitHub notifications thread
         gh_thread = None
         for k in range(3):
