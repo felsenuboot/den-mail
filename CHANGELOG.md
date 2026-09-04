@@ -6,6 +6,9 @@ Unreleased changes gather at the top until they are tagged.
 
 ## [Unreleased]
 
+### Features
+- A lock screen: on demand, after some idle time or when the session locks; unlocking through the system's authentication prompt where the polkit policy is installed, else a passphrase (#28)
+
 ## [0.3.0] - 2026-09-04
 
 Milestones *Release engineering*, *Learning layer* and *JMAP Contacts*.

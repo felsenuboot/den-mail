@@ -30,5 +30,6 @@ package() {
   for s in 64 128 256; do
     install -Dm644 "data/icons/$s.png" "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps/io.github.felsenuboot.DenMail.png"
   done
+  install -Dm644 data/io.github.felsenuboot.DenMail.policy -t "$pkgdir/usr/share/polkit-1/actions"
   install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
 }

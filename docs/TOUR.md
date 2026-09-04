@@ -213,6 +213,19 @@ with a button to the thing it describes. A new tip comes with every start,
 and *Next tip* moves on. Under the tip, a row of quick links opens Clean up,
 Newsletters, Rules, the search and the shortcuts, whatever tip is showing.
 
+## Lock
+
+*Lock* in the main menu, or Ctrl+Shift+L, hides the mail behind a lock page
+and hides the compose and conversation windows with it; a notification that
+arrives meanwhile says "New mail" and nothing else. Turn the lock on under
+*Account → Lock* in Preferences, choose to lock after some idle time and
+when the desktop session locks. Unlocking uses the system's own
+authentication prompt (password, fingerprint, whatever PAM is set up for)
+where the polkit policy file is installed, which the AUR package does and
+`install.sh` shows the one command for; elsewhere, a Flatpak in particular,
+a passphrase set in Preferences. This is a privacy screen, not a security
+boundary: the cache and the token are not encrypted by it.
+
 ## Preferences
 
 Three pages. *General* holds the theme, sender logos, remote images and
