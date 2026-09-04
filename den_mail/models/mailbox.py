@@ -36,6 +36,8 @@ class MailboxObject(GObject.Object):
         self.data: dict = data or {}
         self.children = Gio.ListStore(item_type=MailboxObject)
         self.depth = depth
+        self.held = 0             # unread messages the screener hides from this mailbox (#62)
+        self._server_unread = 0
         if section_title is not None:
             self.is_section = True
             self.name = section_title
@@ -66,18 +68,26 @@ class MailboxObject(GObject.Object):
         self.data = data
         role = data.get("role") or ""
         color = color_override if color_override is not None and color_override >= 0 else label_color_index(data["id"])
+        self._server_unread = int(data.get("unreadEmails") or 0)
         for prop, value in (
             ("id", data["id"]),
             ("name", data.get("name") or ""),
             ("role", role),
             ("parent_id", data.get("parentId") or ""),
-            ("unread", int(data.get("unreadEmails") or 0)),
+            ("unread", max(0, self._server_unread - self.held)),
             ("total", int(data.get("totalEmails") or 0)),
             ("icon_name", ROLE_ICONS.get(role or None, "folder-symbolic") if role else "fm-tag-symbolic"),
             ("color_index", color),
         ):
             if self.get_property(prop) != value:
                 self.set_property(prop, value)
+
+    def set_held(self, held: int) -> None:
+        """The badge shows the server's unread count minus what the screener holds back (#62)."""
+        self.held = max(0, int(held))
+        unread = max(0, self._server_unread - self.held)
+        if self.unread != unread:
+            self.unread = unread
 
     @property
     def is_hidden(self) -> bool:

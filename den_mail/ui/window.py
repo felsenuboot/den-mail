@@ -417,6 +417,7 @@ class MainWindow(Adw.ApplicationWindow):
         if not on and self.current_mailbox is not None and self.current_mailbox.id == views.SCREENER:
             self._goto_role(ROLE_INBOX)
         self._sync_screened()
+        self._update_held()
         self._schedule_view_refresh()
 
     def cancel_scheduled(self, email_id: str) -> None:
@@ -588,11 +589,19 @@ class MainWindow(Adw.ApplicationWindow):
         if not self._view_timer and self.engine and (self.tree.show_views or self.config.get("screener")):
             self._view_timer = GLib.timeout_add(300, self._refresh_views)
 
+    def _update_held(self) -> None:
+        """The Inbox badge leaves out what the screener holds (#62); the Screener view counts it."""
+        inbox = self.tree.by_role(ROLE_INBOX)
+        if inbox is None or self.db is None:
+            return
+        inbox.set_held(self.db.screener_held_unread(inbox.id) if self.config.get("screener") else 0)
+
     def _refresh_views(self) -> bool:
         self._view_timer = 0
         if not self.engine or not self.db:
             return False
         self._sync_screened()
+        self._update_held()
         for view_id, (total, unread) in views.all_counts(self.db, self.engine.trash_junk_ids()).items():
             obj = self.tree.get(view_id)
             if obj is not None:
