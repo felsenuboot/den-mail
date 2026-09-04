@@ -536,7 +536,8 @@ QUICK_LINKS = (
     ("Clean up", "fm-broom-symbolic", "win.cleanup", "Senders ranked by how pointless their mail looks"),
     ("Newsletters", "fm-newsletter-symbolic", "win.newsletters", "Unsubscribe from many senders at once"),
     ("Rules", "fm-filter-symbolic", "win.rules", "What happens to mail from a sender, domain, list or category"),
-    ("Search", "system-search-symbolic", "win.search", "from: is:unread has:attachment older_than:7d …"),
+    ("Search", "system-search-symbolic", "win.search",
+     "Search the list or all mail; operators such as from:, is:unread, has:attachment and older_than:7d narrow it"),
     ("Shortcuts", "input-keyboard-symbolic", "win.shortcuts", "Every key the app answers to"),
 )
 
