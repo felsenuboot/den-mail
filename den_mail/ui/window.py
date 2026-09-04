@@ -45,7 +45,7 @@ from .rules import RulesDialog, prompt_sender_rule
 from .sidebar import Sidebar
 from .thread_window import ThreadWindow
 from .threadlist import ThreadList
-from .widgets import confirm, text_prompt
+from .widgets import confirm, secret_entry, text_prompt
 
 log = logging.getLogger(__name__)
 
@@ -1400,9 +1400,7 @@ class MainWindow(Adw.ApplicationWindow):
             self._toast("No passphrase or PIN is set, so the lock is off; set one under Account in Preferences", 6)
             return
         pin = method == lock.METHOD_PIN
-        entry = Gtk.PasswordEntry(show_peek_icon=True, activates_default=True)
-        if pin:
-            entry.set_input_purpose(Gtk.InputPurpose.PIN)
+        entry = secret_entry(pin, activates_default=True)
         dlg = Adw.AlertDialog(heading="Unlock Den Mail", body="Your Den Mail PIN." if pin else "Your Den Mail passphrase.")
         dlg.set_extra_child(entry)
         dlg.add_response("cancel", "Cancel")

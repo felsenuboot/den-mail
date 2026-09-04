@@ -18,8 +18,7 @@ def assistant_page(dialog: Adw.PreferencesDialog, config, assistant: llm.Assista
 
     group = Adw.PreferencesGroup(
         title="Language model",
-        description=("Features such as thread summaries ask a language model, and only when you use them. "
-                     "Nothing is sent anywhere while this is off."))
+        description="Summaries and other features ask a language model, only when you use them.")
     page.add(group)
 
     enable = Adw.SwitchRow(title="Use an assistant", active=config.get("assistant_enabled", False))
@@ -65,19 +64,16 @@ def assistant_page(dialog: Adw.PreferencesDialog, config, assistant: llm.Assista
 
     def refresh() -> None:
         s, u, _m = llm.settings(config)
-        group.set_description(
-            "Features such as thread summaries ask a language model, and only when you use them. "
-            "Nothing is sent anywhere while this is off. "
-            f"Blank fields use {s.title}'s defaults: {s.default_url}, model {s.default_model}.")
+        url.set_tooltip_text(f"Blank: {s.default_url}")
+        model.set_tooltip_text(f"Blank: {s.default_model}")
         key.set_visible(s.needs_key)
         stored = bool(llm.load_key(s.key)) if s.needs_key else False
-        key.set_title("API key (stored in the keyring; type to replace)" if stored else
-                      "API key (kept in the keyring, never in the config file)")
+        key.set_title("API key (stored; type to replace)" if stored else "API key (kept in the keyring)")
         if llm.is_local(u):
             where.set_subtitle(f"Stays on this machine: {u} is local")
             where_icon.set_from_icon_name("fm-shield-symbolic")
         else:
-            where.set_subtitle(f"Leaves this machine for {host_of(u)}: every summary sends the mail text there")
+            where.set_subtitle(f"Leaves this machine for {host_of(u)}")
             where_icon.set_from_icon_name("dialog-warning-symbolic")
         usage.set_subtitle(assistant.describe())
         assistant.reset()

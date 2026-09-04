@@ -160,7 +160,7 @@ class PreferencesDialog(Adw.PreferencesDialog):
 
         cleanup = Adw.PreferencesGroup(
             title="Cleaning up",
-            description="Everything here works from the mail the app has listed so far; nothing leaves your computer.")
+            description="Works from the mail the app has listed; nothing leaves your computer.")
         cleanup.add(_link("Clean up…", "Senders ranked by how pointless their mail looks; archive, delete, "
                           "mark read or unsubscribe from many at once", opener("cleanup")))
         cleanup.add(_link("Rules…", (f"{rules_count} rule{'s' if rules_count != 1 else ''}: " if rules_count
@@ -180,9 +180,7 @@ class PreferencesDialog(Adw.PreferencesDialog):
 
         screener = Adw.PreferencesGroup(
             title="First-time senders",
-            description="Mail from a sender you have never seen waits in a Screener view, out of the Inbox and "
-                        "without a notification, until you let them through or screen them out. Only mail that "
-                        "arrives while Den Mail is open is screened.")
+            description="Mail from senders you have never seen waits in a Screener view until you decide.")
         screener.add(_switch(config, "screener", False, "Screen first-time senders", "", on_screener))
         screener.add(_switch(config, "label_suggestions", True, "Suggest labels",
                              "Learned from the mail you have labelled: a \"Work?\" chip on a conversation that "
@@ -198,23 +196,24 @@ class PreferencesDialog(Adw.PreferencesDialog):
         changed = on_lock_changed or (lambda: None)
         polkit = lock.policy_installed()
         keyring = lock.keyring_available()
-        group = Adw.PreferencesGroup(
-            title="Lock",
-            description=("Hides the mail behind a lock page. Unlocking asks the system's own prompt, the keyring "
-                         "daemon's prompt for a Den Mail keyring of its own, or a passphrase or PIN set here."
-                         + ("" if polkit else " The system prompt needs the polkit policy file installed (see the README).")
-                         + " A privacy screen, not a security boundary: the cache and the token are not encrypted."))
-        enable = Adw.SwitchRow(title="Lock screen", subtitle="Adds Lock to the main menu and Ctrl+Shift+L",
+        group = Adw.PreferencesGroup(title="Lock", description="A privacy screen for the mail; nothing is encrypted by it.")
+        enable = Adw.SwitchRow(title="Lock screen", subtitle="Lock in the main menu, Ctrl+Shift+L",
                                active=config.get("lock_enabled", False))
         methods = ([lock.METHOD_SYSTEM] if polkit else []) + [lock.METHOD_PASSPHRASE, lock.METHOD_PIN] \
             + ([lock.METHOD_KEYRING] if keyring else [])
+        explain = {
+            lock.METHOD_SYSTEM: "The system's own authentication prompt",
+            lock.METHOD_PASSPHRASE: "A passphrase set below",
+            lock.METHOD_PIN: "A PIN set below",
+            lock.METHOD_KEYRING: "The keyring daemon's prompt, for a Den Mail keyring of its own",
+        }
         self._passphrase_row = None
         self._keyring_row = None
 
         def on_enable(row, _p):
             m = lock.method(config)
             if row.get_active() and not lock.method_ready(config, m):
-                # Nothing could ask for anything yet: a passphrase or PIN first, or the keyring (#65, #66).
+                # Nothing could ask for anything yet: the secret first, or the keyring (#65, #66).
                 if m == lock.METHOD_KEYRING:
                     self._create_keyring(lambda ok: row.set_active(ok))
                 else:
@@ -238,39 +237,60 @@ class PreferencesDialog(Adw.PreferencesDialog):
         current_method = lock.method(config)
         kind.set_selected(methods.index(current_method) if current_method in methods else 0)
         group.add(kind)
-        has = bool(config.get("lock_passphrase"))
-        row = Adw.ActionRow(title="Passphrase or PIN", subtitle="Set" if has else "None yet: needed before the lock can be enabled",
-                            activatable=True)
+        row = Adw.ActionRow(activatable=True)
         row.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
         row.connect("activated", lambda *_: self._set_passphrase(config, row))
         group.add(row)
         self._passphrase_row = row
-        keyring_row = Adw.ActionRow(
-            title="Den Mail keyring",
-            subtitle=("Exists; the keyring daemon asks its password when unlocking" if keyring and lock.keyring_exists()
-                      else "Created when chosen: the daemon asks for a new password once, and only this collection "
-                           "is locked with the app"))
+        keyring_row = Adw.ActionRow(title="Den Mail keyring")
         group.add(keyring_row)
         self._keyring_row = keyring_row
 
-        def show_rows() -> None:
+        def refresh() -> None:
             m = lock.method(config)
+            kind.set_subtitle(explain[m])
+            pin = m == lock.METHOD_PIN
+            row.set_title("PIN" if pin else "Passphrase")
+            row.set_subtitle("Set" if config.get("lock_passphrase") else "Not set yet")
             row.set_visible(m in (lock.METHOD_PASSPHRASE, lock.METHOD_PIN))
             keyring_row.set_visible(m == lock.METHOD_KEYRING)
+            keyring_row.set_subtitle("Exists" if keyring and lock.keyring_exists() else "Not created yet")
+
+        self._refresh_lock_rows = refresh
+
+        def select(m: str) -> None:
+            """Set the combo without running on_kind."""
+            kind.handler_block(handler)
+            kind.set_selected(methods.index(m))
+            kind.handler_unblock(handler)
 
         def on_kind(r, _p):
+            before = lock.method(config)
             m = methods[r.get_selected()]
+            if m == before:
+                return
+            if m == lock.METHOD_KEYRING and not lock.keyring_exists():
+                # The daemon asks for the new keyring's password now; cancelled or failed, the
+                # choice goes back to what it was, so the lock never points at nothing (#95).
+                def created(ok: bool) -> None:
+                    if ok:
+                        config.set("lock_method", m)
+                    else:
+                        select(before)
+                    refresh()
+
+                self._create_keyring(created)
+                return
             config.set("lock_method", m)
             config.set("lock_kind", "pin" if m == lock.METHOD_PIN else "passphrase")
-            show_rows()
-            if m == lock.METHOD_KEYRING and not lock.keyring_exists():
-                self._create_keyring(lambda ok: None)
-            elif config.get("lock_enabled") and not lock.method_ready(config, m):
-                # The lock cannot ask anything with this method yet: off until it can (#65).
-                enable.set_active(False)
+            if m in (lock.METHOD_PASSPHRASE, lock.METHOD_PIN) and before in (lock.METHOD_PASSPHRASE, lock.METHOD_PIN):
+                config.set("lock_passphrase", "")   # a passphrase is not a PIN and the other way round
+            refresh()
+            if config.get("lock_enabled") and not lock.method_ready(config, m):
+                enable.set_active(False)   # off until this method can ask something (#65)
 
-        kind.connect("notify::selected", on_kind)
-        show_rows()
+        handler = kind.connect("notify::selected", on_kind)
+        refresh()
         return group
 
     def _create_keyring(self, then) -> None:
@@ -283,14 +303,12 @@ class PreferencesDialog(Adw.PreferencesDialog):
             try:
                 lock.keyring_create()
                 ok, message = True, "Den Mail keyring created"
-            except Exception as e:  # noqa: BLE001 - GLib.Error from the daemon, or no daemon
-                ok, message = False, f"Keyring not created: {getattr(e, 'message', e)}"
+            except Exception as e:  # noqa: BLE001 - GLib.Error from the daemon (cancelled too), or no daemon
+                ok, message = False, f"No keyring created: {getattr(e, 'message', e)}"
             GLib.idle_add(done, ok, message)
 
         def done(ok: bool, message: str) -> bool:
             self.add_toast(Adw.Toast(title=message))
-            if ok and self._keyring_row is not None:
-                self._keyring_row.set_subtitle("Exists; the keyring daemon asks its password when unlocking")
             then(ok)
             return False
 
@@ -298,18 +316,19 @@ class PreferencesDialog(Adw.PreferencesDialog):
 
     def _set_passphrase(self, config, row: Adw.ActionRow | None, then=None) -> None:
         from .. import lock
+        from .widgets import secret_entry
 
         pin = lock.method(config) == lock.METHOD_PIN
         what = "PIN" if pin else "passphrase"
-        first = Gtk.PasswordEntry(show_peek_icon=True, placeholder_text=what.capitalize())
-        second = Gtk.PasswordEntry(show_peek_icon=True, placeholder_text="Again", activates_default=True)
-        if pin:
-            for e in (first, second):
-                e.set_input_purpose(Gtk.InputPurpose.PIN)
+        first = secret_entry(pin, what.capitalize())
+        second = secret_entry(pin, "Again", activates_default=True)
+        problem = Gtk.Label(xalign=0, wrap=True, visible=False, css_classes=["error"])
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         box.append(first)
         box.append(second)
-        dlg = Adw.AlertDialog(heading=f"Den Mail {what}", body="Asked for when unlocking. Leave both empty to remove it.")
+        box.append(problem)
+        dlg = Adw.AlertDialog(heading=f"Set a {what}",
+                              body=f"Asked for when unlocking. {'Digits only. ' if pin else ''}Leave both empty to remove it.")
         dlg.set_extra_child(box)
         dlg.add_response("cancel", "Cancel")
         dlg.add_response("ok", "Set")
@@ -322,14 +341,22 @@ class PreferencesDialog(Adw.PreferencesDialog):
                 if then is not None:
                     then(bool(config.get("lock_passphrase")))
                 return
-            if first.get_text() != second.get_text() or (pin and not first.get_text().isdigit() and first.get_text()):
-                self._set_passphrase(config, row, then)
+            text = first.get_text()
+            if text != second.get_text():
+                problem.set_label("The two entries differ")
+            elif pin and text and not text.isdigit():
+                problem.set_label("A PIN is digits only")
+            else:
+                config.set("lock_passphrase", lock.hash_passphrase(text) if text else "")
+                if row is not None:
+                    row.set_subtitle("Set" if text else "Not set yet")
+                if then is not None:
+                    then(bool(text))
                 return
-            config.set("lock_passphrase", lock.hash_passphrase(first.get_text()) if first.get_text() else "")
-            if row is not None:
-                row.set_subtitle("Set" if first.get_text() else "None yet: needed before the lock can be enabled")
-            if then is not None:
-                then(bool(first.get_text()))
+            problem.set_visible(True)
+            second.set_text("")
+            second.grab_focus()
+            dlg.present(self)   # keep asking in the same dialog rather than closing it
 
         dlg.connect("response", on_response)
         dlg.present(self)
@@ -345,8 +372,7 @@ class PreferencesDialog(Adw.PreferencesDialog):
         sync = Adw.PreferencesGroup(title="Sync and notifications")
         sync.add(_switch(config, "notify_new_mail", True, "Notify about new mail"))
         sync.add(_switch(config, "run_in_background", False, "Keep running when the window is closed",
-                         "Closing the window hides it; mail keeps syncing and notifications keep coming. "
-                         "Quit in the main menu (Ctrl+Q) ends it"))
+                         "Syncing and notifications go on; Quit (Ctrl+Q) ends it"))
         poll = Adw.SpinRow.new_with_range(30, 3600, 30)
         poll.set_title("Fallback poll interval (seconds)")
         poll.set_subtitle("Used when the push connection is unavailable")

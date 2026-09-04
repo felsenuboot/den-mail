@@ -1,0 +1,1 @@
+Lock: a PIN can be set and used again (the dialog and Unlock failed silently for PINs), the dialog says what is wrong instead of reopening, switching between passphrase and PIN clears the old secret, and cancelling the keyring's password prompt puts the unlock method back to what it was

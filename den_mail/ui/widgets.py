@@ -27,6 +27,15 @@ def copy_text(widget: Gtk.Widget, text: str) -> None:
     widget.get_clipboard().set(text)
 
 
+def secret_entry(pin: bool, placeholder: str = "", activates_default: bool = False) -> Gtk.Widget:
+    """An entry for a passphrase or a PIN. Gtk.PasswordEntry has no input purpose, so a PIN
+    is a hidden Gtk.Entry with the PIN purpose (numeric keypads, no suggestions) (#95)."""
+    if pin:
+        return Gtk.Entry(visibility=False, input_purpose=Gtk.InputPurpose.PIN, placeholder_text=placeholder,
+                         activates_default=activates_default, max_length=32)
+    return Gtk.PasswordEntry(show_peek_icon=True, placeholder_text=placeholder, activates_default=activates_default)
+
+
 def toast(widget: Gtk.Widget, text: str, timeout: int = 3) -> None:
     """Find the nearest ToastOverlay above `widget` and show a toast."""
     w = widget
