@@ -554,7 +554,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.conversation.clear()
         self.threadlist.set_empty_text("No results", "Try different words, or search all mail.")
         self.query_key = self.engine.load_query(search_query_spec(text, mailbox_id, self.engine.trash_junk_ids(),
-                                                                  self._current_sort(), self.threadlist.unread_only))
+                                                                  self._current_sort(), self.threadlist.unread_only,
+                                                                  mailboxes=self.db.get_mailboxes()))
         self.threadlist.set_title("All mail" if not text else "Search", "Loading…" if not text else "Searching…")
         self.threadlist.scroll_to_top()
 

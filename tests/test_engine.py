@@ -114,6 +114,66 @@ def test_search_spec_parsing(engine):
     assert any("ticket" in s.lower() for s in subjects)
 
 
+def test_search_tokens_and_phrases():
+    from den_mail.store.sync import search_tokens
+    assert search_tokens('from:"Anna Berger" "team meeting" subject:"re: x" is:unread plain "') == [
+        ("from", "Anna Berger"), ("", "team meeting"), ("subject", "re: x"), ("is", "unread"), ("", "plain")]
+    assert search_tokens('"open quote runs on') == [("", "open quote runs on")]
+    assert search_tokens("ticket:123 :x y:") == [("ticket", "123"), ("", ":x"), ("", "y:")]
+    spec = search_query_spec('"team meeting" from:"Anna Berger" ticket', None, [])
+    assert spec["filter"]["conditions"] == [{"text": "team meeting"}, {"from": "Anna Berger"}, {"text": "ticket"}]
+
+
+def test_search_dates():
+    from datetime import UTC, datetime
+
+    from den_mail.store.sync import search_date
+    now = datetime(2026, 9, 4, 12, 30, tzinfo=UTC)
+    assert search_date("2026-09-04") == "2026-09-04T00:00:00Z"
+    assert search_date("2026/9/4") == "2026-09-04T00:00:00Z"
+    assert search_date("2026-09") == "2026-09-01T00:00:00Z"
+    assert search_date("2026") == "2026-01-01T00:00:00Z"
+    assert search_date("2026-13") is None and search_date("soon") is None
+    assert search_date("7d", now) == "2026-08-28T12:30:00Z"
+    assert search_date("2w", now) == "2026-08-21T12:30:00Z"
+    assert search_date("12h", now) == "2026-09-04T00:30:00Z"
+    assert search_date("2026-09-04T10:00:00", now) == "2026-09-04T10:00:00Z"
+    spec = search_query_spec("older_than:7d newer_than:1m before:2026 after:2025-06 before:soon", None, [], now=now)
+    assert spec["filter"]["conditions"] == [
+        {"before": "2026-08-28T12:30:00Z"}, {"after": "2026-08-05T12:30:00Z"}, {"before": "2026-01-01T00:00:00Z"},
+        {"after": "2025-06-01T00:00:00Z"}, {"text": "before:soon"}]
+
+
+def test_search_mailbox_operators(engine):
+    from den_mail.store.sync import resolve_mailbox
+    boxes = engine.db.get_mailboxes()
+    by_name = {m["name"]: m["id"] for m in boxes}
+    assert resolve_mailbox("inbox", boxes) == engine.roles[ROLE_INBOX]
+    assert resolve_mailbox("Spam", boxes) == engine.roles["junk"] == resolve_mailbox("junk", boxes)
+    assert resolve_mailbox("projects", boxes) == by_name["Projects"]
+    assert resolve_mailbox("Work/Projects", boxes) == by_name["Projects"]
+    assert resolve_mailbox("work / projects", boxes) == by_name["Projects"]
+    assert resolve_mailbox("news-letters", boxes) is None and resolve_mailbox("nowhere", boxes) is None
+    tj = engine.trash_junk_ids()
+    spec = search_query_spec("label:receipts in:Inbox", None, tj, mailboxes=boxes)
+    assert spec["filter"]["conditions"] == [
+        {"inMailbox": by_name["Receipts"]}, {"inMailbox": engine.roles[ROLE_INBOX]}, {"inMailboxOtherThan": tj}]
+    # a mailbox scope and a label combine; an unknown label is searched as text
+    spec = search_query_spec("label:nowhere", engine.roles[ROLE_INBOX], tj, mailboxes=boxes)
+    assert spec["filter"]["conditions"] == [{"text": "nowhere"}, {"inMailbox": engine.roles[ROLE_INBOX]}]
+    # naming Trash or Spam, or in:anywhere, lifts the exclusion
+    assert search_query_spec("in:trash", None, tj, mailboxes=boxes)["filter"] == {"inMailbox": engine.roles["trash"]}
+    assert search_query_spec("in:anywhere", None, tj, mailboxes=boxes)["filter"] == {}
+    key = engine.load_query(search_query_spec('in:"Work/Projects"', None, tj, mailboxes=boxes))
+    pump(lambda: any(a[0] == key for a in engine.events.get("query-updated", [])))
+    ids = engine.db.get_query(key)["ids"]
+    assert ids and all(by_name["Projects"] in engine.db.get_email(i)["mailboxIds"] for i in ids)
+    key = engine.load_query(search_query_spec("in:trash", None, tj, mailboxes=boxes))
+    pump(lambda: any(a[0] == key for a in engine.events.get("query-updated", [])))
+    ids = engine.db.get_query(key)["ids"]
+    assert ids and all(engine.roles["trash"] in engine.db.get_email(i)["mailboxIds"] for i in ids)
+
+
 def test_optimistic_action_and_undo(engine, server):
     inbox = engine.roles[ROLE_INBOX]
     key = engine.load_query(mailbox_query_spec(inbox))

@@ -35,7 +35,8 @@ you own in the From field.
   group by sender (any sort order), fold groups, act on a whole sender at once.
 - **One-click unsubscribe**, an unread filter, quoted history folded behind
   a `···` pill, search operators
-  (`from:` `to:` `subject:` `is:unread` `has:attachment` `before:` `after:`),
+  (`from:` `to:` `subject:` `is:unread` `has:attachment` `label:` `in:`
+  `before:` `after:` `older_than:7d`, quoted phrases),
   notifications with the sender's logo, `mailto:` handling, keyboard shortcuts.
 
 ## How fast is it

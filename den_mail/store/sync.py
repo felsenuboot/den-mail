@@ -11,11 +11,13 @@ import hashlib
 import json
 import logging
 import queue
+import re
 import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -116,24 +118,114 @@ def mailbox_query_spec(mailbox_id: str, sort: list[dict] | None = None, unread_o
     return {"filter": filt, "sort": sort or SORT_NEWEST, "collapseThreads": True}
 
 
+# Search box grammar.  A token is a bare word, a "quoted phrase", or operator:value where the value may be quoted.
+_TOKEN_RE = re.compile(r'(?:[^\s"]|"[^"]*"?)+')
+_RELATIVE_RE = re.compile(r"^(\d+)\s*([hdwmy])$")
+_DATE_RE = re.compile(r"^(\d{4})(?:[-/](\d{1,2})(?:[-/](\d{1,2}))?)?$")
+_UNIT_DAYS = {"h": 1 / 24, "d": 1, "w": 7, "m": 30, "y": 365}
+
+# Names `in:` accepts for the system mailboxes, whatever they are called in the account.
+MAILBOX_ALIASES = {
+    "inbox": ROLE_INBOX, "archive": ROLE_ARCHIVE, "drafts": ROLE_DRAFTS, "draft": ROLE_DRAFTS, "sent": ROLE_SENT,
+    "spam": ROLE_JUNK, "junk": ROLE_JUNK, "trash": ROLE_TRASH, "bin": ROLE_TRASH, "deleted": ROLE_TRASH,
+}
+_EVERYWHERE = ("anywhere", "all", "everywhere")
+
+
+def search_tokens(text: str) -> list[tuple[str, str]]:
+    """Split a search string into (operator, value) pairs; a bare word or phrase has an empty operator.
+
+    Double quotes group words: `subject:"team meeting"`, `"exact phrase"`; a quote left open runs to the end.
+    """
+    out: list[tuple[str, str]] = []
+    for raw in _TOKEN_RE.findall(text):
+        if raw.startswith('"'):
+            phrase = raw.strip('"').strip()
+            if phrase:
+                out.append(("", phrase))
+            continue
+        key, sep, value = raw.partition(":")
+        value = value.strip('"').strip()
+        if sep and key and value:
+            out.append((key.lower(), value))
+        elif raw.strip('"').strip():
+            out.append(("", raw.strip('"').strip()))
+    return out
+
+
+def _mailbox_key(name: str) -> str:
+    return re.sub(r"[\s_\-]+", " ", name.strip().lower())
+
+
+def resolve_mailbox(name: str, mailboxes: list[dict]) -> str | None:
+    """The id of the mailbox a `label:`/`in:` value names.
+
+    A role alias (inbox, spam, trash…), a full path (`work/projects`) or a name (`projects`); case, hyphens and
+    underscores don't matter, so `label:to-do` finds "To Do".  A name shared by several mailboxes picks the
+    shallowest.
+    """
+    parts = [_mailbox_key(p) for p in name.split("/") if _mailbox_key(p)]
+    if not parts:
+        return None
+    role = MAILBOX_ALIASES.get(parts[0]) if len(parts) == 1 else None
+    if role:
+        for m in mailboxes:
+            if m.get("role") == role:
+                return m["id"]
+    by_id = {m["id"]: m for m in mailboxes}
+    want = "/".join(parts)
+    best: tuple[int, str] | None = None
+    for m in mailboxes:
+        path: list[str] = []
+        cur: dict | None = m
+        while cur is not None and cur["id"] not in path:
+            path.append(cur["id"])
+            cur = by_id.get(cur.get("parentId") or "")
+        names = "/".join(_mailbox_key(by_id[i].get("name") or "") for i in reversed(path))
+        if (names == want or names.endswith("/" + want)) and (best is None or len(path) < best[0]):
+            best = (len(path), m["id"])
+    return best[1] if best else None
+
+
+def search_date(value: str, now: datetime | None = None) -> str | None:
+    """A `before:`/`after:` value as a JMAP UTC date: `2026-09-04`, `2026-09`, `2026`, or `7d`/`2w`/`3m`/`1y` ago."""
+    m = _RELATIVE_RE.match(value.lower())
+    if m:
+        now = now or datetime.now(UTC)
+        return (now - timedelta(days=int(m[1]) * _UNIT_DAYS[m[2]])).strftime("%Y-%m-%dT%H:%M:%SZ")
+    m = _DATE_RE.match(value)
+    if m:
+        try:
+            return datetime(int(m[1]), int(m[2] or 1), int(m[3] or 1)).strftime("%Y-%m-%dT00:00:00Z")
+        except ValueError:
+            return None
+    if "T" in value and len(value) >= 16:
+        return value if value.endswith("Z") else value + "Z"
+    return None
+
+
 def search_query_spec(text: str, mailbox_id: str | None, trash_junk: list[str],
-                      sort: list[dict] | None = None, unread_only: bool = False) -> dict:
-    """Turn a search box string into a JMAP filter (supports from:/to:/subject:/is:/has:/before:/after:)."""
+                      sort: list[dict] | None = None, unread_only: bool = False,
+                      mailboxes: list[dict] | None = None, now: datetime | None = None) -> dict:
+    """Turn a search box string into a JMAP filter.
+
+    Operators: from:/to:/cc:/subject: (quoted values allowed), is:unread|read|flagged|starred|unflagged,
+    has:attachment, before:/after: (a date, or `7d` ago), older_than:/newer_than: (same values),
+    label:/in: (a mailbox name or path resolved against `mailboxes`; in:anywhere lifts the Trash/Spam exclusion).
+    Bare words search everything, a "quoted phrase" must appear as written.  A `label:` naming no mailbox, or
+    a date that does not parse, is searched as text instead.
+    """
     conditions: list[dict] = []
     words: list[str] = []
-    for token in text.split():
-        key, sep, value = token.partition(":")
-        key = key.lower()
-        if not sep or not value:
-            words.append(token)
-        elif key == "from":
-            conditions.append({"from": value})
-        elif key == "to":
-            conditions.append({"to": value})
-        elif key == "cc":
-            conditions.append({"cc": value})
-        elif key == "subject":
-            conditions.append({"subject": value})
+    everywhere = False
+    for key, value in search_tokens(text):
+        if not key:
+            if " " in value:
+                conditions.append({"text": value})
+            else:
+                words.append(value)
+        elif key in ("from", "to", "cc", "subject"):
+            conditions.append({key: value})
         elif key == "is" and value in ("unread", "read", "flagged", "starred", "unflagged"):
             if value == "unread":
                 conditions.append({"notKeyword": KW_SEEN})
@@ -145,20 +237,25 @@ def search_query_spec(text: str, mailbox_id: str | None, trash_junk: list[str],
                 conditions.append({"notKeyword": "$flagged"})
         elif key == "has" and value in ("attachment", "attachments"):
             conditions.append({"hasAttachment": True})
-        elif key in ("before", "after") and len(value) >= 4:
-            iso = value if "T" in value else f"{value}T00:00:00Z"
-            conditions.append({key: iso})
-        elif key == "label" or key == "in":
-            words.append(token)  # resolved by caller if needed
+        elif key in ("before", "after", "older_than", "newer_than", "older", "newer") and (when := search_date(value, now)):
+            conditions.append({"before" if key.startswith(("before", "older")) else "after": when})
+        elif key in ("label", "in") and value.lower() in _EVERYWHERE:
+            everywhere = True
+        elif key in ("label", "in") and (mid := resolve_mailbox(value, mailboxes or [])):
+            conditions.append({"inMailbox": mid})
+            if mid in trash_junk:
+                everywhere = True
+        elif key in ("label", "in"):
+            words.append(value)
         else:
-            words.append(token)
+            words.append(f"{key}:{value}")
     if words:
         conditions.append({"text": " ".join(words)})
     if unread_only:
         conditions.append({"notKeyword": KW_SEEN})
     if mailbox_id:
         conditions.append({"inMailbox": mailbox_id})
-    elif trash_junk:
+    elif trash_junk and not everywhere:
         conditions.append({"inMailboxOtherThan": trash_junk})
     if not conditions:
         filt: dict = {}
