@@ -23,7 +23,7 @@ from typing import Any, ClassVar
 
 from gi.repository import GLib, GObject
 
-from ..classify.rules import CLASSIFY_HEADERS
+from ..classify.rules import CLASSIFY_HEADERS, RULES_VERSION
 from ..config import Config, attachments_dir
 from ..jmap.client import (
     AuthError,
@@ -63,6 +63,7 @@ PRIO_BACKGROUND = 3
 PRIO_BACKFILL = 4   # after everything the user is waiting for
 
 BACKFILL_BATCH = 500
+SEED_SENT_LIMIT = 2000   # newest sent messages whose recipients count as "written to"
 
 SORT_NEWEST = [{"property": "receivedAt", "isAscending": False}]
 
@@ -451,7 +452,37 @@ class SyncEngine(GObject.Object):
             self._incremental_sync()
         self._set_online(True)
         self._emit("sync-status", "idle", "")
+        self.enqueue(PRIO_BACKFILL, self._job_seed_correspondents, "seed-correspondents")
         self.enqueue(PRIO_BACKFILL, self._job_backfill_headers, "backfill-headers")
+        self.enqueue(PRIO_BACKFILL, self._job_reclassify_after_upgrade, "reclassify")
+
+    def _job_reclassify_after_upgrade(self) -> None:
+        """A cache classified by older rules is run through the current ones once."""
+        if self.db.get_meta("rules_version") == RULES_VERSION:
+            return
+        ids = self.db.reclassify()
+        self.db.set_meta("rules_version", RULES_VERSION)
+        if ids:
+            log.info("reclassified %d cached messages with rules %s", len(ids), RULES_VERSION)
+            self._emit("emails-changed", ids)
+
+    def _job_seed_correspondents(self) -> None:
+        """Once per cache: who the user has written to, from the Sent folder (#18).
+        Only recipients are fetched, the messages themselves are not cached."""
+        sent = self.roles.get(ROLE_SENT)
+        if not sent or self.db.get_meta("correspondents_seeded"):
+            return
+        acc = self.client.session.account_id
+        req = Request()
+        c_q = req.add("Email/query", {"accountId": acc, "filter": {"inMailbox": sent}, "collapseThreads": False,
+                                      "sort": SORT_NEWEST, "limit": SEED_SENT_LIMIT})
+        c_get = req.add("Email/get", {"accountId": acc, "properties": ["id", "to", "cc", "bcc", "receivedAt"],
+                                      "#ids": Request.ref(c_q, "Email/query", "/ids")})
+        resp = self.client.send(req)
+        changed = self.db.record_correspondents(resp.get(c_get)["list"])
+        self.db.set_meta("correspondents_seeded", "1")
+        if changed:
+            self._emit("emails-changed", changed)
 
     def _job_backfill_headers(self) -> None:
         """Messages cached before the categoriser's headers were list properties (#18):

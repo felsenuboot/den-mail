@@ -4,16 +4,25 @@ Pure functions over the list-property Email object the cache holds (subject,
 preview, addresses and a handful of headers).  The first rule that fires wins;
 they are ordered by how much a signal can be trusted:
 
-1. ``List-Post`` (a list one can write to)            -> lists
-2. bulk headers (``List-Unsubscribe``, ``Precedence``, ``Feedback-ID``, ``List-Id``)
-   -> promotions when the wording sells something, else newsletters
-   (a receipt or a sign-in alert that happens to carry them keeps its category)
-3. security / transaction wording in the subject       -> security / transactions
-4. a sender the user has written to                     -> primary
-5. ``Auto-Submitted`` or a no-reply style address       -> updates
+0. mail from one of the user's own addresses             -> primary
+1. ``List-Post`` from a person (a list one can write to) -> lists
+2. list headers (``List-Unsubscribe``, ``Precedence``, ``List-Id``)
+   -> promotions when the wording sells something; updates when a no-reply
+   sender shows no newsletter cue (Indeed matches, Google notices, monthly
+   reports); else newsletters.  A receipt or a sign-in alert that happens to
+   carry them keeps its category.
+3. security / transaction wording in the subject         -> security / transactions
+4. a ``[list:1234]`` subject tag                         -> lists
+5. a sender the user has written to                      -> primary
+6. ``Auto-Submitted``, ``Feedback-ID`` or a no-reply style address -> updates
    (their preview may still say it is a code or a receipt)
-6. weaker content matches in subject and preview
-7. everything else                                      -> primary
+7. weaker content matches in subject and preview
+8. everything else                                       -> primary
+
+``Feedback-ID`` on its own is not a newsletter signal: large senders stamp it
+on order confirmations, comment notifications and support replies, and some
+providers on the user's own sent mail.  Together with ``List-Unsubscribe`` it
+is what every real newsletter carries, so it only counts as "automated".
 """
 
 from __future__ import annotations
@@ -53,6 +62,8 @@ CLASSIFY_HEADERS = (H_LIST_POST, H_LIST_ID, H_LIST_UNSUBSCRIBE, H_PRECEDENCE, H_
 
 SOURCE_RULES = "rules"
 SOURCE_USER = "user"
+# Bump when a rule changes: a cache classified by an older version is run through the rules again.
+RULES_VERSION = "2"
 
 
 @dataclass(frozen=True)
@@ -72,13 +83,50 @@ _NOREPLY_RE = re.compile(r"no[-_.]?reply|do[-_.]?not[-_.]?reply|no[-_.]?response
 _AUTOMATED_LOCAL_RE = re.compile(
     r"^(?:notifications?|notify|notification-?system|alerts?|alarm|mailer-daemon|postmaster|bounces?|"
     r"automated|automat(?:ic|isch)|system|auto-?confirm|robot|bot|daemon|updates?|info-?mail|service|"
-    r"kundenservice|benachrichtigung(?:en)?|newsletter|news|marketing|promo(?:tions?)?|offers?|angebote?)"
+    r"kundenservice|benachrichtigung(?:en)?|newsletter|news|marketing|promo(?:tions?)?|offers?|angebote?|"
+    r"security|accounts?|billing|invoices?|receipts?|orders?|order-?(?:update|confirmation|status)|"
+    r"bestell\w*|rechnung\w*|shipping|ship-?confirm|versand\w*|delivery|tracking|verify|verification|"
+    r"confirm(?:ation)?|password|passwort|comments?-noreply|drive-shares\w*|team-?noreply)"
     r"(?:[-_.+]|$)",
     re.IGNORECASE,
 )
 # Local parts that are still marketing even without list headers.
 _PROMO_LOCAL_RE = re.compile(r"^(?:marketing|promo(?:tions?)?|offers?|angebote?|deals?|sale|sales)(?:[-_.+]|$)",
                              re.IGNORECASE)
+
+# Signs that list mail is an editorial or marketing send rather than a notice:
+# the sender's mailbox, name or domain, the subject, or the "view in browser"
+# line most campaign tools put first.
+_NEWSLETTER_SENDER_RE = re.compile(
+    r"news|newsletter|briefing|digest|bulletin|weekly|daily|monthly|magazin|magazine|journal|editor|redaktion|"
+    r"freibrief|rundbrief|infobrief|letter|subscri|campaign|mailing|hello|hi\b|team|community|crew|studio|"
+    r"press|blog|insights?|report|review|recap|roundup|tips|inspiration|club|friends|members|rewards|store|shop",
+    re.IGNORECASE,
+)
+_NEWSLETTER_SUBJECT_RE = _rx(
+    r"\b(?:newsletter|digest|briefing|bulletin|roundup|round-up|recap|edition|issue\s*#?\s*\d+|vol\.?\s*\d+|"
+    r"this week|last week|weekly|monthly|quarterly|ausgabe|rundbrief|infobrief|wochenrückblick|kw\s?\d{1,2}|"
+    r"what's new|neuigkeiten|top stories|in the news)\b",
+)
+_VIEW_IN_BROWSER_RE = _rx(
+    r"\b(?:view|read|open|see)\s+(?:this\s+(?:email|e-mail|message)\s+)?(?:it\s+)?(?:in|on)\s+(?:your\s+|a\s+)?(?:browser|web)\b",
+    r"\b(?:view|read)\s+(?:online|as a web ?page)\b|\bweb[- ]?version\b|\bonline[- ]?version\b",
+    r"\bim browser\b|\bbrowser-?ansicht\b|\bonline ansehen\b|\bweb-?version\b|\bhier klicken für die web\b|\bwird diese (?:nachricht|e-?mail) nicht richtig\b",
+    r"\bafficher dans\b|\bver en el navegador\b|\bvisualizza nel browser\b|\bin browser bekijken\b",
+)
+# Automated notices that campaign tools send with list headers: application receipts, account notices.
+_NOTICE_RE = _rx(
+    r"\b(?:thank(?:s| you) for (?:your )?(?:applying|application|interest in)|your application|application (?:received|confirmation|status|update)|"
+    r"we(?:'ve| have) received your|application at|applied to|candidate account|interview (?:request|invitation|confirmation))\b",
+    r"\b(?:deine|ihre|eure)\s+bewerbung\b|\bbewerbung\s+(?:eingegangen|erhalten|bei)\b|\b(?:danke|vielen dank) für (?:deine|ihre) bewerbung\b|\bbewerbungseingang\b",
+    r"\b(?:account|konto)\s+(?:wird|will be|has been|wurde)\s+(?:gelöscht|deleted|geschlossen|closed|deaktiviert|deactivated)\b",
+    r"\b(?:bitte bewerten|rate your|how was your|wie war)\b",
+    r"\b(?:postfach|new (?:documents?|messages?)\s+(?:in|available|waiting)|neue (?:dokumente|nachrichten?)|ungelesene nachrichten?)\b",
+    r"\b(?:account|konto|kundenkonto|profile|profil)\s+(?:has been |was |wurde |erfolgreich )?(?:created|erstellt|angelegt|updated|aktualisiert)\b",
+    r"^(?:updated )?(?:invitation|einladung|accepted|angenommen|declined|abgelehnt|tentative|canceled event|abgesagt)\s*:",
+)
+# "[gsba-bkyomu:35917]": the numbered subject tag of list software that sets no list headers
+_LIST_TAG_RE = re.compile(r"\[[A-Za-z][\w.-]{1,40}:\d{2,7}\]")
 
 # --- Security: codes, passwords, sign-ins (EN + DE)
 _SECURITY_RE = _rx(
@@ -91,9 +139,9 @@ _SECURITY_RE = _rx(
     r"\bpassword\s+(?:reset|change|changed|updated|expir\w*|recovery)\b",
     r"\bnew\s+(?:sign-?in|log-?in|login|device|browser|location)\b",
     r"\b(?:signed|logged)\s+in\s+(?:from|on|to)\b",
-    r"\b(?:unusual|suspicious|unrecognized|unrecognised|unknown|new)\s+(?:activity|sign-?in|login|access|attempt|device)\b",
+    r"\b(?:unusual|suspicious|unrecognized|unrecognised|unfamiliar|unknown|new)\s+(?:activity|sign-?in|login|access|attempt|device)\b",
     r"\bsecurity\s+(?:alert|notice|notification|warning|update|key|check)\b",
-    r"\b(?:verify|confirm|activate)\s+your\s+(?:e-?mail|email address|account|identity|address|registration|phone)\b",
+    r"\b(?:verify|confirm|activate)\s+your\s+(?:\w+\s+){0,2}(?:e-?mail|email address|account|identity|address|registration|phone)\b",
     r"\b(?:email|e-mail|account)\s+(?:verification|confirmation|activation)\b",
     r"\bmagic\s+link\b",
     r"\btwo[-\s]?factor\b|\b2fa\b|\bmfa\b",
@@ -104,6 +152,9 @@ _SECURITY_RE = _rx(
     r"\b(?:ihr|dein|der)\s+(?:\w+\s+)?(?:code|einmalcode|einmalpasswort|pin)\b",
     r"\bcode\s+(?:lautet|ist|zur|für)\b",
     r"\b(?:passwort|kennwort)\s+(?:zurücksetzen|zuruecksetzen|ändern|geändert|aendern|geaendert|vergessen|erneuern|abgelaufen)\b",
+    r"\b(?:neues|dein neues|ihr neues)\s+(?:passwort|kennwort)\b|\banmeldewarnung\b|\banmeldeversuch\b",
+    # Japanese and Chinese: verification codes, passwords, new logins
+    r"検証コード|認証コード|確認コード|ワンタイム|パスワード(?:の)?(?:再設定|リセット|変更)|新しいデバイス|新しいログイン|验证码|驗證碼|重置密码|新设备登录",
     r"\b(?:neues?|neuer)\s+(?:anmeldung|login|gerät|geraet|browser|standort)\b",
     r"\banmeldung\s+(?:von|über|ueber|auf|mit)\s+(?:einem\s+)?(?:neuen|unbekannten)\b",
     r"\b(?:verdächtige|verdaechtige|ungewöhnliche|ungewoehnliche|unbekannte)\s+(?:aktivität|aktivitaet|anmeldung|zugriff)\b",
@@ -120,7 +171,7 @@ _CODE_DIGITS_RE = re.compile(r"\b\d{4,8}\b.{0,40}\b(?:code|pin|passcode)\b|\b(?:
 
 # --- Transactions: receipts, orders, shipping, tickets, bookings (EN + DE)
 _TRANSACTION_RE = _rx(
-    r"\b(?:receipt|invoice|e-?invoice|bill|billing|statement|refund|reimbursement|payout|payment|purchase|transaction|subscription|renewal)\b",
+    r"\b(?:receipt|invoice|e-?invoice|bill|billing|statement|refund|reimbursement|payout|payment|purchase|transaction|subscription|renewal|renewed)\b",
     r"\b(?:your|an|the|new)\s+order\b|\border\s+(?:confirmation|confirmed|update|status|shipped|received|placed|number|no\.?|#|is|has|was|details)\b|#\s?\d{4,}\b.*\border\b|\border\b.*#\s?\d{4,}\b",
     r"\bthank(?:s| you) for (?:your|the) (?:order|purchase|payment|booking|reservation)\b",
     r"\b(?:has|have|is|was|been)\s+(?:shipped|dispatched|delivered|sent out|despatched)\b|\bshipp(?:ed|ing)\b|\bdispatch(?:ed)?\b",
@@ -132,6 +183,11 @@ _TRANSACTION_RE = _rx(
     r"\b(?:return|returns)\s+(?:label|confirmed|received|instructions)\b|\bpre-?order\b|\bback-?order\b",
     r"\b(?:direct debit|bank transfer|wire transfer|card payment|payment method|charged|charge of|amount due|now due|past due|overdue)\b",
     r"\bappointment\s+(?:confirmed|confirmation|reminder|booked|scheduled)\b",
+    r"\b(?:ihr|dein|der|zum|ihrem|deinem)\s+[\w.-]*auftrag\b|\bauftrags?(?:nummer|nr|bestätigung|bestaetigung|eingang|status)\b|\S-auftrag\b",
+    r"^(?:ordered|delivered|shipped|dispatched|bestellt|geliefert|versandt|versendet|zugestellt|unterwegs)\b",
+    r"\bpre-?flight\b|\bflight\s+(?:reminder|details|confirmation|confirmed|change)\b",
+    # Japanese and Chinese: orders, receipts, shipping, bookings
+    r"注文|領収書|請求書|発送|配送|お届け|予約確認|ご予約|お支払い|订单|发票|发货|收据|预订",
     # German
     r"\b(?:rechnung|e-?rechnung|quittung|beleg|kaufbeleg|kassenbon|gutschrift|erstattung|rückerstattung|rueckerstattung|auszahlung|zahlung|zahlungseingang|zahlungsbestätigung|zahlungsbestaetigung|zahlungserinnerung|mahnung|kontoauszug|abrechnung|abonnement|abo-?verlängerung|verlaengerung)\b",
     r"\b(?:ihre|deine|neue|die)\s+bestellung\b|\bbestell(?:ung|bestätigung|bestaetigung|nummer|status|eingang)\b|\bauftrags?(?:bestätigung|bestaetigung|nummer|eingang)\b",
@@ -165,6 +221,8 @@ _PROMO_RE = _rx(
     r"\b(?:letzte chance|letzter tag|nur (?:noch )?(?:heute|bis|kurz|\d+\s+(?:tage|stunden))|endet (?:bald|heute|morgen|sonntag)|nur für kurze zeit|begrenzte zeit|limitiert|exklusiv(?:e|es|er)?|neu eingetroffen|neu im (?:shop|sortiment)|neuheiten|neue kollektion|bestseller|top-?angebote|unsere (?:angebote|highlights|empfehlungen|bestseller|favoriten)|für dich ausgewählt|für sie ausgewählt|wieder (?:da|verfügbar|verfuegbar)|reduziert|preis gesenkt|ab nur|schon ab)\b",
     r"\b(?:gewinnspiel|gewinne|verlosung|mitmachen und gewinnen)\b",
     r"\b(?:jetzt (?:upgraden|freischalten|testen)|kostenlos testen|probemonat|testphase)\b",
+    # Japanese and Chinese: sales, discounts, coupons
+    r"セール|割引|クーポン|キャンペーン|期間限定|特価|促销|折扣|优惠券|限时",
 )
 
 
@@ -189,32 +247,46 @@ def is_noreply(addr: str) -> bool:
     return bool(local) and (bool(_NOREPLY_RE.search(local)) or bool(_AUTOMATED_LOCAL_RE.match(local)))
 
 
-def is_automated(email: dict) -> bool:
-    """Auto-Submitted (anything but "no") or a no-reply style sender."""
+def is_auto_submitted(email: dict) -> bool:
     auto = _header(email, H_AUTO_SUBMITTED).lower()
-    if auto and auto != "no" and not auto.startswith("no "):
-        return True
-    return is_noreply(sender_address(email))
+    return bool(auto) and auto != "no" and not auto.startswith("no ")
+
+
+def is_automated(email: dict) -> bool:
+    """Machine-sent: Auto-Submitted (anything but "no"), Feedback-ID, or a no-reply style sender."""
+    return is_auto_submitted(email) or bool(_header(email, H_FEEDBACK_ID)) or is_noreply(sender_address(email))
 
 
 def bulk_reason(email: dict) -> str:
-    """Which header marks this as bulk mail (newsletter or campaign), or ""."""
+    """Which header marks this as list mail (newsletter, campaign or notice run), or ""."""
     if _header(email, H_LIST_UNSUBSCRIBE):
         return "List-Unsubscribe"
     prec = _header(email, H_PRECEDENCE).lower()
     if prec in ("bulk", "list", "junk"):
         return f"Precedence: {prec}"
-    if _header(email, H_FEEDBACK_ID):
-        return "Feedback-ID"
     if _header(email, H_LIST_ID):
         return "List-Id"
     return ""
 
 
 def is_discussion_list(email: dict) -> bool:
-    """List-Post names an address to write to; "NO" means a one-way list (RFC 2369)."""
+    """List-Post names an address to write to; "NO" means a one-way list (RFC 2369).
+    A no-reply sender with List-Post (GitHub, Jira) is a notice, not a list."""
     post = _header(email, H_LIST_POST)
-    return bool(post) and post.upper() != "NO"
+    return bool(post) and post.upper() != "NO" and not is_noreply(sender_address(email))
+
+
+def newsletter_cue(email: dict, subject: str, preview: str) -> bool:
+    """Something that says "editorial or campaign send": the sender's mailbox,
+    name or domain, the subject, or a "view in browser" line."""
+    frm = (email.get("from") or [{}])[0] if email.get("from") else {}
+    addr = ((frm or {}).get("email") or "").lower()
+    name = ((frm or {}).get("name") or "").lower()
+    local, _, domain = addr.partition("@")
+    labels = " ".join(domain.split(".")[:-1])  # every label but the TLD
+    if _NEWSLETTER_SENDER_RE.search(f"{local} {name} {labels}"):
+        return True
+    return bool(_NEWSLETTER_SUBJECT_RE.search(subject)) or bool(_VIEW_IN_BROWSER_RE.search(preview))
 
 
 def security_text(text: str) -> bool:
@@ -233,12 +305,17 @@ def code_digits(text: str) -> bool:
     return bool(text) and bool(_CODE_DIGITS_RE.search(text))
 
 
-def classify(email: dict, written_to: Callable[[str], bool] | None = None) -> Classification:
-    """Category of one list-property Email; `written_to(address)` says whether the
-    user has ever sent mail to that address (a Sent-folder signal the cache keeps)."""
+def classify(email: dict, written_to: Callable[[str], bool] | None = None,
+             is_own: Callable[[str], bool] | None = None) -> Classification:
+    """Category of one list-property Email.  `written_to(address)` says whether the
+    user has ever sent mail to that address (a Sent-folder signal the cache keeps);
+    `is_own(address)` whether it is one of the user's identities."""
     subject = " ".join((email.get("subject") or "").split())
     preview = " ".join((email.get("preview") or "").split())
     sender = sender_address(email)
+
+    if sender and is_own is not None and is_own(sender):
+        return Classification(PRIMARY, 0.9, "sent by you")
 
     if is_discussion_list(email):
         return Classification(LISTS, 0.95, "List-Post")
@@ -253,12 +330,18 @@ def classify(email: dict, written_to: Callable[[str], bool] | None = None) -> Cl
             return Classification(TRANSACTIONS, 0.75, f"transaction wording in the subject ({bulk})")
         if promotion_text(preview):
             return Classification(PROMOTIONS, 0.7, f"{bulk}, sales wording in the text")
+        if _NOTICE_RE.search(subject):
+            return Classification(UPDATES, 0.7, f"notice wording in the subject ({bulk})")
+        if (is_noreply(sender) or is_auto_submitted(email)) and not newsletter_cue(email, subject, preview):
+            return Classification(UPDATES, 0.7, f"{bulk} from a no-reply sender, no newsletter cue")
         return Classification(NEWSLETTERS, 0.8, bulk)
 
     if security_text(subject):
         return Classification(SECURITY, 0.85, "security wording in the subject")
     if transaction_text(subject):
         return Classification(TRANSACTIONS, 0.8, "transaction wording in the subject")
+    if _LIST_TAG_RE.search(subject):
+        return Classification(LISTS, 0.6, "numbered list tag in the subject")
 
     if sender and written_to is not None and written_to(sender):
         return Classification(PRIMARY, 0.8, "a sender you have written to")
@@ -270,11 +353,14 @@ def classify(email: dict, written_to: Callable[[str], bool] | None = None) -> Cl
             return Classification(TRANSACTIONS, 0.65, "automated sender, transaction wording")
         if promotion_text(subject) or _PROMO_LOCAL_RE.match(_local_part(sender) or "-"):
             return Classification(PROMOTIONS, 0.65, "automated sender, sales wording")
-        reason = "Auto-Submitted" if _header(email, H_AUTO_SUBMITTED) else "no-reply sender"
+        reason = ("Auto-Submitted" if is_auto_submitted(email) else
+                  "no-reply sender" if is_noreply(sender) else "Feedback-ID")
         return Classification(UPDATES, 0.75, reason)
 
     if code_digits(subject) or security_text(preview):
         return Classification(SECURITY, 0.6, "security wording")
+    if _NOTICE_RE.search(subject):
+        return Classification(UPDATES, 0.6, "notice wording in the subject")
     if transaction_text(preview):
         return Classification(TRANSACTIONS, 0.55, "transaction wording in the text")
     if promotion_text(subject):

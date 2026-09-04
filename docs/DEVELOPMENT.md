@@ -71,6 +71,16 @@ views are collapsed, the minimum width of each pane and every descendant wider
 than the threshold, which is how to find the widget that keeps a pane from
 shrinking below a breakpoint.
 
+## Categoriser
+
+`den_mail/classify/rules.py` sorts every cached message into a category from its
+list headers, sender and wording (#18). The rules are generic (English, German
+and a few Japanese and Chinese tokens); they were checked against a real
+account with `tools/categoriser_report.py`, which runs them over an account's
+SQLite cache and prints counts, the rule that fired for each category, and
+random samples. After changing a rule, or on a new account, run it and read the
+samples of the categories you doubt; nothing leaves the machine.
+
 ## Environment variables
 
 | Variable | Purpose |

@@ -440,8 +440,19 @@ def test_categories_from_the_server_and_header_backfill(engine, server):
     assert cats[by_subject["Digest #40"]] == NEWSLETTERS
     assert cats[by_subject["Sale ends soon"]] == PROMOTIONS
     assert cats[by_subject["Re: GTK meetup on Thursday"]] == PRIMARY
-    # the sent reply in the meetup thread makes Anna a correspondent
+    # the sent reply in the meetup thread makes Anna a correspondent, the Sent folder seed adds Ben
     assert engine.db.is_correspondent("anna@example.net")
+    pump(lambda: engine.db.get_meta("correspondents_seeded") == "1")
+    assert engine.db.is_correspondent("ben@example.net")
+    pump(lambda: engine.db.get_meta("rules_version") is not None)
+    # a cache classified by older rules is run through the current ones once
+    engine.db.set_meta("rules_version", "0")
+    engine.events.pop("emails-changed", None)
+    engine._job_reclassify_after_upgrade()
+    pump(lambda: any(a[0] for a in engine.events.get("emails-changed", [])))
+    assert engine.db.get_meta("rules_version") != "0"
+    # sent mail is Primary whatever it carries
+    assert engine.db.get_categories([by_subject["Re: GTK meetup on Thursday"]]) == {by_subject["Re: GTK meetup on Thursday"]: PRIMARY}
     # mail cached before the headers were list properties: the backfill fetches them
     gtk = by_subject["[gtk-devel] Widget lifecycle question"]
     import json

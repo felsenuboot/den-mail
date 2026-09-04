@@ -50,8 +50,43 @@ def test_headers_outrank_content():
     assert cat("Digest #40", **{H_LIST_POST: "NO", **unsub}) == NEWSLETTERS  # RFC 2369: no posting
     assert cat("Arch Linux news: kernel 7.2", frm="news@archlinux.org", **unsub) == NEWSLETTERS
     assert cat("Weekly update", **{H_PRECEDENCE: "bulk"}) == NEWSLETTERS
-    assert cat("Weekly update", **{H_FEEDBACK_ID: "a:b:c:mailer"}) == NEWSLETTERS
     assert cat("Weekly update", **{H_LIST_ID: "<news.example>"}) == NEWSLETTERS
+    # Feedback-ID alone is what big senders put on everything: automated, not a newsletter
+    assert cat("Ordered: 'Blum Manufaktur 250ml...'", frm="bestellbestaetigung@shop.example",
+               **{H_FEEDBACK_ID: "a:b:c:mailer"}) == TRANSACTIONS
+    assert cat("Someone commented on your document", frm="comments-noreply@docs.example",
+               **{H_FEEDBACK_ID: "a:b:c:mailer"}) == UPDATES
+    assert cat("Weekly update", **{H_FEEDBACK_ID: "a:b:c:mailer"}) == UPDATES
+    assert cat("Weekly update", **{H_FEEDBACK_ID: "a:b:c:mailer", **unsub}) == NEWSLETTERS
+
+
+def test_list_post_from_a_machine_is_a_notice_and_list_tags_are_lists():
+    post = {H_LIST_POST: "<mailto:reply+abc@reply.github.example>", H_PRECEDENCE: "list",
+            H_LIST_UNSUBSCRIBE: "<mailto:unsub@github.example>"}
+    assert cat("[org/repo] Run failed: CI - master", frm="notifications@github.example", **post) == UPDATES
+    assert cat("[gtk-devel] Widget lifecycle", frm="erin@example.org", **post) == LISTS
+    assert cat("Re: [gsba-bkyomu:35917] About the programme", frm="office@uni.example") == LISTS
+    assert cat("[VUB#03338685] Re: Confirmation", frm="office@uni.example") != LISTS  # a ticket number
+    assert cat("Invoice [acct:12345]", frm="office@uni.example") == TRANSACTIONS  # wording first
+
+
+def test_list_mail_from_noreply_needs_a_newsletter_cue():
+    unsub = {H_LIST_UNSUBSCRIBE: "<https://x.example/u>"}
+    assert cat("Analytics Manager @ Grüns", "Hi Felix, it looks like your background", frm="donotreply@match.jobs.example", **unsub) == UPDATES
+    assert cat("Ihr monatlicher Bericht für Ihre FRITZ!Box", frm="noreply@router.example", **unsub) == UPDATES
+    assert cat("Nowhere to hide", "Morning Briefing", frm="noreply@news.paper.example", **unsub) == NEWSLETTERS
+    assert cat("Hidden Worlds IRL", "Digital camo", frm="404-media@ghost.example", **unsub) == NEWSLETTERS
+    assert cat("Issue #42", "Read in browser", frm="noreply@paper.example", **unsub) == NEWSLETTERS
+    assert cat("Hello there", "Wird diese Nachricht nicht richtig dargestellt?", frm="noreply@x.example", **unsub) == NEWSLETTERS
+    assert cat("Thank You For Applying!", frm="acme@myworkday.example", **unsub) == UPDATES
+    assert cat("Vielen Dank für deine Bewerbung", frm="jobs@firma.example") == UPDATES
+
+
+def test_own_mail_is_primary():
+    own = {"me@example.com"}.__contains__
+    m = mail("den-mail send test", frm="me@example.com", **{H_FEEDBACK_ID: "i6ec1497d:Provider"})
+    assert classify(m, None, own).category == PRIMARY
+    assert classify(m).category == UPDATES
 
 
 def test_bulk_mail_splits_into_promotions_by_wording():
@@ -100,6 +135,18 @@ def test_automated_senders_are_updates_unless_the_text_says_otherwise():
     assert cat("Reminder: renew domain", "example.com is due for renewal", frm="noreply@registrar.example") == TRANSACTIONS
     assert cat("Reminder: renew domain", "example.com is due for renewal") == TRANSACTIONS
     assert cat("Notes", "renewal of our chat", frm="anna@example.net") == TRANSACTIONS  # weak, preview-only
+    assert cat("Neues Passwort", frm="abeasyinfo@example.net") == SECURITY
+    assert cat("A withdrawal was made from an unfamiliar device") == SECURITY
+    assert cat("Neue 1Password-Anmeldewarnung", frm="hello@1password.example") == SECURITY
+    assert cat("Verify your candidate account", frm="acme@otp.workday.example") == SECURITY
+    assert cat("Ihr Brunobett.de-Auftrag 26041101: Terminbestätigung", frm="auftragsinfo@courier.example") == TRANSACTIONS
+    assert cat("Pegasus Pre-Flight Reminders", frm="pegasus@fly.example") == TRANSACTIONS
+    assert cat("SmartLife 登録検証コード", frm="system@notice.example") == SECURITY
+    assert cat("ご注文ありがとうございます", frm="shop@store.example") == TRANSACTIONS
+    assert cat("Your Classique membership has been renewed", frm="loyalty@rail.example") == TRANSACTIONS
+    assert cat("Sie haben 2 ungelesene Nachrichten in Ihrem Postfach", frm="postfach@versicherung.example") == UPDATES
+    assert cat("Updated invitation: Felix x Mirela | Call", frm="mirela@people.example") == UPDATES
+    assert cat("Welcome! Your Careers account has been created.", frm="talent@firm.example") == UPDATES
 
 
 def test_noreply_address_shapes():

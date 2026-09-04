@@ -233,7 +233,7 @@ class Database:
 
     def _classify(self, c: sqlite3.Connection, e: dict) -> None:
         """Store the rules' verdict; a category the user chose (source "user") stays."""
-        verdict = classify(e, self.is_correspondent)
+        verdict = classify(e, self.is_correspondent, self.is_own_address)
         c.execute(
             "INSERT INTO classification(email_id, category, source, confidence, ts, reason) VALUES (?,?,?,?,?,?)"
             " ON CONFLICT(email_id) DO UPDATE SET category=excluded.category, source=excluded.source,"
@@ -265,17 +265,19 @@ class Database:
                 " VALUES (?,?,?,?,?,?)",
                 [(eid, category, source, 1.0, time.time(), "") for eid in email_ids])
 
-    def reclassify(self, ids: list[str] | None = None) -> None:
-        """Run the rules again over the given (else all) cached messages."""
+    def reclassify(self, ids: list[str] | None = None) -> list[str]:
+        """Run the rules again over the given (else all) cached messages; returns their ids."""
         with self._write_lock:
             c = self.conn()
-            emails = self.get_emails(ids).values() if ids is not None else (
-                json.loads(r["json"]) for r in c.execute("SELECT json FROM emails").fetchall())
+            emails = list(self.get_emails(ids).values()) if ids is not None else [
+                json.loads(r["json"]) for r in c.execute("SELECT json FROM emails").fetchall()]
             for e in emails:
                 self._classify(c, e)
+            return [e["id"] for e in emails]
 
-    def _reclassify_from(self, c: sqlite3.Connection, senders: set[str]) -> None:
-        """Mail already cached from people the user has now written to."""
+    def _reclassify_from(self, c: sqlite3.Connection, senders: set[str]) -> list[str]:
+        """Mail already cached from people the user has now written to; returns its ids."""
+        done: list[str] = []
         for addr in senders:
             rows = c.execute("SELECT json FROM emails WHERE LOWER(json) LIKE ?",
                              (f'%"email": "{addr.lower()}"%',)).fetchall()
@@ -283,6 +285,8 @@ class Database:
                 e = json.loads(r["json"])
                 if any((a.get("email") or "").strip().lower() == addr for a in e.get("from") or []):
                     self._classify(c, e)
+                    done.append(e["id"])
+        return done
 
     def emails_missing_headers(self, limit: int = 500) -> list[str]:
         """Cached before the categoriser's headers were part of the list fetch (#18)."""
@@ -340,6 +344,16 @@ class Database:
         if self._sent_mailbox_id and (e.get("mailboxIds") or {}).get(self._sent_mailbox_id):
             return True
         return any(self.is_own_address(a.get("email") or "") for a in e.get("from") or [])
+
+    def record_correspondents(self, sent: list[dict]) -> list[str]:
+        """Remember the recipients of sent mail (the Sent folder seed, #18) and put
+        cached mail from anyone new through the rules again; returns the ids it reclassified."""
+        with self._write_lock:
+            c = self.conn()
+            new: set[str] = set()
+            for e in sent:
+                new |= self._record_correspondents(c, e)
+            return self._reclassify_from(c, new) if new else []
 
     def _record_correspondents(self, c: sqlite3.Connection, e: dict) -> set[str]:
         """Remember who the user wrote to; returns the addresses that were new."""
