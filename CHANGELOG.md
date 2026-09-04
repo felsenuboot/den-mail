@@ -6,6 +6,9 @@ Unreleased changes gather at the top until they are tagged.
 
 ## [Unreleased]
 
+### Features
+- Lock: a third way to unlock, through the keyring. Choosing it creates a keyring collection of the app's own ("Den Mail"), which the keyring daemon locks with the app and unlocks with its own prompt; the login keyring and other apps are never touched, and it works inside a Flatpak. "Unlock with" in Preferences now lists every method available on the machine (#66)
+
 ### Fixes
 - The Search quick link's tooltip is a sentence about what the search does instead of a bare list of operators (#80)
 

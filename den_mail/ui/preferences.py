@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from gi.repository import Adw, Gtk
+from gi.repository import Adw, GLib, Gtk
 
 REMOTE_OPTIONS = ["ask", "always", "never"]
 UNDO_SEND_OPTIONS = [0, 5, 10, 20, 30]
@@ -174,20 +174,28 @@ class PreferencesDialog(Adw.PreferencesDialog):
 
         changed = on_lock_changed or (lambda: None)
         polkit = lock.policy_installed()
+        keyring = lock.keyring_available()
         group = Adw.PreferencesGroup(
             title="Lock",
-            description=("Hides the mail behind a lock page; unlocking asks the system's own authentication prompt."
-                         if polkit else
-                         "Hides the mail behind a lock page; unlocking asks for a passphrase set here. The system's "
-                         "own prompt needs the polkit policy file installed (see the README). A privacy screen, "
-                         "not a security boundary: the cache and the token are not encrypted."))
+            description=("Hides the mail behind a lock page. Unlocking asks the system's own prompt, the keyring "
+                         "daemon's prompt for a Den Mail keyring of its own, or a passphrase or PIN set here."
+                         + ("" if polkit else " The system prompt needs the polkit policy file installed (see the README).")
+                         + " A privacy screen, not a security boundary: the cache and the token are not encrypted."))
         enable = Adw.SwitchRow(title="Lock screen", subtitle="Adds Lock to the main menu and Ctrl+Shift+L",
                                active=config.get("lock_enabled", False))
+        methods = ([lock.METHOD_SYSTEM] if polkit else []) + [lock.METHOD_PASSPHRASE, lock.METHOD_PIN] \
+            + ([lock.METHOD_KEYRING] if keyring else [])
+        self._passphrase_row = None
+        self._keyring_row = None
 
         def on_enable(row, _p):
-            if row.get_active() and not polkit and not config.get("lock_passphrase"):
-                # Nothing could ask for anything yet: set a passphrase or PIN first, or the switch stays off (#65).
-                self._set_passphrase(config, self._passphrase_row, then=lambda ok: row.set_active(ok))
+            m = lock.method(config)
+            if row.get_active() and not lock.method_ready(config, m):
+                # Nothing could ask for anything yet: a passphrase or PIN first, or the keyring (#65, #66).
+                if m == lock.METHOD_KEYRING:
+                    self._create_keyring(lambda ok: row.set_active(ok))
+                else:
+                    self._set_passphrase(config, self._passphrase_row, then=lambda ok: row.set_active(ok))
                 return
             config.set("lock_enabled", row.get_active())
             changed()
@@ -202,25 +210,73 @@ class PreferencesDialog(Adw.PreferencesDialog):
         group.add(idle)
         group.add(_switch(config, "lock_with_session", True, "Lock with the session",
                           "When the desktop locks or the screensaver starts"))
-        self._passphrase_row = None
-        if not polkit:
-            kind = Adw.ComboRow(title="Unlock with", model=Gtk.StringList.new(["A passphrase", "A PIN"]))
-            kind.set_selected(1 if config.get("lock_kind") == "pin" else 0)
-            kind.connect("notify::selected", lambda r, _p: config.set("lock_kind", "pin" if r.get_selected() else "passphrase"))
-            group.add(kind)
-            has = bool(config.get("lock_passphrase"))
-            row = Adw.ActionRow(title="Passphrase or PIN", subtitle="Set" if has else "None yet: needed before the lock can be enabled",
-                                activatable=True)
-            row.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
-            row.connect("activated", lambda *_: self._set_passphrase(config, row))
-            group.add(row)
-            self._passphrase_row = row
+
+        kind = Adw.ComboRow(title="Unlock with", model=Gtk.StringList.new([lock.METHOD_TITLES[m] for m in methods]))
+        current_method = lock.method(config)
+        kind.set_selected(methods.index(current_method) if current_method in methods else 0)
+        group.add(kind)
+        has = bool(config.get("lock_passphrase"))
+        row = Adw.ActionRow(title="Passphrase or PIN", subtitle="Set" if has else "None yet: needed before the lock can be enabled",
+                            activatable=True)
+        row.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
+        row.connect("activated", lambda *_: self._set_passphrase(config, row))
+        group.add(row)
+        self._passphrase_row = row
+        keyring_row = Adw.ActionRow(
+            title="Den Mail keyring",
+            subtitle=("Exists; the keyring daemon asks its password when unlocking" if keyring and lock.keyring_exists()
+                      else "Created when chosen: the daemon asks for a new password once, and only this collection "
+                           "is locked with the app"))
+        group.add(keyring_row)
+        self._keyring_row = keyring_row
+
+        def show_rows() -> None:
+            m = lock.method(config)
+            row.set_visible(m in (lock.METHOD_PASSPHRASE, lock.METHOD_PIN))
+            keyring_row.set_visible(m == lock.METHOD_KEYRING)
+
+        def on_kind(r, _p):
+            m = methods[r.get_selected()]
+            config.set("lock_method", m)
+            config.set("lock_kind", "pin" if m == lock.METHOD_PIN else "passphrase")
+            show_rows()
+            if m == lock.METHOD_KEYRING and not lock.keyring_exists():
+                self._create_keyring(lambda ok: None)
+            elif config.get("lock_enabled") and not lock.method_ready(config, m):
+                # The lock cannot ask anything with this method yet: off until it can (#65).
+                enable.set_active(False)
+
+        kind.connect("notify::selected", on_kind)
+        show_rows()
         return group
+
+    def _create_keyring(self, then) -> None:
+        """Create the Den Mail collection on a thread (the daemon prompts); `then(ok)` on the main loop."""
+        import threading
+
+        from .. import lock
+
+        def run() -> None:
+            try:
+                lock.keyring_create()
+                ok, message = True, "Den Mail keyring created"
+            except Exception as e:  # noqa: BLE001 - GLib.Error from the daemon, or no daemon
+                ok, message = False, f"Keyring not created: {getattr(e, 'message', e)}"
+            GLib.idle_add(done, ok, message)
+
+        def done(ok: bool, message: str) -> bool:
+            self.add_toast(Adw.Toast(title=message))
+            if ok and self._keyring_row is not None:
+                self._keyring_row.set_subtitle("Exists; the keyring daemon asks its password when unlocking")
+            then(ok)
+            return False
+
+        threading.Thread(target=run, name="keyring-create", daemon=True).start()
 
     def _set_passphrase(self, config, row: Adw.ActionRow | None, then=None) -> None:
         from .. import lock
 
-        pin = config.get("lock_kind") == "pin"
+        pin = lock.method(config) == lock.METHOD_PIN
         what = "PIN" if pin else "passphrase"
         first = Gtk.PasswordEntry(show_peek_icon=True, placeholder_text=what.capitalize())
         second = Gtk.PasswordEntry(show_peek_icon=True, placeholder_text="Again", activates_default=True)
