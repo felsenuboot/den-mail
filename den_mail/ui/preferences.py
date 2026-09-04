@@ -146,7 +146,8 @@ class PreferencesDialog(Adw.PreferencesDialog):
                           "mark read or unsubscribe from many at once", opener("cleanup")))
         cleanup.add(_link("Rules…", (f"{rules_count} rule{'s' if rules_count != 1 else ''}: " if rules_count
                                      else "None yet: ") + "what happens to mail from a sender, domain, list or "
-                          "category as it arrives. Right-click a conversation for “Always for this sender…”",
+                          "category as it arrives; Den Mail's own rules, run while it is open, apart from the ones in "
+                          "your Fastmail settings. Right-click a conversation for “Always for this sender…”",
                           opener("rules")))
         cleanup.add(_link("Newsletters…", "Every sender with an unsubscribe header, and a way to leave them all",
                           opener("newsletters")))
