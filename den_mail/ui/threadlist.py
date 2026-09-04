@@ -831,9 +831,14 @@ class ThreadList(Adw.NavigationPage):
         self._update_empty()
         self._sync_fold_button()
         self._sync_list_style()
+        adj = self.scrolled.get_vadjustment()
         if self._want_top and added and model.get_n_items() == added:
             self._want_top = False
-            GLib.idle_add(lambda: self.scrolled.get_vadjustment().set_value(0) or False)
+            GLib.idle_add(lambda: adj.set_value(0) or False)
+        elif added and position == 0 and adj.get_value() < 1:
+            # GTK keeps the row under the top edge in place, so a message arriving above
+            # it would land out of sight; a list that sits at the top stays at the top.
+            GLib.idle_add(lambda: adj.set_value(0) or False)
 
     # ---------------------------------------------------------- search
 

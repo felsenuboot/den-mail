@@ -1000,6 +1000,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length)
+        if path == "/deliver":  # test hook: a new message arrives (the body is its subject)
+            self._send(200, {"id": self.server.deliver(body.decode() or "New mail arrived")})
+            return
         if path == "/api":
             self.server.requests.append(json.loads(body))
             self._send(200, self.server.dispatcher.handle(json.loads(body)))
