@@ -28,6 +28,7 @@ from ..store.sync import (
     search_mailboxes,
     search_query_spec,
 )
+from .cleanup import CleanupDialog
 from .compose import ComposeWindow
 from .conversation import ConversationView
 from .identities import IdentitiesDialog
@@ -208,6 +209,7 @@ class MainWindow(Adw.ApplicationWindow):
         primary = Gio.Menu()
         section = Gio.Menu()
         section.append("Newsletters…", "win.newsletters")
+        section.append("Clean up…", "win.cleanup")
         section.append("Rules…", "win.rules")
         section.append("Masked Email…", "win.masked")
         section.append("Identities & Aliases…", "win.identities")
@@ -306,6 +308,7 @@ class MainWindow(Adw.ApplicationWindow):
             "masked": lambda: MaskedEmailDialog(self.engine, self.db).present(self),
             "newsletters": lambda: NewslettersDialog(self.engine, self.db, self.config, self._after_action).present(self),
             "rules": lambda: RulesDialog(self.engine, self.db, self.config, self.tree).present(self),
+            "cleanup": self.show_cleanup,
             "identities": lambda: IdentitiesDialog(self.engine, self.db, self.config).present(self),
             "preferences": self.show_preferences,
             "shortcuts": self.show_shortcuts,
@@ -837,6 +840,12 @@ class MainWindow(Adw.ApplicationWindow):
             return
         self.open_thread_window(thread)
 
+    def open_thread_by_id(self, thread_id: str) -> None:
+        """A thread named by id (the cleanup dialog's message rows), in its own window."""
+        summary = self.db.thread_summary(thread_id, None, set(self.engine.trash_junk_ids()))
+        if summary is not None:
+            self.open_thread_window(ThreadObject(summary))
+
     def open_thread_window(self, thread: ThreadObject) -> None:
         for w in self.thread_windows:
             if w.thread.thread_id == thread.thread_id:
@@ -1147,6 +1156,11 @@ class MainWindow(Adw.ApplicationWindow):
                           on_manage_identities=lambda: IdentitiesDialog(self.engine, self.db, self.config).present(self),
                           on_sidebar_views=self.set_sidebar_views,
                           ).present(self)
+
+    def show_cleanup(self) -> None:
+        self.cleanup_dialog = CleanupDialog(self.engine, self.db, self.config, self.tree, self._after_action,
+                                            self.open_thread_by_id)
+        self.cleanup_dialog.present(self)
 
     def show_shortcuts(self) -> None:
         dlg = Adw.ShortcutsDialog()

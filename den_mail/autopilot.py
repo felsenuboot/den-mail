@@ -14,8 +14,9 @@ Commands:
   compose-send         press Send in the newest compose window
   undo-send            press Undo on the newest pending send
   config <key> <json>  set a preference for this run
-  masked | identities | preferences | rules   open that dialog
+  masked | identities | preferences | rules | cleanup   open that dialog
   sender-rule <address>   open the "Always for this sender" prompt
+  cleanup-all <mark_read|archive|trash|unsubscribe>   select every sender in the open cleanup dialog and run that
   resize <w> <h>       resize the main window
   unread-filter on|off   toggle the unread filter button
   category-filter <category>|off   show only that category (newsletters, transactions, …)
@@ -127,9 +128,12 @@ def _run(app, steps: list[str]) -> bool:
 
             popover = _find_descendant(win.compose_windows[-1].from_row, Gtk.Popover)
             popover.popup()
+        elif cmd == "cleanup-all" and win and getattr(win, "cleanup_dialog", None):
+            win.cleanup_dialog.select_all.set_active(True)
+            win.cleanup_dialog.run(arg.strip())
         elif cmd == "sender-rule" and win:
             win.sender_rule(arg.strip())
-        elif cmd in ("masked", "identities", "preferences", "rules") and win:
+        elif cmd in ("masked", "identities", "preferences", "rules", "cleanup") and win:
             win.lookup_action(cmd).activate(None)
         elif cmd == "resize" and win:
             w, h = arg.split()

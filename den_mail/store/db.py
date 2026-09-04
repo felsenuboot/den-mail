@@ -13,7 +13,14 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..classify.rules import CLASSIFY_HEADERS, PRIMARY, SOURCE_RULES, SOURCE_USER, classify
+from ..classify.rules import (
+    CLASSIFY_HEADERS,
+    H_LIST_UNSUBSCRIBE,
+    PRIMARY,
+    SOURCE_RULES,
+    SOURCE_USER,
+    classify,
+)
 from ..jmap.types import KW_DRAFT, KW_FLAGGED, KW_SEEN, address_display
 
 SCHEMA_VERSION = 1
@@ -30,7 +37,7 @@ CREATE TABLE IF NOT EXISTS emails (
     keywords TEXT NOT NULL, mailbox_ids TEXT NOT NULL, has_attachment INTEGER DEFAULT 0,
     json TEXT NOT NULL, body_json TEXT, body_fetched_at REAL,
     size INTEGER DEFAULT 0, from_email TEXT DEFAULT '', from_sort TEXT DEFAULT '',
-    seen INTEGER DEFAULT 0, flagged INTEGER DEFAULT 0);
+    seen INTEGER DEFAULT 0, flagged INTEGER DEFAULT 0, has_unsubscribe INTEGER DEFAULT 0);
 CREATE INDEX IF NOT EXISTS emails_thread ON emails(thread_id);
 CREATE INDEX IF NOT EXISTS emails_received ON emails(received_at);
 CREATE TABLE IF NOT EXISTS email_mailboxes (email_id TEXT, mailbox_id TEXT, PRIMARY KEY (email_id, mailbox_id));
@@ -46,6 +53,8 @@ CREATE TABLE IF NOT EXISTS classification (
     email_id TEXT PRIMARY KEY, category TEXT NOT NULL, source TEXT NOT NULL, confidence REAL, ts REAL, reason TEXT);
 CREATE INDEX IF NOT EXISTS classification_category ON classification(category);
 CREATE TABLE IF NOT EXISTS correspondents (email TEXT PRIMARY KEY, last_written TEXT);
+CREATE TABLE IF NOT EXISTS sender_deletions (
+    email TEXT PRIMARY KEY, deleted INTEGER DEFAULT 0, deleted_unread INTEGER DEFAULT 0);
 """
 
 # Columns the sidebar views (#19) filter and sort on, added to caches from before
@@ -56,6 +65,7 @@ VIEW_COLUMNS = (
     ("from_sort", "TEXT DEFAULT ''"),
     ("seen", "INTEGER DEFAULT 0"),
     ("flagged", "INTEGER DEFAULT 0"),
+    ("has_unsubscribe", "INTEGER DEFAULT 0"),   # a List-Unsubscribe header (the cleanup ranking, #21)
 )
 VIEW_INDEXES = """
 CREATE INDEX IF NOT EXISTS emails_from ON emails(from_email);
@@ -63,16 +73,18 @@ CREATE INDEX IF NOT EXISTS emails_size ON emails(size);
 """
 
 
-def view_columns(e: dict) -> tuple[int, str, str, int, int]:
-    """(size, from_email, from_sort, seen, flagged) of a list-property Email;
-    from_sort is what the JMAP "from" comparator orders by, the display name
+def view_columns(e: dict) -> tuple[int, str, str, int, int, int]:
+    """(size, from_email, from_sort, seen, flagged, has_unsubscribe) of a list-property
+    Email; from_sort is what the JMAP "from" comparator orders by, the display name
     else the address, lowercased (see models.thread.sender_group_key)."""
     frm = e.get("from") or []
     first = frm[0] if frm and isinstance(frm[0], dict) else {}
     addr = (first.get("email") or "").strip().lower()
     name = (first.get("name") or "").strip().lower()
     kws = e.get("keywords") or {}
-    return (int(e.get("size") or 0), addr, name or addr, 1 if kws.get(KW_SEEN) else 0, 1 if kws.get(KW_FLAGGED) else 0)
+    unsub = e.get(H_LIST_UNSUBSCRIBE)
+    return (int(e.get("size") or 0), addr, name or addr, 1 if kws.get(KW_SEEN) else 0,
+            1 if kws.get(KW_FLAGGED) else 0, 1 if isinstance(unsub, str) and unsub.strip() else 0)
 
 
 @dataclass
@@ -127,8 +139,8 @@ class Database:
             for name, decl in missing:
                 c.execute(f"ALTER TABLE emails ADD COLUMN {name} {decl}")  # nosec B608 - names from VIEW_COLUMNS
             rows = c.execute("SELECT id, json FROM emails").fetchall()
-            c.executemany("UPDATE emails SET size=?, from_email=?, from_sort=?, seen=?, flagged=? WHERE id=?",
-                          [(*view_columns(json.loads(r["json"])), r["id"]) for r in rows])
+            c.executemany("UPDATE emails SET size=?, from_email=?, from_sort=?, seen=?, flagged=?, has_unsubscribe=?"
+                          " WHERE id=?", [(*view_columns(json.loads(r["json"])), r["id"]) for r in rows])
             c.execute("COMMIT")
         except Exception:
             c.execute("ROLLBACK")
@@ -154,7 +166,7 @@ class Database:
         with self._write_lock:
             c = self.conn()
             for table in ("mailboxes", "emails", "email_mailboxes", "threads", "identities", "masked_emails",
-                          "query_cache", "addresses", "classification", "correspondents"):
+                          "query_cache", "addresses", "classification", "correspondents", "sender_deletions"):
                 # table names come from the literal tuple above (Bandit B608)
                 c.execute(f"DELETE FROM {table}")  # nosec B608
             c.execute("DELETE FROM meta WHERE key LIKE 'state:%'")
@@ -262,8 +274,8 @@ class Database:
                 mailbox_ids = merged.get("mailboxIds") or {}
                 c.execute(
                     "INSERT OR REPLACE INTO emails(id, thread_id, received_at, subject, preview, keywords, mailbox_ids,"
-                    " has_attachment, json, body_json, body_fetched_at, size, from_email, from_sort, seen, flagged)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " has_attachment, json, body_json, body_fetched_at, size, from_email, from_sort, seen, flagged,"
+                    " has_unsubscribe) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         merged["id"], merged.get("threadId"), merged.get("receivedAt"), merged.get("subject"),
                         merged.get("preview"), json.dumps(keywords), json.dumps(mailbox_ids),
@@ -426,6 +438,27 @@ class Database:
                 if not known:
                     new.add(addr)
         return new
+
+    def record_deletions(self, emails: list[dict]) -> None:
+        """The user threw these away (Trash or gone): counted per sender, unread ones
+        apart, as the "deleted unread" signal of the cleanup ranking (#21)."""
+        rows: dict[str, list[int]] = {}
+        for e in emails:
+            addr = view_columns(e)[1]
+            if not addr:
+                continue
+            t = rows.setdefault(addr, [0, 0])
+            t[0] += 1
+            if not (e.get("keywords") or {}).get(KW_SEEN):
+                t[1] += 1
+        if not rows:
+            return
+        with self._write_lock:
+            self.conn().executemany(
+                "INSERT INTO sender_deletions(email, deleted, deleted_unread) VALUES (?,?,?)"
+                " ON CONFLICT(email) DO UPDATE SET deleted=deleted+excluded.deleted,"
+                " deleted_unread=deleted_unread+excluded.deleted_unread",
+                [(addr, d, u) for addr, (d, u) in rows.items()])
 
     def is_correspondent(self, addr: str) -> bool:
         """Has the user ever sent mail to this address?"""

@@ -83,6 +83,19 @@ moved into or out of it. The window keeps the view's ordered ids, hands the
 list one page at a time, and re-runs the query, debounced, whenever the cache
 changes; the counts on the badges are recomputed the same way.
 
+## Sender statistics
+
+`den_mail/senders.py` (#21) groups the cached mail by sender in one SQL
+statement: counts, unread, first and last date, size, a List-Unsubscribe
+flag (`has_unsubscribe`, a cache column), whether the user wrote to the
+address (`correspondents`) and how much of their mail the user trashed or
+destroyed unread (`sender_deletions`, which the engine increments as it
+performs those actions). The score that orders the cleanup dialog is a
+property of the dataclass. Bulk actions go through `SyncEngine.act_on_sender`,
+which queries the server for every message from the address outside Trash
+and Spam, caches the ones it never listed, and performs one action, so the
+dialog's undo covers them all.
+
 ## Rules
 
 Client-side rules (`den_mail/rules.py`, #22) are stored in the config file

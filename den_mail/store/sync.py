@@ -972,6 +972,10 @@ class SyncEngine(GObject.Object):
         deltas: dict[str, tuple[int, int]] = {}
         fallback = self.roles.get(ROLE_ARCHIVE) or self.roles.get(ROLE_INBOX)
 
+        trash = self.roles.get(ROLE_TRASH)
+        if isinstance(action, EmailAction) and (action.destroy or (trash and action.mailbox_replace == {trash})):
+            self.db.record_deletions([emails[eid] for eid in ids if eid in emails
+                                      and not (trash and (emails[eid].get("mailboxIds") or {}).get(trash))])
         if isinstance(action, EmailAction) and action.destroy:
             for eid in ids:
                 e = emails.get(eid)

@@ -125,6 +125,22 @@ you have already left shows the date.
 
 ![Newsletters dialog](../data/screenshots/newsletters.png)
 
+## Clean up
+
+*Clean up…* in the main menu lists every sender in the local cache, the
+most pointless first: how many messages, how many unread, when the last one
+came, whether you ever wrote back, how much of their mail you threw away
+unread, and whether they offer an unsubscribe method. The score behind the
+order rewards volume that is never opened or deleted unread and drops below
+zero for anyone you have replied to. Narrow the list to a category, sort by
+volume, unread, date or size, and open a sender to see their newest
+messages. Tick senders and press Mark read, Archive, Delete or Unsubscribe;
+the first three reach every message from them on the server, not only the
+cached ones, and can be undone from the toast. *Always…* adds a rule per
+selected sender for their future mail and applies it now.
+
+![Clean up dialog](../data/screenshots/cleanup.png)
+
 ## Rules
 
 *Always for this sender…* in a conversation's context menu makes a rule: for

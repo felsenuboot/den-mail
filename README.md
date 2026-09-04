@@ -36,6 +36,8 @@ offline and follows changes as they happen.
   and wording; a chip on the row and a filter in the list header.
 - 👓 **Views.** Newsletters, Transactions, Security, Updates, Never read and
   Big attachments in the sidebar, answered from the local cache in an instant.
+- 🧹 **Clean up.** Senders ranked by how pointless their mail looks, with
+  bulk archive, delete, mark read and unsubscribe per sender.
 - 📐 **Rules.** Always label, archive, read or delete mail from a sender,
   a domain, a list or a category, applied as it arrives.
 - 🔔 **Desktop.** Notifications with the sender's logo, `mailto:` links, keyboard
