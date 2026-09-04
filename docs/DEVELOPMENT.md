@@ -75,6 +75,7 @@ shrinking below a breakpoint.
 | `DEN_MAIL_DEBUG=1` | log every JMAP request (method names and sizes, never bodies) |
 | `DEN_MAIL_NO_WEBKIT=1` | force the text renderer for HTML mail |
 | `DEN_MAIL_AUTOPILOT` | script to run after start-up (see above) |
+| `DEN_MAIL_TIMING=1` | log `timing:` marks for start-up, folder switch, search and opening (see [BENCHMARK.md](BENCHMARK.md)) |
 
 ## Where things live
 

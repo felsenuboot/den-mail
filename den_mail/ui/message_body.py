@@ -17,6 +17,7 @@ from urllib.parse import unquote
 import gi
 from gi.repository import Gdk, Gio, GLib, Gtk
 
+from .. import timing
 from ..html.sanitize import sanitize_html
 from ..html.totext import html_to_markup, quote_layout, split_quoted_text, text_to_markup
 from .widgets import open_uri
@@ -120,6 +121,7 @@ if HAVE_WEBKIT:
 
         def _on_load_changed(self, _view, event):
             if event == WebKit.LoadEvent.FINISHED:
+                timing.mark("open-painted")
                 self.apply_quotes()
                 self._schedule_measure()
                 GLib.timeout_add(400, lambda: (self._measure(), False)[1])
@@ -252,6 +254,7 @@ class MessageBody(Gtk.Box):
         label.set_markup(text_to_markup(text if self.quotes_shown else self._text))
         self.has_remote = False
         self._sync_quote_button(bool(quoted))
+        timing.mark("open-rendered")
 
     def show_html(self, html: str, email_id: str, allow_remote: bool, dark: bool = False,
                   text: str | None = None) -> None:
@@ -281,6 +284,7 @@ class MessageBody(Gtk.Box):
             else:
                 web.remove_css_class("dark")
             web.load_html(result.html, f"{CID_SCHEME}://{email_id}/")
+            timing.mark("open-rendered")  # handed to WebKit; open-painted follows once it has loaded
         else:
             label = self._ensure_label()
             label.set_markup(html_to_markup(html))

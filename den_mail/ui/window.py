@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 from gi.repository import Adw, Gio, GLib, Gtk
 
-from .. import secrets, shortcuts
+from .. import secrets, shortcuts, timing
 from ..avatars import AvatarService
 from ..config import Config, database_path
 from ..html.body import find_inline_part
@@ -80,6 +80,8 @@ class MainWindow(Adw.ApplicationWindow):
     # ------------------------------------------------------------ account
 
     def start(self) -> None:
+        timing.mark("inbox-start")  # the first mailbox listing closes it (docs/BENCHMARK.md)
+        self._timing_pending: str | None = "inbox"
         token = secrets.load_token()
         if not token:
             self.stack.set_visible_child_name("login")
@@ -158,6 +160,7 @@ class MainWindow(Adw.ApplicationWindow):
         set_cid_resolver(self._resolve_cid)
         e.start()
         self.stack.set_visible_child_name("main")
+        timing.mark("session-ready")
         self._on_mailboxes_changed(e)
 
     def _auth_failed(self) -> None:
@@ -377,6 +380,9 @@ class MainWindow(Adw.ApplicationWindow):
         q = self.db.get_query(key)
         if not q:
             return
+        if self._timing_pending:
+            timing.mark(f"{self._timing_pending}-listed")
+            self._timing_pending = None
         selected_ids = {t.thread_id for t in self.selected}
         self.model.loading = False
         ids = list(q["ids"])
@@ -457,6 +463,9 @@ class MainWindow(Adw.ApplicationWindow):
     # ---------------------------------------------------------- navigation
 
     def _on_select_mailbox(self, mb: MailboxObject) -> None:
+        if self.current_mailbox is not None:  # the first selection belongs to the start-up pair
+            timing.mark("switch-start")
+            self._timing_pending = "switch"
         self.current_mailbox = mb
         log.debug("select mailbox %s", mb.name)
         self.threadlist.search_entry.set_text("")
@@ -522,6 +531,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.threadlist.set_title(live.name, sub)
 
     def _on_search(self, text: str, scope: str) -> None:
+        if text:
+            timing.mark("search-start")
+            self._timing_pending = "search"
         if not text and scope == "mailbox":
             if self.current_mailbox:
                 self._load_mailbox(self.current_mailbox)
@@ -607,6 +619,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.selected = threads
         if len(threads) == 1:
             t = threads[0]
+            timing.mark("open-start")
             self.conversation.show_thread(t, self.model.mailbox_id)
             if self.config.get("mark_read_on_open", True):
                 unread = self.conversation.unread_email_ids()
