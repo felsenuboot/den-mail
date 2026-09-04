@@ -140,5 +140,8 @@ def main_entry() -> int:
         setproctitle.setproctitle("den-mail")  # what top, btop and ps show (#30)
     logging.basicConfig(level=logging.DEBUG if os.environ.get("DEN_MAIL_DEBUG") else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    from . import timing
+
+    timing.install_watchdog()
     app = FastmailApp()
     return app.run(sys.argv)

@@ -35,3 +35,38 @@ def mark(event: str) -> None:
     started = _starts.get(name)
     took = f" took={(now - started) * 1000:.0f}" if started is not None else ""
     log.info("timing: %s at=%d%s", event, (now - _T0) * 1000, took)
+
+
+def install_watchdog(threshold_ms: int = 1000) -> None:
+    """Log when the main loop stops turning for longer than `threshold_ms` (DEN_MAIL_TIMING=1).
+
+    A thread posts a heartbeat to the main loop every 250 ms and measures how late it
+    runs; a late heartbeat means the main thread was busy (or blocked) that long, which
+    is what the compositor's "not responding" dialog reacts to."""
+    if not ENABLED:
+        return
+    import threading
+
+    from gi.repository import GLib
+
+    last_mark = {"name": "start"}
+    original_mark = globals()["mark"]
+
+    def mark_and_note(event: str) -> None:
+        last_mark["name"] = event
+        original_mark(event)
+
+    globals()["mark"] = mark_and_note
+
+    def beat(sent: float) -> bool:
+        late = (time.perf_counter() - sent) * 1000
+        if late > threshold_ms:
+            log.warning("timing: main loop stalled %.0f ms (last mark %s)", late, last_mark["name"])
+        return False
+
+    def pulse() -> None:
+        while True:
+            GLib.idle_add(beat, time.perf_counter(), priority=GLib.PRIORITY_HIGH)
+            time.sleep(0.25)
+
+    threading.Thread(target=pulse, name="timing-watchdog", daemon=True).start()

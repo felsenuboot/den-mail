@@ -94,6 +94,12 @@ if HAVE_WEBKIT:
             _primary_view = WebKit.WebView(web_context=_get_context(), network_session=_session)
         return _primary_view
 
+    def warm_up() -> None:
+        """Spawn the shared web process now, so the first message opened does not wait for it."""
+        view = _related_view()
+        if view.get_uri() is None:
+            view.load_html("<!DOCTYPE html><html><body></body></html>", "about:blank")
+
     class _SizedWebView(WebKit.WebView):
         """A WebView that grows to its content height (no inner scrolling)."""
 
@@ -199,6 +205,12 @@ if HAVE_WEBKIT:
                 decision.ignore()
                 return True
             return False
+
+
+def warm_up_renderer() -> None:
+    """Start WebKit's shared web process ahead of the first HTML message (a no-op without WebKit)."""
+    if HAVE_WEBKIT:
+        warm_up()
 
 
 class MessageBody(Gtk.Box):

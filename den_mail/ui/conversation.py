@@ -14,7 +14,7 @@ from ..html.body import assemble_body
 from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full
 from ..models.thread import ThreadObject, format_date_long
 from ..unsubscribe import parse_list_unsubscribe
-from .message_body import MessageBody
+from .message_body import MessageBody, warm_up_renderer
 from .widgets import avatar, confirm, human_size, open_uri, toast
 
 COLUMN_WIDTH = 980  # the message column's maximum width
@@ -620,6 +620,7 @@ class ConversationView(Adw.NavigationPage):
         self.connect("notify::wide", lambda *_: self._place_actions())
         self.set_child(view)
         self._install_actions()
+        GLib.idle_add(lambda: (warm_up_renderer(), False)[1], priority=GLib.PRIORITY_LOW)  # after the first paint
 
     def _place_actions(self) -> None:
         """Move the thread actions between the header bar and the subject row."""

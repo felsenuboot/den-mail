@@ -167,7 +167,7 @@ def run_app(runs: int) -> None:
                                  capture_output=True, text=True).stdout.strip().splitlines()[-1]
             info = json.loads(win)
             browser = None
-            for _ in range(150):  # the debugging port comes up shortly after the window
+            for _ in range(300):  # the debugging port comes up shortly after the window (60 s at most)
                 try:
                     browser = p.chromium.connect_over_cdp(f"http://127.0.0.1:{CDP_PORT}")
                     break
