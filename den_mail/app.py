@@ -132,8 +132,12 @@ class FastmailApp(Adw.Application):
 
 
 def main_entry() -> int:
-    import setproctitle
-    setproctitle.setproctitle("den-mail")
+    try:
+        import setproctitle
+    except ImportError:  # optional: without it the process merely shows as python3
+        pass
+    else:
+        setproctitle.setproctitle("den-mail")  # what top, btop and ps show (#30)
     logging.basicConfig(level=logging.DEBUG if os.environ.get("DEN_MAIL_DEBUG") else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     app = FastmailApp()

@@ -46,13 +46,14 @@ group-and-archive workflow, are in the [tour](docs/TOUR.md).
 ## Install
 
 Python 3.12+, PyGObject, GTK 4, libadwaita 1.5+, libsecret and, for HTML mail,
-WebKitGTK 6.0.
+WebKitGTK 6.0. Optional: setproctitle, so the process shows up as `den-mail`
+rather than `python3` in top and friends.
 
 ```
 # Arch
-sudo pacman -S --needed python-gobject gtk4 libadwaita libsecret webkitgtk-6.0
-# Fedora: python3-gobject gtk4 libadwaita libsecret webkitgtk6.0
-# Debian/Ubuntu: python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 gir1.2-webkit-6.0
+sudo pacman -S --needed python-gobject gtk4 libadwaita libsecret webkitgtk-6.0 python-setproctitle
+# Fedora: python3-gobject gtk4 libadwaita libsecret webkitgtk6.0 python3-setproctitle
+# Debian/Ubuntu: python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 gir1.2-webkit-6.0 python3-setproctitle
 
 git clone https://github.com/felsenuboot/den-mail.git
 cd den-mail
