@@ -19,7 +19,14 @@ from ..models.thread import ThreadListModel, ThreadObject
 from ..store import actions
 from ..store.actions import UndoRecord
 from ..store.db import Database
-from ..store.sync import SyncEngine, build_sort, mailbox_query_spec, parse_sort, search_query_spec
+from ..store.sync import (
+    SyncEngine,
+    build_sort,
+    mailbox_query_spec,
+    parse_sort,
+    search_mailboxes,
+    search_query_spec,
+)
 from .compose import ComposeWindow
 from .conversation import ConversationView
 from .identities import IdentitiesDialog
@@ -547,15 +554,28 @@ class MainWindow(Adw.ApplicationWindow):
         if self.query_key:
             self.engine.release_query(self.query_key)
         mailbox_id = self.current_mailbox.id if (scope == "mailbox" and self.current_mailbox) else None
+        mailboxes = self.db.get_mailboxes()
+        named, unknown, everywhere = search_mailboxes(text, mailboxes)
+        if named or everywhere:
+            # `in:`/`label:` replaces the folder scope; a single named mailbox scopes the thread rows too
+            mailbox_id = named[0] if len(named) == 1 else None
         self.model.mailbox_id = mailbox_id
         self.model.trash_junk = set(self.engine.trash_junk_ids())
+        self.conversation.clear()
+        if unknown:
+            self.query_key = None
+            self.model.loading = False
+            self.model.clear()
+            self.threadlist.set_empty_text(f"No label called “{unknown[0]}”",
+                                           "A search can name the labels and folders in the sidebar.")
+            self.threadlist.set_title("Search", "0 results")
+            return
         self.model.loading = True
         self.model.clear()
-        self.conversation.clear()
         self.threadlist.set_empty_text("No results", "Try different words, or search all mail.")
-        self.query_key = self.engine.load_query(search_query_spec(text, mailbox_id, self.engine.trash_junk_ids(),
-                                                                  self._current_sort(), self.threadlist.unread_only,
-                                                                  mailboxes=self.db.get_mailboxes()))
+        self.query_key = self.engine.load_query(search_query_spec(text, None if named or everywhere else mailbox_id,
+                                                                  self.engine.trash_junk_ids(), self._current_sort(),
+                                                                  self.threadlist.unread_only, mailboxes=mailboxes))
         self.threadlist.set_title("All mail" if not text else "Search", "Loading…" if not text else "Searching…")
         self.threadlist.scroll_to_top()
 

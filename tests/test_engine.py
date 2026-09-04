@@ -16,7 +16,7 @@ from den_mail.jmap.types import KW_SEEN, ROLE_ARCHIVE, ROLE_INBOX, ROLE_TRASH
 from den_mail.models.thread import ThreadListModel
 from den_mail.store import actions
 from den_mail.store.db import Database
-from den_mail.store.sync import SyncEngine, mailbox_query_spec, search_query_spec
+from den_mail.store.sync import SyncEngine, mailbox_query_spec, search_mailboxes, search_query_spec
 
 from .fake_server import FakeJMAPServer
 
@@ -158,9 +158,14 @@ def test_search_mailbox_operators(engine):
     spec = search_query_spec("label:receipts in:Inbox", None, tj, mailboxes=boxes)
     assert spec["filter"]["conditions"] == [
         {"inMailbox": by_name["Receipts"]}, {"inMailbox": engine.roles[ROLE_INBOX]}, {"inMailboxOtherThan": tj}]
-    # a mailbox scope and a label combine; an unknown label is searched as text
-    spec = search_query_spec("label:nowhere", engine.roles[ROLE_INBOX], tj, mailboxes=boxes)
-    assert spec["filter"]["conditions"] == [{"text": "nowhere"}, {"inMailbox": engine.roles[ROLE_INBOX]}]
+    # a named mailbox replaces the folder scope; an unknown label is left out of the query (the window reports it)
+    spec = search_query_spec("in:trash", engine.roles[ROLE_INBOX], tj, mailboxes=boxes)
+    assert spec["filter"] == {"inMailbox": engine.roles["trash"]}
+    spec = search_query_spec("label:nowhere x", engine.roles[ROLE_INBOX], tj, mailboxes=boxes)
+    assert spec["filter"]["conditions"] == [{"text": "x"}, {"inMailbox": engine.roles[ROLE_INBOX]}]
+    assert search_mailboxes("in:trash label:nowhere in:Projects", boxes) == (
+        [engine.roles["trash"], by_name["Projects"]], ["nowhere"], False)
+    assert search_mailboxes("in:anywhere", boxes) == ([], [], True)
     # naming Trash or Spam, or in:anywhere, lifts the exclusion
     assert search_query_spec("in:trash", None, tj, mailboxes=boxes)["filter"] == {"inMailbox": engine.roles["trash"]}
     assert search_query_spec("in:anywhere", None, tj, mailboxes=boxes)["filter"] == {}

@@ -204,6 +204,23 @@ def search_date(value: str, now: datetime | None = None) -> str | None:
     return None
 
 
+def search_mailboxes(text: str, mailboxes: list[dict]) -> tuple[list[str], list[str], bool]:
+    """What the `label:`/`in:` operators in a query name: (resolved ids, names that match nothing, in:anywhere)."""
+    ids: list[str] = []
+    unknown: list[str] = []
+    everywhere = False
+    for key, value in search_tokens(text):
+        if key not in ("label", "in"):
+            continue
+        if value.lower() in _EVERYWHERE:
+            everywhere = True
+        elif mid := resolve_mailbox(value, mailboxes):
+            ids.append(mid)
+        else:
+            unknown.append(value)
+    return ids, unknown, everywhere
+
+
 def search_query_spec(text: str, mailbox_id: str | None, trash_junk: list[str],
                       sort: list[dict] | None = None, unread_only: bool = False,
                       mailboxes: list[dict] | None = None, now: datetime | None = None) -> dict:
@@ -211,13 +228,19 @@ def search_query_spec(text: str, mailbox_id: str | None, trash_junk: list[str],
 
     Operators: from:/to:/cc:/subject: (quoted values allowed), is:unread|read|flagged|starred|unflagged,
     has:attachment, before:/after: (a date, or `7d` ago), older_than:/newer_than: (same values),
-    label:/in: (a mailbox name or path resolved against `mailboxes`; in:anywhere lifts the Trash/Spam exclusion).
-    Bare words search everything, a "quoted phrase" must appear as written.  A `label:` naming no mailbox, or
-    a date that does not parse, is searched as text instead.
+    label:/in: (a mailbox name or path resolved against `mailboxes`).  Bare words search everything, a
+    "quoted phrase" must appear as written; a date that does not parse is searched as text.
+
+    Naming a mailbox replaces the folder scope `mailbox_id`, and naming Trash or Spam (or in:anywhere) lifts
+    the exclusion an all-mail search applies.  A name that matches no mailbox is left out here; the window
+    checks `search_mailboxes` first and shows "no such label" instead of running the query.
     """
     conditions: list[dict] = []
     words: list[str] = []
-    everywhere = False
+    ids, _unknown, everywhere = search_mailboxes(text, mailboxes or [])
+    everywhere = everywhere or any(i in trash_junk for i in ids)
+    if ids or everywhere:
+        mailbox_id = None
     for key, value in search_tokens(text):
         if not key:
             if " " in value:
@@ -239,14 +262,9 @@ def search_query_spec(text: str, mailbox_id: str | None, trash_junk: list[str],
             conditions.append({"hasAttachment": True})
         elif key in ("before", "after", "older_than", "newer_than", "older", "newer") and (when := search_date(value, now)):
             conditions.append({"before" if key.startswith(("before", "older")) else "after": when})
-        elif key in ("label", "in") and value.lower() in _EVERYWHERE:
-            everywhere = True
-        elif key in ("label", "in") and (mid := resolve_mailbox(value, mailboxes or [])):
-            conditions.append({"inMailbox": mid})
-            if mid in trash_junk:
-                everywhere = True
         elif key in ("label", "in"):
-            words.append(value)
+            if (mid := resolve_mailbox(value, mailboxes or [])) and {"inMailbox": mid} not in conditions:
+                conditions.append({"inMailbox": mid})
         else:
             words.append(f"{key}:{value}")
     if words:

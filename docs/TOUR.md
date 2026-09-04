@@ -70,13 +70,13 @@ operator too (`from:"Anna Berger"`).
 | `from:` `to:` `cc:` `subject:` | match one header |
 | `is:unread` `is:read` `is:flagged` `is:unflagged` | by flag (`is:starred` works too) |
 | `has:attachment` | with an attachment |
-| `label:Receipts` `in:Work/Projects` | in that mailbox: a name, a path, or `inbox`, `sent`, `archive`, `spam`, `trash`; case, hyphens and underscores don't matter |
+| `label:Receipts` `in:Work/Projects` | in that mailbox, whatever the scope says: a name, a path, or `inbox`, `sent`, `archive`, `spam`, `trash`; case, hyphens and underscores don't matter |
 | `in:trash` `in:spam` `in:anywhere` | Trash and Spam are otherwise left out of an all-mail search |
 | `before:2026-09-04` `after:2026-09` `after:2025` | a date; a month or a year means its first day |
 | `older_than:7d` `newer_than:2w` | a span in `h`ours, `d`ays, `w`eeks, `m`onths or `y`ears ago (`before:7d` means the same) |
 
-Several operators combine with AND. A label that names no mailbox, or a date
-that does not parse, is searched as text instead.
+Several operators combine with AND. A label that names no mailbox gives an
+empty list that says so; a date that does not parse is searched as text.
 
 ![Search for has:attachment](../data/screenshots/search.png)
 
