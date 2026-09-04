@@ -294,9 +294,11 @@ class MessageCard(Gtk.Box):
         self.refresh_unsubscribe()
         if html:
             allow = self.remote_allowed or policy == "always" or (trusted and policy != "never")
-            self.body.show_html(html, self.email_id, allow_remote=allow, dark=self.wants_dark())
+            self.body.show_html(html, self.email_id, allow_remote=allow, dark=self.wants_dark(), text=text)
             self.banner.set_sender(address_display((self.email.get("from") or [{}])[0]) or self.sender_email or "")
-            self.banner.set_revealed(bool(self.body.has_remote) and not allow and policy == "ask")
+            self._remote_asks = not allow and policy == "ask"
+            self.body.on_quotes_toggled = self._update_banner  # remote images may live only in the quote
+            self._update_banner()
         elif text is not None:
             self.body.show_text(text)
             self.banner.set_revealed(False)
@@ -306,6 +308,9 @@ class MessageCard(Gtk.Box):
         atts = [a for a in full.get("attachments") or []
                 if a.get("disposition") == "attachment" or not a.get("cid")]
         self._fill_attachments(atts)
+
+    def _update_banner(self) -> None:
+        self.banner.set_revealed(bool(self.body.has_remote) and getattr(self, "_remote_asks", False))
 
     def _fill_attachments(self, atts: list[dict]) -> None:
         while child := self.attachments.get_first_child():

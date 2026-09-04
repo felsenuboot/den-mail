@@ -32,7 +32,8 @@ you own in the From field.
   ones you use, manage Masked Email addresses.
 - **Bulk actions.** Ctrl/Shift-click or the Select button with checkboxes;
   group by sender (any sort order), fold groups, act on a whole sender at once.
-- **One-click unsubscribe**, an unread filter, search operators
+- **One-click unsubscribe**, an unread filter, quoted history folded behind
+  a `···` pill, search operators
   (`from:` `to:` `subject:` `is:unread` `has:attachment` `before:` `after:`),
   notifications with the sender's logo, `mailto:` handling, keyboard shortcuts.
 

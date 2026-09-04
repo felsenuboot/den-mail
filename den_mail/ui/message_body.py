@@ -18,7 +18,7 @@ import gi
 from gi.repository import Gdk, Gio, GLib, Gtk
 
 from ..html.sanitize import sanitize_html
-from ..html.totext import html_to_markup, text_to_markup
+from ..html.totext import html_to_markup, quote_layout, split_quoted_text, text_to_markup
 from .widgets import open_uri
 
 log = logging.getLogger(__name__)
@@ -105,6 +105,7 @@ if HAVE_WEBKIT:
             self.set_hexpand(True)
             self._last_width = 0
             self._pending = 0
+            self.show_quotes = False  # re-applied once a load finishes, so a toggle during a load is not lost
             self.connect("load-changed", self._on_load_changed)
             self.connect("decide-policy", self._on_decide_policy)
             self.connect("create", self._on_create)  # never open WebKit child windows
@@ -119,6 +120,7 @@ if HAVE_WEBKIT:
 
         def _on_load_changed(self, _view, event):
             if event == WebKit.LoadEvent.FINISHED:
+                self.apply_quotes()
                 self._schedule_measure()
                 GLib.timeout_add(400, lambda: (self._measure(), False)[1])
                 GLib.timeout_add(1500, lambda: (self._measure(), False)[1])
@@ -133,11 +135,20 @@ if HAVE_WEBKIT:
             self._measure()
             return False
 
+        def apply_quotes(self):
+            """Show or hide the quoted history (the den-quote elements) in the loaded page."""
+            self.evaluate_javascript(
+                f"document.body && document.body.classList.toggle('den-show-quotes', {'true' if self.show_quotes else 'false'})",
+                -1, None, None, None, None, None)
+            self._schedule_measure()
+
         def _measure(self):
             if not self.get_mapped():
                 return
+            # The root's scrollHeight never drops below the viewport, which is this widget's
+            # last size, so it could only grow; offsetHeight is the laid-out content.
             self.evaluate_javascript(
-                "Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)",
+                "Math.max(document.documentElement.offsetHeight, document.body ? document.body.scrollHeight : 0)",
                 -1, None, None, None, self._on_measured, None,
             )
 
@@ -188,6 +199,18 @@ class MessageBody(Gtk.Box):
         self.has_remote = False
         self._html: str | None = None
         self._email_id: str | None = None
+        self._text: str | None = None      # the text body without its quoted history
+        self._full_text: str | None = None  # the text body as received
+        self._text_alternative: str | None = None  # the text/plain part beside an HTML body
+        self._remote_in_quotes = False
+        self.quotes_shown = False
+        self.on_quotes_toggled: Callable[[], None] = lambda: None
+        # Quoted history collapses behind this pill (#9); it sits below the content.
+        self.quote_button = Gtk.Button(label="···", tooltip_text="Show quoted text", halign=Gtk.Align.START,
+                                       visible=False)
+        self.quote_button.add_css_class("quote-toggle")
+        self.quote_button.connect("clicked", lambda *_: self.set_quotes_shown(not self.quotes_shown))
+        self.append(self.quote_button)
 
     def _ensure_label(self) -> Gtk.Label:
         if self._label is None:
@@ -199,7 +222,7 @@ class MessageBody(Gtk.Box):
             self._label.set_margin_start(4)
             self._label.set_margin_end(4)
             self._label.connect("activate-link", self._on_link)
-            self.append(self._label)
+            self.insert_child_after(self._label, None)
         self._label.set_visible(True)
         if self._web is not None:
             self._web.set_visible(False)
@@ -209,7 +232,7 @@ class MessageBody(Gtk.Box):
         if self._web is None:
             self._web = _SizedWebView()
             self._web.add_css_class("html-body")
-            self.append(self._web)
+            self.insert_child_after(self._web, None)
         self._web.set_visible(True)
         if self._label is not None:
             self._label.set_visible(False)
@@ -223,20 +246,33 @@ class MessageBody(Gtk.Box):
 
     def show_text(self, text: str) -> None:
         self._html = None
+        self._full_text = text
+        self._text, quoted = split_quoted_text(text)
         label = self._ensure_label()
-        label.set_markup(text_to_markup(text))
+        label.set_markup(text_to_markup(text if self.quotes_shown else self._text))
         self.has_remote = False
+        self._sync_quote_button(bool(quoted))
 
-    def show_html(self, html: str, email_id: str, allow_remote: bool, dark: bool = False) -> None:
+    def show_html(self, html: str, email_id: str, allow_remote: bool, dark: bool = False,
+                  text: str | None = None) -> None:
+        """`text` is the message's text/plain alternative: when it shows an inline reply
+        (answers between quoted lines) the HTML quote containers hold the sender's own
+        words too, so nothing is folded."""
         self._html = html
+        self._text = None
+        self._text_alternative = text
         self._email_id = email_id
         self._allow_remote = allow_remote
         self._dark = dark
         if HAVE_WEBKIT:
+            fold = text is None or quote_layout(text) != "inline"
             result = sanitize_html(html, allow_remote=allow_remote, cid_scheme=f"{CID_SCHEME}://{email_id}/",
-                                   dark=dark)
-            self.has_remote = result.has_remote_content
+                                   dark=dark, show_quotes=self.quotes_shown, fold_quotes=fold)
+            self._remote_in_quotes = result.has_remote_in_quotes
+            self.has_remote = result.has_remote_content or (self.quotes_shown and result.has_remote_in_quotes)
+            self._sync_quote_button(result.has_quotes)
             web = self._ensure_web()
+            web.show_quotes = self.quotes_shown
             rgba = Gdk.RGBA()
             rgba.parse("#1e1e1e" if dark else "#ffffff")
             web.set_background_color(rgba)
@@ -249,12 +285,35 @@ class MessageBody(Gtk.Box):
             label = self._ensure_label()
             label.set_markup(html_to_markup(html))
             self.has_remote = "http" in html and ("<img" in html.lower())
+            self._sync_quote_button(False)
+
+    def _sync_quote_button(self, has_quotes: bool) -> None:
+        self.quote_button.set_visible(has_quotes)
+        self.quote_button.set_tooltip_text("Hide quoted text" if self.quotes_shown else "Show quoted text")
+        if self.quotes_shown:
+            self.quote_button.add_css_class("expanded")
+        else:
+            self.quote_button.remove_css_class("expanded")
+
+    def set_quotes_shown(self, shown: bool) -> None:
+        """Reveal or collapse the quoted history of the current body."""
+        self.quotes_shown = shown
+        if self._text is not None and self._label is not None:
+            self._label.set_markup(text_to_markup(self._full_text if shown else self._text))
+        elif self._web is not None and self._web.get_visible():
+            self._web.show_quotes = shown
+            self._web.apply_quotes()
+            self.has_remote = self.has_remote or (shown and self._remote_in_quotes)
+        self._sync_quote_button(self.quote_button.get_visible())
+        self.on_quotes_toggled()
 
     def allow_remote(self) -> None:
         if self._html is not None and self._email_id is not None:
-            self.show_html(self._html, self._email_id, allow_remote=True, dark=getattr(self, "_dark", False))
+            self.show_html(self._html, self._email_id, allow_remote=True, dark=getattr(self, "_dark", False),
+                           text=self._text_alternative)
 
     def set_dark(self, dark: bool) -> None:
         """Re-render the current HTML for a theme change."""
         if self._html is not None and self._email_id is not None and getattr(self, "_dark", None) != dark:
-            self.show_html(self._html, self._email_id, allow_remote=getattr(self, "_allow_remote", False), dark=dark)
+            self.show_html(self._html, self._email_id, allow_remote=getattr(self, "_allow_remote", False), dark=dark,
+                           text=self._text_alternative)

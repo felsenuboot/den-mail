@@ -242,3 +242,11 @@ image.label-color-11 { color: #a51d2d; } .chip.label-color-11 { background: alph
   font-size: 110px;
   color: @accent_bg_color;
 }
+
+/* Quoted history behind a pill (#9) */
+.message-body .quote-toggle {
+  min-height: 20px; min-width: 0; padding: 0 9px; margin: 2px 0 8px 8px; border-radius: 10px;
+  background: alpha(currentColor, 0.12); color: alpha(currentColor, 0.75);
+  font-weight: bold; letter-spacing: 1px; line-height: 1;
+}
+.message-body .quote-toggle:hover, .message-body .quote-toggle.expanded { background: alpha(currentColor, 0.2); }

@@ -12,6 +12,9 @@ Commands:
   masked | identities | preferences   open that dialog
   resize <w> <h>       resize the main window
   unread-filter on|off   toggle the unread filter button
+  quotes on|off        reveal or fold the quoted history of every shown message
+  expand-all           expand every message card of the shown conversation
+  body-size            log the height of every HTML body view
   focus <search|list|sidebar|body>   move keyboard focus, to test key routing
   state                log panes, focus, search text and the selected conversations
   row-pos <mailbox>    log where that sidebar row is, in window coordinates
@@ -128,6 +131,20 @@ def _run(app, steps: list[str]) -> bool:
             win.maximize()
         elif cmd == "measure" and win:
             _log_min_widths(win, int(arg) if arg.strip() else 250)
+        elif cmd == "body-size" and win:
+            for card in win.conversation.cards.values():
+                web = card.body._web
+                if web is not None and web.get_visible():
+                    log.info("body-size: %s height=%d", card.email_id, web.get_size_request()[1])
+        elif cmd == "expand-all" and win:
+            for card in win.conversation.cards.values():
+                card.set_expanded(True)
+        elif cmd == "quotes" and win:
+            shown = arg.strip() in ("on", "1", "true")
+            pills = [c.body for c in win.conversation.cards.values() if c.body.quote_button.get_visible()]
+            for body in pills:
+                body.set_quotes_shown(shown)
+            log.info("quotes: %d messages with quoted history, shown=%s", len(pills), shown)
         elif cmd == "unread-filter" and win:
             win.threadlist.unread_button.set_active(arg.strip() in ("on", "1", "true"))
         elif cmd == "focus" and win:

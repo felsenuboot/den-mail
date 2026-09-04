@@ -7,6 +7,7 @@ Then:            DEN_MAIL_SESSION_URL=<url> DEN_MAIL_TOKEN=fake-token den-mail
 
 from __future__ import annotations
 
+import html as html_module
 import json
 import random
 import re
@@ -32,6 +33,19 @@ def _now() -> str:
 
 def _iso(dt: datetime) -> str:
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _preview(text: str | None, html: str | None) -> str:
+    """Like a real server: the words of the message, without markup, entities or quoted history."""
+    from den_mail.html.totext import split_quoted_text
+
+    if text is None:
+        stripped = re.sub(r"<(style|script)[^>]*>.*?</\1>", " ", html or "", flags=re.DOTALL | re.IGNORECASE)
+        stripped = re.sub(r"<[^>]+?class=\"[^\"]*gmail_quote[^\"]*\"[^>]*>.*$", " ", stripped, flags=re.DOTALL)
+        text = html_module.unescape(re.sub(r"<[^>]+>", " ", stripped))
+    else:
+        text = split_quoted_text(text)[0]
+    return re.sub(r"\s+", " ", text).strip()[:200]
 
 
 def _png_1x1(rgb=(255, 120, 0)) -> bytes:
@@ -181,7 +195,7 @@ class FakeData:
             "messageId": [msg_id], "inReplyTo": [in_reply_to] if in_reply_to else None,
             "references": [in_reply_to] if in_reply_to else None,
             "from": [frm], "sender": None, "to": to, "cc": cc, "bcc": None, "replyTo": None, "subject": subject,
-            "preview": re.sub(r"\s+", " ", preview_text or re.sub(r"<[^>]+>", " ", re.sub(r"<(style|script)[^>]*>.*?</\1>", " ", html or "", flags=re.DOTALL | re.IGNORECASE))).strip()[:200],
+            "preview": _preview(preview_text, html),
             "hasAttachment": any(a["disposition"] == "attachment" for a in atts),
             "textBody": text_body, "htmlBody": html_body, "attachments": atts, "bodyValues": values,
             "bodyStructure": {"partId": None, "type": "multipart/mixed", "subParts": text_body + html_body + atts},
@@ -241,15 +255,24 @@ class FakeData:
         # A conversation thread of four messages (text)
         thread = None
         prev = None
-        for idx, (who, body) in enumerate([
-            (people[0], "Hi Felix,\n\nare we still on for the GTK meetup on Thursday?\n\nAnna"),
-            (me, "Hi Anna,\n\nyes! I'll bring the demo laptop.\n\n> are we still on for the GTK meetup on Thursday?\n"),
-            (people[1], "Count me in as well. Which room?\n\nBen"),
-            (people[0], "Room 2.04, 18:00. See you both there!\n\nAnna"),
+        # The replies carry the quoted history the way real clients write it (text with an
+        # attribution line, and a Gmail-style HTML quote), which the viewer folds away (#9).
+        gmail_reply = ('<div dir="ltr">Room 2.04, 18:00. See you both there!<div><br></div><div>Anna</div></div><br>'
+                       '<div class="gmail_quote"><div dir="ltr" class="gmail_attr">On Tue, 1 Sep 2026 at 09:12, '
+                       'Ben Okafor &lt;<a href="mailto:ben@example.net">ben@example.net</a>&gt; wrote:</div>'
+                       '<blockquote class="gmail_quote" style="margin:0 0 0 .8ex;border-left:1px solid #ccc;'
+                       'padding-left:1ex">Count me in as well. Which room?<br><br>Ben</blockquote></div>')
+        for idx, (who, body, html) in enumerate([
+            (people[0], "Hi Felix,\n\nare we still on for the GTK meetup on Thursday?\n\nAnna", None),
+            (me, "Hi Anna,\n\nyes! I'll bring the demo laptop.\n\nOn Mon, 31 Aug 2026 at 15:04, Anna Berger wrote:\n"
+                 "> Hi Felix,\n>\n> are we still on for the GTK meetup on Thursday?\n>\n> Anna\n", None),
+            (people[1], "Count me in as well. Which room?\n\nBen\n\nOn Mon, 31 Aug 2026 at 18:10, Felix Test\n"
+                        "<felix@example.com> wrote:\n> Hi Anna,\n>\n> yes! I'll bring the demo laptop.\n", None),
+            (people[0], None, gmail_reply),
         ]):
             e = self.add_email(frm=who, to=[me] if who != me else [people[0]], cc=[people[1]] if idx else None,
                                subject="GTK meetup on Thursday" if idx == 0 else "Re: GTK meetup on Thursday",
-                               text=body, mailboxes=[sent if who == me else inbox],
+                               text=body, html=html, mailboxes=[sent if who == me else inbox],
                                keywords={"$seen": True} if idx < 3 else {}, when=t - timedelta(days=3, hours=-idx * 3),
                                thread=thread, in_reply_to=prev)
             thread, prev = e["threadId"], e["messageId"][0]

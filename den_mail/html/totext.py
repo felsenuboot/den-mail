@@ -211,6 +211,80 @@ def html_to_markup(html: str) -> str:
 URL_RE = re.compile(r"(https?://[^\s<>\"']+[^\s<>\"'.,;:!?)\]])")
 
 
+_VERBS = r"(wrote|writes|schrieb|a écrit|escribió|scrisse|schreef|skrev|napisał|написал[аи]?)"
+QUOTE_ATTRIBUTION_RE = re.compile(
+    r"\b" + _VERBS + r"\b[^:]{0,80}:\s*$"
+    r"|^-{2,}\s*(Original|Forwarded) message\s*-{2,}\s*$|^-{5,}\s*$", re.IGNORECASE)
+# "On Tue, 1 Sep 2026 at 10:00, Anna Berger" / "<anna@example.net> wrote:" wrapped over two lines
+# (the joined lines must carry a date or an address, so a sentence starting with "On" is not one)
+WRAPPED_ATTRIBUTION_RE = re.compile(
+    r"^(On|Am|Le|El|Il|Op|Den|Dnia|W dniu)\b(?=.*(\d|<[^>]*@[^>]*>)).*\b" + _VERBS + r"\b[^:]{0,80}:\s*$",
+    re.IGNORECASE | re.DOTALL)
+SIGNATURE_RE = re.compile(r"^-- ?$")
+
+
+def _quote_bounds(lines: list[str]) -> tuple[int, int, int] | None:
+    """(start, end, tail): the trailing quoted block of `lines` plus its attribution.
+
+    `end` is where the quoted lines stop and `tail` where the message ends (a signature
+    below the quote, Thunderbird style, folds with it). None when nothing folds."""
+    tail = len(lines)
+    while tail and not lines[tail - 1].strip():
+        tail -= 1
+    end = tail
+    sig = next((i for i in range(tail - 1, -1, -1) if SIGNATURE_RE.match(lines[i])), None)
+    if sig is not None and not any(line.startswith(">") for line in lines[sig:tail]):
+        end = sig
+        while end and not lines[end - 1].strip():
+            end -= 1
+    start = end
+    while start and (lines[start - 1].startswith(">") or not lines[start - 1].strip()):
+        start -= 1
+    if not any(line.startswith(">") for line in lines[start:end]):
+        return None
+    prev = start - 1
+    while prev >= 0 and not lines[prev].strip():
+        prev -= 1
+    if prev >= 0 and QUOTE_ATTRIBUTION_RE.search(lines[prev].strip()):
+        start = prev
+        above = lines[prev - 1].strip() if prev >= 1 else ""
+        if above and WRAPPED_ATTRIBUTION_RE.match(above + " " + lines[prev].strip()):
+            start = prev - 1
+    while start < end and not lines[start].strip():
+        start += 1
+    if not any(line.strip() for line in lines[:start]):
+        return None
+    return start, end, tail
+
+
+def quote_layout(text: str) -> str:
+    """"none" (no quoted history), "trailing" (own words, then the quote) or "inline"
+    (answers written between quoted lines, which must all stay visible)."""
+    lines = text.splitlines()
+    bounds = _quote_bounds(lines)
+    first = next((i for i, line in enumerate(lines) if line.startswith(">")), None)
+    if first is None:
+        return "none"
+    if bounds is None:
+        return "inline"
+    return "inline" if first < bounds[0] else "trailing"
+
+
+def split_quoted_text(text: str) -> tuple[str, str]:
+    """Split plain text into (own words, quoted history) at the trailing quote block (#9).
+
+    The quoted part is the run of ">" lines that ends the message, plus the attribution
+    ("On …, X wrote:", possibly wrapped over two lines) before it and a signature after
+    it. Messages that are quotes only are left whole; an inline reply keeps its exchange
+    and folds only the quote it ends with."""
+    lines = text.splitlines()
+    bounds = _quote_bounds(lines)
+    if bounds is None:
+        return text, ""
+    start, _end, tail = bounds
+    return "\n".join(lines[:start]).rstrip(), "\n".join(lines[start:tail])
+
+
 def text_to_markup(text: str) -> str:
     """Escape plain text for Pango and make URLs clickable; dim quoted lines."""
     lines = []
