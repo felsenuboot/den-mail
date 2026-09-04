@@ -1,0 +1,1 @@
+Sender logos: a site without a favicon at the usual paths is asked once for the icon its home page links to; and "Sender logos" in Preferences chooses where logos come from: each sender's site, DuckDuckGo's icon service so sender sites see nothing, BIMI only with no web contact, or off
