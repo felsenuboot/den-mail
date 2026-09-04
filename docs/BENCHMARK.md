@@ -4,53 +4,10 @@ den-mail against Fastmail's desktop app and web client: the same account, the
 same machine and network, the same window size and scenario, on an idle
 desktop. Lower is better in every chart.
 
-```mermaid
-xychart-beta
-    title "Launch to a usable inbox, lower is better"
-    x-axis ["den-mail", "den-mail, cold", "Fastmail app", "Fastmail web"]
-    y-axis "ms" 0 --> 2780
-    bar [300, 2528, 1418, 868]
-```
-
-```mermaid
-xychart-beta
-    title "Switch to a folder of 2,900 conversations, lower is better"
-    x-axis ["den-mail", "den-mail, cold", "Fastmail app", "Fastmail web"]
-    y-axis "ms" 0 --> 510
-    bar [118, 458, 204, 114]
-```
-
-```mermaid
-xychart-beta
-    title "Search, lower is better"
-    x-axis ["den-mail", "den-mail, cold", "Fastmail app", "Fastmail web"]
-    y-axis "ms" 0 --> 270
-    bar [186, 239, 226, 180]
-```
-
-```mermaid
-xychart-beta
-    title "Open a message, first paint, lower is better"
-    x-axis ["den-mail", "den-mail, cold", "Fastmail app", "Fastmail web"]
-    y-axis "ms" 0 --> 200
-    bar [67, 179, 135, 148]
-```
-
-```mermaid
-xychart-beta
-    title "Memory with a message open (PSS), lower is better"
-    x-axis ["den-mail", "den-mail, cold", "Fastmail app", "Fastmail web"]
-    y-axis "MiB" 0 --> 710
-    bar [340, 380, 642, 511]
-```
-
-```mermaid
-xychart-beta
-    title "CPU at rest with a message open, lower is better"
-    x-axis ["den-mail", "den-mail, cold", "Fastmail app", "Fastmail web"]
-    y-axis "% of a core" 0 --> 3.4
-    bar [0.1, 0.4, 2.8, 0.6]
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="benchmark/2026-09-04-dark.svg">
+  <img alt="Six bar charts: den-mail against Fastmail's desktop app and web client for start-up, folder switch, search, opening a message, memory and idle CPU" src="benchmark/2026-09-04-light.svg">
+</picture>
 
 | medians, 2026-09-04 | den-mail warm | den-mail cold | Fastmail app | Fastmail web |
 | --- | --- | --- | --- | --- |
@@ -78,7 +35,7 @@ xychart-beta
 The rows are in [`benchmark/results-2026-09-04.jsonl`](benchmark/results-2026-09-04.jsonl)
 (eight runs per client for the timings, three for CPU; den-mail a88f9f9,
 Flathub app 1.7.0, Chromium 150 for the web client) and `bench/charts.py`
-writes the charts (Mermaid for GitHub, SVG for elsewhere) from them.
+draws the picture from them.
 
 ## Method
 
@@ -101,5 +58,5 @@ Running it: `bench/den-mail.sh 5 warm|cold` (needs `DEN_MAIL_TOKEN`; a
 separate profile, mark-read-on-open off), `bench/web.py app 5` and
 `bench/web.py web 5` (Playwright in `bench/venv`, the desktop app from Flathub
 started with a debugging port, one manual login each), `bench/report.py` for
-the table and `bench/charts.py` for the charts. A quiet machine and twenty
+the table and `bench/charts.py` for the picture. A quiet machine and twenty
 minutes of hands off are the only other requirements.

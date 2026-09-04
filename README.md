@@ -1,9 +1,10 @@
-# <img src="data/io.github.felsenuboot.DenMail.svg" width="40" alt=""> Den Mail
-
-[![CI](https://github.com/felsenuboot/den-mail/actions/workflows/ci.yml/badge.svg)](https://github.com/felsenuboot/den-mail/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/felsenuboot/den-mail/actions/workflows/codeql.yml/badge.svg)](https://github.com/felsenuboot/den-mail/actions/workflows/codeql.yml)
-
-Read and write your Fastmail mail on the Linux desktop
+<div align="center">
+  <img src="data/io.github.felsenuboot.DenMail.svg" width="128" alt="">
+  <h1>Den Mail</h1>
+  <p>A Fastmail client for GNOME</p>
+  <a href="https://github.com/felsenuboot/den-mail/actions/workflows/ci.yml"><img src="https://github.com/felsenuboot/den-mail/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/felsenuboot/den-mail/actions/workflows/codeql.yml"><img src="https://github.com/felsenuboot/den-mail/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
+</div>
 
 Den Mail is a Fastmail client built with GTK 4 and libadwaita. It talks JMAP
 to Fastmail directly and keeps a local cache, so it opens at once, works
@@ -18,55 +19,24 @@ offline and follows changes as they happen.
 
 ## Features
 
-- Conversations in three panes, with labels as Fastmail has them: nested,
-  several per message, drag and drop
-- Instant folder switches and offline reading from a local cache, updates
-  over Fastmail's push stream
-- Undo for every action, including sending
-- Sanitised HTML mail with remote content blocked until allowed, and a dark
-  mode for light-coloured messages
-- Send from any alias or wildcard address, create Masked Email addresses
-- Select many conversations, group the list by sender, act on a sender at once
-- One-click unsubscribe, and a Newsletters dialog to leave many lists at once
-- Search operators for sender, recipient, subject, state, label, folder and date
-- Desktop notifications with the sender's logo, `mailto:` links, keyboard
-  shortcuts
+- **Labels.** Nested, several per message, drag and drop, as in Fastmail.
+- **Offline.** A local cache makes folder switches instant and keeps mail
+  readable without a connection; changes arrive by push.
+- **Undo.** Every action can be taken back from a toast, sending included.
+- **Safe HTML.** Sanitised mail, remote content blocked until you allow it,
+  dark mode for light-coloured messages.
+- **Identities.** Send from any alias or wildcard address; manage Masked Email.
+- **Bulk actions.** Select many conversations, group by sender, act on a
+  whole sender at once.
+- **Unsubscribe.** One click per message, or many senders at once in the
+  Newsletters dialog.
+- **Search.** Operators for sender, subject, state, label, folder and date.
+- **Desktop.** Notifications with the sender's logo, `mailto:` links, keyboard
+  shortcuts.
 
-The [tour](docs/TOUR.md) shows each of these, with screenshots and the list
-of shortcuts.
-
-## Speed
-
-den-mail against Fastmail's desktop app and web client on the same account,
-machine and network; medians of eight runs, lower is better.
-
-| | den-mail | den-mail, cold | Fastmail app | Fastmail web |
-| --- | --- | --- | --- | --- |
-| launch to a usable inbox, ms | **300** | 2,528 | 1,418 | 868 |
-| switch to a folder of 2,900 conversations, ms | 118 | 458 | 204 | **114** |
-| search, ms | 186 | 239 | 226 | **180** |
-| open a message, first paint, ms | **67** | 179 | 135 | 148 |
-| memory with a message open, PSS, MiB | **340** | 380 | 642 | 511 |
-| CPU at rest with a message open, % of a core | **0.1** | 0.4 | 2.8 | 0.6 |
-
-```mermaid
-xychart-beta
-    title "Launch to a usable inbox, lower is better"
-    x-axis ["den-mail", "den-mail, cold", "Fastmail app", "Fastmail web"]
-    y-axis "ms" 0 --> 2780
-    bar [300, 2528, 1418, 868]
-```
-
-```mermaid
-xychart-beta
-    title "Memory with a message open (PSS), lower is better"
-    x-axis ["den-mail", "den-mail, cold", "Fastmail app", "Fastmail web"]
-    y-axis "MiB" 0 --> 710
-    bar [340, 380, 642, 511]
-```
-
-The method, the other four charts and the rows behind them are in
-[docs/BENCHMARK.md](docs/BENCHMARK.md).
+The [tour](docs/TOUR.md) shows each of these with screenshots, and
+[docs/BENCHMARK.md](docs/BENCHMARK.md) compares speed and memory with
+Fastmail's desktop app and web client.
 
 ## Install
 
