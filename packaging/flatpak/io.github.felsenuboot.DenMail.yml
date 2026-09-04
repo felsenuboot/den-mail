@@ -21,6 +21,10 @@ finish-args:
 modules:
   - name: den-mail
     buildsystem: simple
+    # The SDK's appstreamcli compose fails with a bare file-read-error on this
+    # tree although the host's succeeds; the bundle is sideloaded, not listed in
+    # a software centre, so the composed catalogue is not needed.
+    appstream-compose: false
     build-commands:
       - pip3 install --prefix=/app --no-deps --no-build-isolation .
       - install -Dm644 data/io.github.felsenuboot.DenMail.desktop -t /app/share/applications

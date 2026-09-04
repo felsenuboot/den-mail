@@ -35,6 +35,11 @@ jobs:
           appstreamcli validate --no-net data/io.github.felsenuboot.DenMail.metainfo.xml
       - name: Build
         run: flatpak-builder --user --repo=repo --force-clean --disable-rofiles-fuse build packaging/flatpak/io.github.felsenuboot.DenMail.yml
+      - name: Compose report, when the build failed
+        if: failure()
+        run: |
+          find .flatpak-builder build -iname '*issue*' -o -iname '*report*' 2>/dev/null | head
+          find build/files/share -maxdepth 2 2>/dev/null | head -40
       - name: Bundle
         run: flatpak build-bundle repo den-mail.flatpak io.github.felsenuboot.DenMail
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
