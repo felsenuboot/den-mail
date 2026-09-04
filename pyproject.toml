@@ -1,6 +1,6 @@
 [project]
 name = "den-mail"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Fastmail (JMAP) mail client in GTK4 + libadwaita"
 requires-python = ">=3.11"
 license = { text = "MIT" }

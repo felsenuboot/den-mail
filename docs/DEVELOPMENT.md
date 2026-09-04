@@ -84,6 +84,20 @@ rules cannot tell apart (notifications from friendly mailboxes with list
 headers, wording in other languages, a person's mail that mentions an invoice)
 is listed in #40, the brief for the learning layers.
 
+## Process: branches, pull requests, releases
+
+The rules every session follows are in `CLAUDE.md` at the top of the repo;
+in short: an issue for everything, a branch per issue (`<issue>-<slug>`), a
+pull request with `Closes #<issue>` merged by squash so master has one commit
+per issue, a changelog line in the same PR, and a milestone per release
+whose title carries the version. A release is a `release/X.Y.Z` branch that
+bumps `VERSION` and turns the *Unreleased* changelog entries into a section,
+then a `vX.Y.Z` tag on the merge commit; the Release workflow
+(`.github/workflows/release.yml`) turns the tag into a GitHub release with
+that section as notes and refuses a tag that does not match `VERSION`.
+`.github/release.yml` groups pull requests by label for GitHub's own
+release-notes generator. Master is protected: pull requests and green CI are
+required, force pushes are blocked, the repository admin can bypass.
 ## Packaging
 
 `packaging/flatpak/` holds the Flatpak manifest (GNOME runtime; the app is
