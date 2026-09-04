@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: pipx run --spec shellcheck-py==0.11.0.1 shellcheck install.sh bin/den-mail
+      - run: pipx run --spec shellcheck-py==0.11.0.1 shellcheck install.sh bin/den-mail tools/ui_smoke.sh
 
   bandit:
     name: Bandit
@@ -73,3 +73,23 @@ jobs:
       - run: python3 -m pytest -q
         env:
           DEN_MAIL_NO_WEBKIT: "1"
+
+  # The UI itself, headlessly: every autopilot script from tools/ui_smoke.sh
+  # runs inside a cage compositor in an Arch container against the fake server;
+  # a traceback or a GTK critical fails the job and the screenshots are kept as
+  # an artifact (#11). Not a required check yet.
+  ui-smoke:
+    name: UI smoke
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: pacman -Syu --noconfirm --needed cage grim dbus python python-gobject gtk4 libadwaita libsecret gdk-pixbuf2 mesa ttf-dejavu noto-fonts-cjk
+      - run: dbus-run-session -- tools/ui_smoke.sh screenshots
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: ui-smoke-screenshots
+          path: screenshots

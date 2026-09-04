@@ -117,6 +117,15 @@ SQLite cache and sync worker, models, UI). Ideas and open questions are on the
 [issue tracker](https://github.com/felsenuboot/den-mail/issues); the inbox
 cleanup roadmap is #15.
 
+## UI smoke test
+
+`tools/ui_smoke.sh [out-dir]` runs the app headlessly once per autopilot
+script (the inbox, grouping, selection, search, views, compose, every dialog,
+the cleanup bulk actions, a narrow window) against the fake server, fails on
+a traceback or GTK critical in the logs, and leaves the screenshots in the
+directory. CI runs it in an Arch container (`ui-smoke` in `ci.yml`) and keeps
+the screenshots as an artifact; it is not a required check.
+
 ## Checks
 
 CI (`.github/workflows/ci.yml`) runs Ruff, ShellCheck, Bandit and the test

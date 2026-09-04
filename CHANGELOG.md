@@ -6,6 +6,9 @@ Unreleased changes gather at the top until they are tagged.
 
 ## [Unreleased]
 
+### Features
+- CI runs the UI headlessly once per autopilot script and keeps the screenshots as an artifact (#11)
+
 ## [0.2.0] - 2026-09-04
 
 Milestone *Sender cleanup*, plus the views that came just before it.
