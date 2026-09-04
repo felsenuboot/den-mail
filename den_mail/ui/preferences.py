@@ -22,6 +22,32 @@ def apply_color_scheme(config) -> None:
     install_palette_guard()
 
 
+_PLAIN_CHIPS: Gtk.CssProvider | None = None
+
+
+def apply_chip_colours(config) -> None:
+    """Coloured chips for labels and categories, or plain ones: a provider added on top of
+    the stylesheet overrides every colour rule with the same specificity (#105)."""
+    from gi.repository import Gdk
+
+    global _PLAIN_CHIPS
+    display = Gdk.Display.get_default()
+    if display is None:
+        return
+    if _PLAIN_CHIPS is None:
+        chips = [f".chip.label-color-{n}" for n in range(12)] + [
+            f".chip.category-{c}" for c in ("transactions", "security", "updates", "newsletters", "lists", "promotions")]
+        images = [f"image.label-color-{n}" for n in range(12)]
+        _PLAIN_CHIPS = Gtk.CssProvider()
+        _PLAIN_CHIPS.load_from_string(
+            ", ".join(chips) + " { background: alpha(currentColor, 0.12); color: inherit; }\n"
+            + ", ".join(images) + " { color: inherit; }\n")
+    if config.get("chip_colours", True):
+        Gtk.StyleContext.remove_provider_for_display(display, _PLAIN_CHIPS)
+    else:
+        Gtk.StyleContext.add_provider_for_display(display, _PLAIN_CHIPS, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+
+
 def _switch(config, key: str, default: bool, title: str, subtitle: str = "",
             after: Callable[[bool], None] | None = None) -> Adw.SwitchRow:
     row = Adw.SwitchRow(title=title, subtitle=subtitle, active=config.get(key, default))
@@ -95,6 +121,8 @@ class PreferencesDialog(Adw.PreferencesDialog):
 
         scheme.connect("notify::selected", on_scheme)
         appearance.add(scheme)
+        appearance.add(_switch(config, "chip_colours", True, "Coloured labels and categories",
+                               "Each label and category chip in its own colour", lambda _on: apply_chip_colours(config)))
         from ..avatars import SOURCES, logo_source
 
         logos = Adw.ComboRow(title="Sender logos", model=Gtk.StringList.new([
