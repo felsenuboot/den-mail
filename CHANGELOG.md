@@ -6,6 +6,9 @@ Unreleased changes gather at the top until they are tagged.
 
 ## [Unreleased]
 
+### Features
+- Send later: a clock next to Send schedules the message for a preset or any time; it waits in Scheduled and can be cancelled from the conversation (#6)
+
 ## [0.3.0] - 2026-09-04
 
 Milestones *Release engineering*, *Learning layer* and *JMAP Contacts*.

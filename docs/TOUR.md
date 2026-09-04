@@ -178,6 +178,14 @@ dialog links to Fastmail's own rules settings.
 
 ![Always for this sender](../data/screenshots/rules.png)
 
+## Send later
+
+The clock next to Send offers this afternoon, this evening, tomorrow morning
+or afternoon, Monday morning, or any time from a calendar. The server holds
+the message until then (Fastmail allows up to a year ahead) and it waits in
+the Scheduled folder, where opening it shows when it goes and a *Cancel
+send* button that puts it back in Drafts. Snoozing is not offered: Fastmail
+does not expose it to third-party clients over JMAP.
 ## Address book
 
 With a token that has the Contacts scope, the app keeps your Fastmail
