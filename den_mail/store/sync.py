@@ -23,6 +23,7 @@ from typing import Any, ClassVar
 
 from gi.repository import GLib, GObject
 
+from .. import rules as client_rules
 from ..classify.rules import CLASSIFY_HEADERS, RULES_VERSION
 from ..config import Config, attachments_dir
 from ..jmap.client import (
@@ -316,6 +317,7 @@ class SyncEngine(GObject.Object):
         "action-failed": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
         "auth-failed": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "cache-reset": (GObject.SignalFlags.RUN_FIRST, None, ()),
+        "rules-applied": (GObject.SignalFlags.RUN_FIRST, None, (object,)),   # {rule id: hits} (#22)
     }
 
     def __init__(self, client: JMAPClient, db: Database, config: Config):
@@ -622,6 +624,7 @@ class SyncEngine(GObject.Object):
             if created:
                 self.db.upsert_emails(created)
                 changed_ids += [e["id"] for e in created]
+                created = self._apply_rules(created)   # a rule may archive or read a message before it is announced
                 for e in created:
                     if inbox and (e.get("mailboxIds") or {}).get(inbox) and not (e.get("keywords") or {}).get(KW_SEEN):
                         new_mail.append(e)
@@ -676,6 +679,58 @@ class SyncEngine(GObject.Object):
             self._emit("emails-destroyed", destroyed_ids)
         if new_mail:
             self._emit("new-mail", new_mail)
+
+    # ----------------------------------------------------------------- rules
+
+    def _apply_rules(self, created: list[dict]) -> list[dict]:
+        """Run the client-side rules (#22) over mail that just arrived; returns the
+        messages as they are after the rules, so notifications see the outcome."""
+        rules = client_rules.load_rules(self.config)
+        if not rules:
+            return created
+        categories = self.db.get_categories([e["id"] for e in created])
+        actions, hits = client_rules.plan(rules, created, categories, self.roles, self.roles.get(ROLE_INBOX))
+        if not actions:
+            return created
+        for act in actions:
+            self._job_perform(act, None)
+        self._emit("rules-applied", hits)
+        after = self.db.get_emails([e["id"] for e in created])
+        return [after.get(e["id"], e) for e in created]
+
+    def act_on_sender(self, address: str, action: EmailAction | Callable[[list[str]], EmailAction],
+                      on_done: Callable[[UndoRecord | None], None] | None = None,
+                      include_trash: bool = False) -> None:
+        """Apply an action to every message from `address` the server has, cached or
+        not (a cleanup-dialog bulk action, #21).  `action` is an EmailAction whose
+        email_ids are ignored, or a function from the ids to one."""
+        def job() -> None:
+            acc = self.client.session.account_id
+            filt: dict[str, Any] = {"from": address}
+            others = self.trash_junk_ids() if not include_trash else [i for i in self.trash_junk_ids()
+                                                                       if i != self.roles.get(ROLE_TRASH)]
+            if others:
+                filt = {"operator": "AND", "conditions": [filt, {"inMailboxOtherThan": others}]}
+            res = self.client.call("Email/query", {"accountId": acc, "filter": filt, "limit": 5000,
+                                                   "collapseThreads": False})
+            ids = res.get("ids") or []
+            missing = self.db.missing_email_ids(ids)
+            if missing:
+                got = self.client.call("Email/get", {"accountId": acc, "ids": missing, "properties": EMAIL_LIST_PROPERTIES})
+                self.db.upsert_emails(got["list"])
+            # the server's from: filter is a substring match on name and address; keep exact senders
+            emails = self.db.get_emails(ids)
+            want = address.strip().lower()
+            ids = [i for i in ids if i in emails and client_rules.sender_of(emails[i]) == want]
+            if not ids:
+                self._callback(on_done, None)
+                return
+            act = action(ids) if callable(action) else EmailAction(
+                ids, action.description, dict(action.keyword_changes), set(action.mailbox_add),
+                set(action.mailbox_remove), action.mailbox_replace, action.destroy, action.undoable)
+            self._job_perform(act, on_done)
+
+        self.enqueue(PRIO_ACTION, job, "sender-action")
 
     # --------------------------------------------------------------- queries
 

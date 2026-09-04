@@ -83,6 +83,16 @@ moved into or out of it. The window keeps the view's ordered ids, hands the
 list one page at a time, and re-runs the query, debounced, whenever the cache
 changes; the counts on the badges are recomputed the same way.
 
+## Rules
+
+Client-side rules (`den_mail/rules.py`, #22) are stored in the config file
+and run inside the sync engine: after `Email/changes` has cached a batch of
+created messages, the ones in the Inbox are matched against every rule, the
+rules that fired are combined into one `EmailAction` per set of rules (Trash
+wins, archive removes the Inbox, labels add up) and performed through the
+same path as a user action, before the batch is announced as new mail. The
+engine reports which rules fired and the window counts the hits.
+
 ## Identities and aliases
 
 `Identity/get` lists every address the account may send from, including

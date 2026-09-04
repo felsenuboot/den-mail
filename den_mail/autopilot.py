@@ -14,7 +14,8 @@ Commands:
   compose-send         press Send in the newest compose window
   undo-send            press Undo on the newest pending send
   config <key> <json>  set a preference for this run
-  masked | identities | preferences   open that dialog
+  masked | identities | preferences | rules   open that dialog
+  sender-rule <address>   open the "Always for this sender" prompt
   resize <w> <h>       resize the main window
   unread-filter on|off   toggle the unread filter button
   category-filter <category>|off   show only that category (newsletters, transactions, …)
@@ -126,7 +127,9 @@ def _run(app, steps: list[str]) -> bool:
 
             popover = _find_descendant(win.compose_windows[-1].from_row, Gtk.Popover)
             popover.popup()
-        elif cmd in ("masked", "identities", "preferences") and win:
+        elif cmd == "sender-rule" and win:
+            win.sender_rule(arg.strip())
+        elif cmd in ("masked", "identities", "preferences", "rules") and win:
             win.lookup_action(cmd).activate(None)
         elif cmd == "resize" and win:
             w, h = arg.split()

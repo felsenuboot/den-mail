@@ -125,6 +125,19 @@ you have already left shows the date.
 
 ![Newsletters dialog](../data/screenshots/newsletters.png)
 
+## Rules
+
+*Always for this sender…* in a conversation's context menu makes a rule: for
+this address or for everyone at its domain, label the mail, archive it, mark
+it as read or delete it, and optionally do that to their existing mail right
+away. *Rules…* in the main menu lists the rules with how often each fired,
+removes them, and adds rules on a list id or a whole category. Rules run in
+the app when new mail lands in the Inbox, so they only work while Den Mail is
+open; for rules that run on the server whether the app is open or not, the
+dialog links to Fastmail's own rules settings.
+
+![Always for this sender](../data/screenshots/rules.png)
+
 ## Writing mail
 
 The From field lists your starred identities first; "Show all identities…"

@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 from gi.repository import Adw, Gio, GLib, Gtk
 
-from .. import APP_NAME, secrets, shortcuts, timing, views
+from .. import APP_NAME, rules, secrets, shortcuts, timing, views
 from ..avatars import AvatarService
 from ..classify.rules import CATEGORY_NAMES
 from ..config import Config, database_path
@@ -38,6 +38,7 @@ from .message_body import set_cid_resolver
 from .newsletters import NewslettersDialog
 from .outbox import PendingSend
 from .preferences import PreferencesDialog
+from .rules import RulesDialog, prompt_sender_rule
 from .sidebar import Sidebar
 from .thread_window import ThreadWindow
 from .threadlist import ThreadList
@@ -173,6 +174,7 @@ class MainWindow(Adw.ApplicationWindow):
         e.connect("auth-failed", lambda _e: self._auth_failed())
         e.connect("cache-reset", lambda _e: self._reload_current())
         e.connect("identities-changed", lambda _e: setattr(self, "identities", self.db.get_identities()))
+        e.connect("rules-applied", lambda _e, hits: rules.bump_hits(self.config, hits))
         set_cid_resolver(self._resolve_cid)
         e.start()
         self.stack.set_visible_child_name("main")
@@ -206,6 +208,7 @@ class MainWindow(Adw.ApplicationWindow):
         primary = Gio.Menu()
         section = Gio.Menu()
         section.append("Newsletters…", "win.newsletters")
+        section.append("Rules…", "win.rules")
         section.append("Masked Email…", "win.masked")
         section.append("Identities & Aliases…", "win.identities")
         primary.append_section(None, section)
@@ -302,6 +305,7 @@ class MainWindow(Adw.ApplicationWindow):
             "back": self._go_back,
             "masked": lambda: MaskedEmailDialog(self.engine, self.db).present(self),
             "newsletters": lambda: NewslettersDialog(self.engine, self.db, self.config, self._after_action).present(self),
+            "rules": lambda: RulesDialog(self.engine, self.db, self.config, self.tree).present(self),
             "identities": lambda: IdentitiesDialog(self.engine, self.db, self.config).present(self),
             "preferences": self.show_preferences,
             "shortcuts": self.show_shortcuts,
@@ -315,6 +319,7 @@ class MainWindow(Adw.ApplicationWindow):
         # Parameterised actions used by the conversation context menu.
         for name, fn in (
             ("find-sender", self._find_sender),
+            ("sender-rule", self.sender_rule),
             ("toggle-label", lambda mid: self._label_toggle(self.tree.get(mid), not self._selection_has_label(mid))),
             ("move-to", lambda mid: self.tree.get(mid) and self._move_to(self.tree.get(mid))),
         ):
@@ -332,6 +337,16 @@ class MainWindow(Adw.ApplicationWindow):
         self.threadlist.focus_search()
         self.threadlist.search_entry.set_text(f"from:{email}")
 
+    def sender_rule(self, sender: str) -> None:
+        """"Always for this sender…" (#22): store a rule, optionally run it over their mail now."""
+        def done(rule: rules.Rule, apply_now: bool) -> None:
+            self._toast(f"Rule added: {rule.describe_match()} → {rule.describe_action()}")
+            if apply_now:
+                self.engine.act_on_sender(sender, lambda ids: rules.combine(ids, [rule], self.engine.roles),
+                                          self._after_action)
+
+        prompt_sender_rule(self, self.tree, self.config, sender, done)
+
     def _on_thread_context_menu(self, thread: ThreadObject, x: int, y: int) -> None:
         threads = self.selected or [thread]
         many = len(threads) > 1
@@ -343,6 +358,9 @@ class MainWindow(Adw.ApplicationWindow):
             if sender.get("email"):
                 item = Gio.MenuItem.new(f"Find all conversations with {sender.get('name') or sender['email']}", None)
                 item.set_action_and_target_value("win.find-sender", GLib.Variant("s", sender["email"]))
+                top.append_item(item)
+                item = Gio.MenuItem.new("Always for this sender…", None)
+                item.set_action_and_target_value("win.sender-rule", GLib.Variant("s", sender["email"]))
                 top.append_item(item)
         menu.append_section(None, top)
         if not many:
