@@ -35,7 +35,8 @@ DEFAULTS: dict[str, Any] = {
     "lock_idle_minutes": 0,  # lock after this long without activity; 0 = never
     "lock_with_session": True,  # lock when the desktop session locks
     "lock_passphrase": "",  # salted PBKDF2 hash; used where no polkit policy is installed
-    "lock_kind": "passphrase",  # "passphrase" or "pin": what the local secret is, for the entry's keypad
+    "lock_kind": "passphrase",  # before #66: "passphrase" or "pin"; read when lock_method is unset
+    "lock_method": "",  # "system" | "passphrase" | "pin" | "keyring": how Unlock asks (see lock.method)
     "assistant_enabled": False,  # the assistant layer (#69): features may ask a language model
     "assistant_provider": "ollama",  # a key of den_mail.llm.PROVIDERS
     "assistant_url": "",  # blank = the provider's default server

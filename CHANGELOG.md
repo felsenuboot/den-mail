@@ -6,6 +6,9 @@ Unreleased changes gather at the top until they are tagged.
 
 ## [Unreleased]
 
+### Features
+- Lock: a third way to unlock, through the keyring. Choosing it creates a keyring collection of the app's own ("Den Mail"), which the keyring daemon locks with the app and unlocks with its own prompt; the login keyring and other apps are never touched, and it works inside a Flatpak. "Unlock with" in Preferences now lists every method available on the machine (#66)
+
 ## [0.5.0] - 2026-09-04
 
 Milestone *Assistant*: a language-model layer with three providers, and summaries on it.
