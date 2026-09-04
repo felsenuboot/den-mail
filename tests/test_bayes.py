@@ -18,7 +18,7 @@ from den_mail.classify.rules import (
 )
 from den_mail.store.db import Database
 
-from .test_views import TRASH_JUNK, db, email  # noqa: F401 - fixture and helper
+from .test_views import db, email  # noqa: F401 - fixture and helper
 
 UNSUB = {H_LIST_UNSUBSCRIBE: "<mailto:leave@lists.example>"}
 

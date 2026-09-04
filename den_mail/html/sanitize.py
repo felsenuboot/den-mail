@@ -36,8 +36,8 @@ QUOTE_IDS = {"yahoo_quoted"}
 CUT_IDS = {"divrplyfwdmsg", "x_divrplyfwdmsg", "appendonsend", "x_appendonsend"}
 QUOTE_CLASS = "den-quote"
 ATTRIBUTION_RE = re.compile(
-    r"\b(wrote|writes|schrieb|a écrit|escribió|scrisse|schreef|skrev|napisał|написал[аи]?)\b[^:]{0,80}:\s*$"
-    r"|-{3,}\s*(Original|Forwarded) Message\s*-{3,}\s*$", re.IGNORECASE)
+    r"(?:\b(wrote|writes|schrieb|a écrit|escribió|scrisse|schreef|skrev|napisał|написал[аи]?)\b[^:]{0,80}:"
+    r"|-{3,}\s*(Original|Forwarded) Message\s*-{3,})\s*$", re.IGNORECASE)
 
 BASE_CSS = """
 :root { color-scheme: light; }

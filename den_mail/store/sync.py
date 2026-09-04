@@ -1210,7 +1210,7 @@ class SyncEngine(GObject.Object):
                         self._emit("action-failed", f"{payload.get('description', 'A change')} could not be applied"
                                                     f" after all: {first.get('description') or first.get('type')}")
                 elif kind == "destroy":
-                    res = self.client.call("Email/set", {"accountId": acc, "destroy": payload["ids"]})
+                    self.client.call("Email/set", {"accountId": acc, "destroy": payload["ids"]})
                 elif kind == "send":
                     self._submit(payload["draft"], payload["identity_id"], payload.get("replace_id"),
                                  payload.get("in_reply_to_id"), payload.get("forwarded_id"), payload.get("send_at"))
