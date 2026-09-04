@@ -40,7 +40,8 @@ class PreferencesDialog(Adw.PreferencesDialog):
         expander.set_enable_expansion(bool(senders))
 
     def __init__(self, config, session, on_sign_out: Callable[[], None], on_clear_cache: Callable[[], None],
-                 on_manage_identities: Callable[[], None] | None = None):
+                 on_manage_identities: Callable[[], None] | None = None,
+                 on_sidebar_views: Callable[[bool], None] | None = None):
         super().__init__(title="Preferences")
         self.config = config
         page = Adw.PreferencesPage(title="General", icon_name="preferences-system-symbolic")
@@ -80,6 +81,18 @@ class PreferencesDialog(Adw.PreferencesDialog):
                                 active=config.get("sender_avatars", True))
         avatars.connect("notify::active", lambda r, _p: config.set("sender_avatars", r.get_active()))
         appearance.add(avatars)
+        views = Adw.SwitchRow(title="Views in the sidebar",
+                              subtitle="Newsletters, Transactions, Security, Updates, Never read and "
+                                       "Big attachments, listed from the local cache",
+                              active=config.get("sidebar_views", True))
+
+        def on_views(row, _p):
+            config.set("sidebar_views", row.get_active())
+            if on_sidebar_views is not None:
+                on_sidebar_views(row.get_active())
+
+        views.connect("notify::active", on_views)
+        appearance.add(views)
         page.add(appearance)
 
         reading = Adw.PreferencesGroup(title="Reading")

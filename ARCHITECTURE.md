@@ -67,6 +67,22 @@ identity across updates). Thread rows aggregate the cached messages of the
 thread *within the current mailbox*: unread if any is unread, flagged if any is
 flagged, and label chips are the union of the messages' other labels.
 
+## Views
+
+The sidebar's Views section (`den_mail/views.py`, #19) lists local queries:
+the category views read the `classification` table, "Never read" groups the
+`emails` table by sender, "Big attachments" filters on size. Each is one SQL
+statement over the cache (`ROW_NUMBER` per thread stands in for JMAP's
+`collapseThreads`), with the mailbox list's sort choices as `ORDER BY` and the
+search box grammar as extra `WHERE` clauses. The `emails` table carries
+`size`, `from_email`, `from_sort`, `seen` and `flagged` columns for this,
+filled from the stored JSON once when an older cache is opened. A view is a
+`MailboxObject` with `is_view` set and no rights, so the sidebar, the sort
+overrides and the actions treat it like a mailbox, except that nothing is
+moved into or out of it. The window keeps the view's ordered ids, hands the
+list one page at a time, and re-runs the query, debounced, whenever the cache
+changes; the counts on the badges are recomputed the same way.
+
 ## Identities and aliases
 
 `Identity/get` lists every address the account may send from, including

@@ -26,6 +26,7 @@ DEFAULTS: dict[str, Any] = {
     "poll_interval_seconds": 300,
     "thread_page_size": 50,
     "sidebar_width": 260,
+    "sidebar_views": True,  # the Views section (#19): local lists such as Newsletters and Never read
     "window": {"width": 1400, "height": 900, "maximized": False},
     "signature_position": "below",
 }

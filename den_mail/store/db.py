@@ -28,7 +28,9 @@ CREATE TABLE IF NOT EXISTS mailboxes (
 CREATE TABLE IF NOT EXISTS emails (
     id TEXT PRIMARY KEY, thread_id TEXT, received_at TEXT, subject TEXT, preview TEXT,
     keywords TEXT NOT NULL, mailbox_ids TEXT NOT NULL, has_attachment INTEGER DEFAULT 0,
-    json TEXT NOT NULL, body_json TEXT, body_fetched_at REAL);
+    json TEXT NOT NULL, body_json TEXT, body_fetched_at REAL,
+    size INTEGER DEFAULT 0, from_email TEXT DEFAULT '', from_sort TEXT DEFAULT '',
+    seen INTEGER DEFAULT 0, flagged INTEGER DEFAULT 0);
 CREATE INDEX IF NOT EXISTS emails_thread ON emails(thread_id);
 CREATE INDEX IF NOT EXISTS emails_received ON emails(received_at);
 CREATE TABLE IF NOT EXISTS email_mailboxes (email_id TEXT, mailbox_id TEXT, PRIMARY KEY (email_id, mailbox_id));
@@ -45,6 +47,32 @@ CREATE TABLE IF NOT EXISTS classification (
 CREATE INDEX IF NOT EXISTS classification_category ON classification(category);
 CREATE TABLE IF NOT EXISTS correspondents (email TEXT PRIMARY KEY, last_written TEXT);
 """
+
+# Columns the sidebar views (#19) filter and sort on, added to caches from before
+# they existed and filled from the stored JSON once; the indexes come after that.
+VIEW_COLUMNS = (
+    ("size", "INTEGER DEFAULT 0"),
+    ("from_email", "TEXT DEFAULT ''"),
+    ("from_sort", "TEXT DEFAULT ''"),
+    ("seen", "INTEGER DEFAULT 0"),
+    ("flagged", "INTEGER DEFAULT 0"),
+)
+VIEW_INDEXES = """
+CREATE INDEX IF NOT EXISTS emails_from ON emails(from_email);
+CREATE INDEX IF NOT EXISTS emails_size ON emails(size);
+"""
+
+
+def view_columns(e: dict) -> tuple[int, str, str, int, int]:
+    """(size, from_email, from_sort, seen, flagged) of a list-property Email;
+    from_sort is what the JMAP "from" comparator orders by, the display name
+    else the address, lowercased (see models.thread.sender_group_key)."""
+    frm = e.get("from") or []
+    first = frm[0] if frm and isinstance(frm[0], dict) else {}
+    addr = (first.get("email") or "").strip().lower()
+    name = (first.get("name") or "").strip().lower()
+    kws = e.get("keywords") or {}
+    return (int(e.get("size") or 0), addr, name or addr, 1 if kws.get(KW_SEEN) else 0, 1 if kws.get(KW_FLAGGED) else 0)
 
 
 @dataclass
@@ -77,6 +105,8 @@ class Database:
             c.execute("PRAGMA journal_mode=WAL")
             c.execute("PRAGMA synchronous=NORMAL")
             c.executescript(SCHEMA)
+            self._add_view_columns(c)
+            c.executescript(VIEW_INDEXES)
             c.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
         # Who the user is and where sent mail lives: the "written to" signal of the categoriser.
         self._identity_emails: set[str] = set()
@@ -84,6 +114,25 @@ class Database:
         self._sent_mailbox_id: str | None = None
         self._load_identity_cache()
         self._load_sent_mailbox()
+
+    @staticmethod
+    def _add_view_columns(c: sqlite3.Connection) -> None:
+        """A cache from before the sidebar views gets their columns, filled from the JSON."""
+        have = {row["name"] for row in c.execute("PRAGMA table_info(emails)")}
+        missing = [(name, decl) for name, decl in VIEW_COLUMNS if name not in have]
+        if not missing:
+            return
+        c.execute("BEGIN")
+        try:
+            for name, decl in missing:
+                c.execute(f"ALTER TABLE emails ADD COLUMN {name} {decl}")  # nosec B608 - names from VIEW_COLUMNS
+            rows = c.execute("SELECT id, json FROM emails").fetchall()
+            c.executemany("UPDATE emails SET size=?, from_email=?, from_sort=?, seen=?, flagged=? WHERE id=?",
+                          [(*view_columns(json.loads(r["json"])), r["id"]) for r in rows])
+            c.execute("COMMIT")
+        except Exception:
+            c.execute("ROLLBACK")
+            raise
 
     def conn(self) -> sqlite3.Connection:
         c = getattr(self._local, "conn", None)
@@ -213,12 +262,14 @@ class Database:
                 mailbox_ids = merged.get("mailboxIds") or {}
                 c.execute(
                     "INSERT OR REPLACE INTO emails(id, thread_id, received_at, subject, preview, keywords, mailbox_ids,"
-                    " has_attachment, json, body_json, body_fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    " has_attachment, json, body_json, body_fetched_at, size, from_email, from_sort, seen, flagged)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         merged["id"], merged.get("threadId"), merged.get("receivedAt"), merged.get("subject"),
                         merged.get("preview"), json.dumps(keywords), json.dumps(mailbox_ids),
                         1 if merged.get("hasAttachment") else 0, json.dumps(merged), body_json,
                         existing["body_fetched_at"] if existing and body_json else None,
+                        *view_columns(merged),
                     ),
                 )
                 c.execute("DELETE FROM email_mailboxes WHERE email_id=?", (merged["id"],))
@@ -333,6 +384,10 @@ class Database:
     def _load_sent_mailbox(self) -> None:
         row = self.conn().execute("SELECT id FROM mailboxes WHERE role='sent'").fetchone()
         self._sent_mailbox_id = row["id"] if row else None
+
+    def own_addresses(self) -> tuple[set[str], set[str]]:
+        """The user's identity addresses and wildcard domains (`*@example.org`)."""
+        return set(self._identity_emails), set(self._identity_domains)
 
     def is_own_address(self, addr: str) -> bool:
         addr = (addr or "").strip().lower()

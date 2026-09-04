@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 from gi.repository import Adw, Gio, GLib, Gtk
 
-from .. import APP_NAME, secrets, shortcuts, timing
+from .. import APP_NAME, secrets, shortcuts, timing, views
 from ..avatars import AvatarService
 from ..classify.rules import CATEGORY_NAMES
 from ..config import Config, database_path
@@ -58,6 +58,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.db: Database | None = None
         self.engine: SyncEngine | None = None
         self.tree = MailboxTree()
+        # The sidebar views (#19): local queries, listed between the folders and the labels.
+        self.tree.set_views([MailboxObject.for_view(v) for v in views.VIEWS])
+        self.tree.show_views = bool(config.get("sidebar_views", True))
+        self._view_ids: list[str] = []      # what the current view lists, in order
+        self._view_shown = 0                # how many of them the list has been given
+        self._view_search = ""              # a search typed while a view is shown
+        self._view_timer = 0
         self.current_mailbox: MailboxObject | None = None
         self.query_key: str | None = None
         self.selected: list[ThreadObject] = []
@@ -213,7 +220,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.sidebar.on_new_label = self.new_label
         self.sidebar.on_rename = self.rename_label
         self.sidebar.on_delete = self.delete_label
-        self.sidebar.on_mark_read = lambda mb: self.engine.mark_mailbox_read(mb.id)
+        self.sidebar.on_mark_read = self.mark_all_read
         self.sidebar.on_empty = self.empty_mailbox
         self.sidebar.on_color = self.set_label_color
         self.sidebar.on_refresh = self.refresh_mailbox
@@ -382,6 +389,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_mailboxes_changed(self, _engine) -> None:
         self.tree.update(self.db.get_mailboxes())
         self.sidebar.apply_expansion()
+        self._schedule_view_refresh()
         if self.current_mailbox is None or self.tree.get(self.current_mailbox.id) is None:
             inbox = self.tree.by_role(ROLE_INBOX)
             if inbox is not None:
@@ -396,12 +404,16 @@ class MainWindow(Adw.ApplicationWindow):
         if not q:
             return
         self._timing_listed()
-        selected_ids = {t.thread_id for t in self.selected}
-        self.model.loading = False
         ids = list(q["ids"])
         if self.threadlist.unread_only and self.selected:
             ids = self._keep_selected(ids)
-        self.model.set_email_ids(ids, q["total"], q["complete"])
+        self._apply_ids(ids, q["total"], q["complete"])
+
+    def _apply_ids(self, ids: list[str], total: int | None, complete: bool) -> None:
+        """Give the list a query's (or a view's) representative email ids."""
+        selected_ids = {t.thread_id for t in self.selected}
+        self.model.loading = False
+        self.model.set_email_ids(ids, total, complete)
         self._update_list_title()
         if self._pending_select_position is not None:
             pos = min(self._pending_select_position, self.model.get_n_items() - 1)
@@ -431,6 +443,89 @@ class MainWindow(Adw.ApplicationWindow):
         for t in self.selected:
             if t.thread_id == self.conversation.thread_id:
                 self.conversation.refresh_thread(t)
+        self._schedule_view_refresh()
+
+    # ------------------------------------------------------------- views
+
+    def _schedule_view_refresh(self) -> None:
+        """Views are answered from the cache, so every change to it may move their
+        counts and, for the one on screen, its rows; coalesced, as changes come in bursts."""
+        if not self._view_timer and self.engine and self.tree.show_views:
+            self._view_timer = GLib.timeout_add(300, self._refresh_views)
+
+    def _refresh_views(self) -> bool:
+        self._view_timer = 0
+        if not self.engine or not self.db:
+            return False
+        for view_id, (total, unread) in views.all_counts(self.db, self.engine.trash_junk_ids()).items():
+            obj = self.tree.get(view_id)
+            if obj is not None:
+                if obj.total != total:
+                    obj.total = total
+                if obj.unread != unread:
+                    obj.unread = unread
+        mb = self.current_mailbox
+        if mb is not None and mb.is_view:
+            ids = self._query_view(mb)
+            if ids != self._view_ids:
+                self._view_ids = ids
+                self._show_view()
+            else:
+                self._update_list_title()
+        return False
+
+    def _query_view(self, mb: MailboxObject) -> list[str]:
+        view = views.get_view(mb.id)
+        s = self._sort_for_mailbox(mb)
+        return views.list_ids(self.db, view, self.engine.trash_junk_ids(), s.get("key", "newest"),
+                              bool(s.get("flagged_first")), bool(s.get("unread_first")),
+                              unread_only=self.threadlist.unread_only, search=self._view_search)
+
+    def _load_view(self, mb: MailboxObject, search: str = "") -> None:
+        """Show a view: no server query, the cache answers at once (#19)."""
+        if self.query_key:
+            self.engine.release_query(self.query_key)
+            self.query_key = None
+        self.model.mailbox_id = None   # rows aggregate the whole thread, as an all-mail search does
+        self.model.trash_junk = set(self.engine.trash_junk_ids())
+        self.model.loading = True
+        self.model.clear()
+        self.selected = []   # else _keep_selected would carry the last mailbox's thread into the view
+        self.conversation.clear()
+        self._view_search = search
+        self._set_empty_text()
+        s = self._sort_for_mailbox(mb)
+        self.threadlist.set_sort(s["key"], bool(s["flagged_first"]), bool(s["unread_first"]))
+        self._view_ids = self._query_view(mb)
+        self._view_shown = self.engine.page_size
+        self._show_view()
+        self._timing_listed()
+        self.threadlist.scroll_to_top()
+
+    def _show_view(self) -> None:
+        """Hand the list the first `_view_shown` rows of the view, the rest on scrolling."""
+        ids = self._view_ids[:self._view_shown]
+        if self.selected:
+            ids = self._keep_selected(ids)   # a row that stopped matching stays while it is open
+        self._apply_ids(ids, len(self._view_ids), len(ids) >= len(self._view_ids))
+
+    def mark_all_read(self, mb: MailboxObject) -> None:
+        if not mb.is_view:
+            self.engine.mark_mailbox_read(mb.id)
+            return
+        ids = views.list_ids(self.db, views.get_view(mb.id), self.engine.trash_junk_ids(),
+                             unread_only=True, collapse=False)
+        if ids:
+            self.engine.perform(actions.mark_read(ids, True))
+
+    def set_sidebar_views(self, on: bool) -> None:
+        """The Preferences switch: show or hide the Views section."""
+        self.tree.show_views = on
+        self.tree.refresh()
+        if on:
+            self._schedule_view_refresh()
+        elif self.current_mailbox is not None and self.current_mailbox.is_view:
+            self._goto_role(ROLE_INBOX)
 
     def _on_sync_status(self, _engine, status: str, message: str) -> None:
         self.threadlist.set_syncing(status == "syncing")
@@ -488,17 +583,22 @@ class MainWindow(Adw.ApplicationWindow):
         log.debug("select mailbox %s", mb.name)
         self.threadlist.search_entry.set_text("")
         self.threadlist.search_bar.set_search_mode(False)
+        self.threadlist.set_scope_label("This view" if mb.is_view else "This mailbox")
         self._load_mailbox(mb)
         if self.main.get_collapsed():
             self.main.set_show_content(True)
 
     def _load_mailbox(self, mb: MailboxObject) -> None:
+        if mb.is_view:
+            self._load_view(mb)
+            return
         if self.query_key:
             self.engine.release_query(self.query_key)
         self.model.mailbox_id = mb.id
         self.model.trash_junk = set(self.engine.trash_junk_ids())
         self.model.loading = True
         self.model.clear()
+        self.selected = []   # GTK reports no selection change for an emptied model
         self.conversation.clear()
         self._set_empty_text()
         s = self._sort_for_mailbox(mb)
@@ -542,7 +642,12 @@ class MainWindow(Adw.ApplicationWindow):
         mb = self.current_mailbox
         where = mb.name if mb else "this list"
         category = self.model.category_filter
-        if category:
+        if mb is not None and mb.is_view and not category and not self.threadlist.unread_only:
+            if self._view_search:
+                self.threadlist.set_empty_text("No results", f"Nothing in {where} matches the search.")
+            else:
+                self.threadlist.set_empty_text(f"Nothing in {where}", views.get_view(mb.id).empty)
+        elif category:
             name = CATEGORY_NAMES.get(category, category)
             self.threadlist.set_empty_text(f"No {name} conversations",
                                            f"Nothing in {where} was sorted into {name}.")
@@ -589,6 +694,9 @@ class MainWindow(Adw.ApplicationWindow):
         if not text and scope == "mailbox":
             if self.current_mailbox:
                 self._load_mailbox(self.current_mailbox)
+            return
+        if scope == "mailbox" and self.current_mailbox is not None and self.current_mailbox.is_view:
+            self._load_view(self.current_mailbox, text)   # the view is local, so is a search within it
             return
         # An empty query over all mail lists everything outside Trash and Spam,
         # which is how "group by sender" works across the whole account.
@@ -653,9 +761,10 @@ class MainWindow(Adw.ApplicationWindow):
             overrides = dict(self.config.get("mailbox_sort", {}) or {})
             overrides[self.current_mailbox.id] = choice
             self.config.set("mailbox_sort", overrides)
-            # Fastmail keeps a per-mailbox sort; try to share it with the web client (ignored if rejected).
-            self.engine.mailbox_set(update={self.current_mailbox.id: {"sort": build_sort(key, flagged_first, unread_first)}},
-                                    on_error=lambda m: log.info("per-mailbox sort not accepted by server: %s", m))
+            if not self.current_mailbox.is_view:
+                # Fastmail keeps a per-mailbox sort; try to share it with the web client (ignored if rejected).
+                self.engine.mailbox_set(update={self.current_mailbox.id: {"sort": build_sort(key, flagged_first, unread_first)}},
+                                        on_error=lambda m: log.info("per-mailbox sort not accepted by server: %s", m))
         else:
             self.sort = choice
             self.config.set("sort", choice)
@@ -665,7 +774,11 @@ class MainWindow(Adw.ApplicationWindow):
             self._load_mailbox(self.current_mailbox)
 
     def _on_load_more(self) -> None:
-        if self.query_key:
+        if self.current_mailbox is not None and self.current_mailbox.is_view:
+            if self._view_shown < len(self._view_ids):
+                self._view_shown += self.engine.page_size
+                self._show_view()
+        elif self.query_key:
             self.engine.load_more(self.query_key)
 
     def _goto_role(self, role: str) -> None:
@@ -739,9 +852,11 @@ class MainWindow(Adw.ApplicationWindow):
         thread_ids = {t.thread_id for t in threads}
         removes_from_list = False
         mb = self.current_mailbox
+        # A view is not a mailbox: archiving neither leaves it nor takes a label away (#19).
+        in_mailbox = mb is not None and not mb.is_view
         if kind == "archive":
-            act = actions.archive(ids, roles, mb.id if mb and not mb.is_system else None)
-            removes_from_list = mb is not None and (mb.role == ROLE_INBOX or not mb.is_system)
+            act = actions.archive(ids, roles, mb.id if in_mailbox and not mb.is_system else None)
+            removes_from_list = in_mailbox and (mb.role == ROLE_INBOX or not mb.is_system)
         elif kind == "trash":
             if mb and mb.role == ROLE_TRASH:
                 confirm(self, "Delete permanently?", "These messages will be removed for good.", "Delete", True,
@@ -831,7 +946,8 @@ class MainWindow(Adw.ApplicationWindow):
         if not ids:
             return
         act = actions.move(ids, mb.id, mb.name)
-        if self.current_mailbox and self.current_mailbox.id != mb.id and not self.threadlist.search_active:
+        current = self.current_mailbox
+        if current and current.id != mb.id and not current.is_view and not self.threadlist.search_active:
             self._remove_from_list({t.thread_id for t in threads})
         self.engine.perform(act, self._after_action)
 
@@ -842,13 +958,15 @@ class MainWindow(Adw.ApplicationWindow):
             act = actions.trash(email_ids, roles) if mb.role == ROLE_TRASH else actions.junk(email_ids, roles)
         elif mb.role == ROLE_ARCHIVE:
             act = actions.archive(email_ids, roles, current.id if current and not current.is_system else None)
-        elif copy or current is None or self.threadlist.search_active or current.role in (ROLE_TRASH, ROLE_JUNK):
+        elif (copy or current is None or current.is_view or self.threadlist.search_active
+                or current.role in (ROLE_TRASH, ROLE_JUNK)):
             act = actions.add_label(email_ids, mb.id, mb.name)
         else:
             act = actions.EmailAction(email_ids, f"Moved to {mb.name}", mailbox_add={mb.id},
                                       mailbox_remove={current.id} if current.id != mb.id else set())
         threads = {self.db.thread_of_email(e) for e in email_ids}
-        if not copy and current and current.id != mb.id and not self.threadlist.search_active:
+        if (not copy and current and current.id != mb.id and not current.is_view
+                and not self.threadlist.search_active):
             self.model.remove_threads({t for t in threads if t})
             self.conversation.clear()
         self.engine.perform(act, self._after_action)
@@ -895,7 +1013,9 @@ class MainWindow(Adw.ApplicationWindow):
 
     def refresh_mailbox(self, mb: MailboxObject) -> None:
         """Sync now and re-run the mailbox query from scratch (bypassing queryChanges)."""
-        if self.current_mailbox and self.current_mailbox.id == mb.id and self.query_key:
+        if self.current_mailbox and self.current_mailbox.id == mb.id and mb.is_view:
+            self._load_view(mb, self._view_search)
+        elif self.current_mailbox and self.current_mailbox.id == mb.id and self.query_key:
             self.engine.load_query(self._mailbox_query(mb))
         else:
             self.sidebar.select_mailbox(mb.id)
@@ -1007,6 +1127,7 @@ class MainWindow(Adw.ApplicationWindow):
                                                       "Sign out", True, lambda: self.sign_out(clear=True)),
                           on_clear_cache=lambda: self.engine.enqueue(0, self.engine.reset_cache, "reset"),
                           on_manage_identities=lambda: IdentitiesDialog(self.engine, self.db, self.config).present(self),
+                          on_sidebar_views=self.set_sidebar_views,
                           ).present(self)
 
     def show_shortcuts(self) -> None:

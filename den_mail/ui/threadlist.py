@@ -854,6 +854,12 @@ class ThreadList(Adw.NavigationPage):
 
     # ------------------------------------------------------------ misc
 
+    def set_scope_label(self, label: str) -> None:
+        """What the narrow search scope is called: "This mailbox", or "This view" (#19)."""
+        model = self.scope.get_model()
+        if model.get_string(0) != label:
+            model.splice(0, 1, [label])
+
     def set_title(self, title: str, subtitle: str = "") -> None:  # type: ignore[override]
         self.title_widget.set_title(title)
         self.title_widget.set_subtitle(subtitle)

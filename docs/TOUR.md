@@ -94,6 +94,24 @@ on screen.
 
 ![Category filter menu](../data/screenshots/categories.png)
 
+## Views
+
+The *Views* section of the sidebar holds lists that no folder on the server
+answers: Newsletters, Transactions, Security and Updates from the categories,
+*Never read* for senders with two or more cached messages you have never
+opened, the oldest at least two months old, and *Big attachments* for mail
+with an attachment of 5 MB or more. They are SQL queries over the local cache,
+so they open at once and cost no request; the badge counts what the cache
+knows, which is every conversation listed since the app was installed, not
+the whole account. A view behaves like a mailbox in the list: the same sort
+menu, unread filter, multi-select, drag and drop, context menu and actions,
+and a search typed while a view is shown narrows the view itself with the
+operators above. Archiving from a view keeps the conversation in it (it is
+still a newsletter); deleting or reporting spam removes it. Trash and Spam
+never appear. *Views in the sidebar* in Preferences turns the section off.
+
+![The Newsletters view](../data/screenshots/views.png)
+
 ## Newsletters
 
 *Newsletters…* in the main menu scans the account for mail that carries a

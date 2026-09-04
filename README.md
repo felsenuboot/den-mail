@@ -34,6 +34,8 @@ offline and follows changes as they happen.
 - 🗂️ **Categories.** Every message is sorted locally into Primary, Transactions,
   Security, Updates, Newsletters, Lists or Promotions from its headers, sender
   and wording; a chip on the row and a filter in the list header.
+- 👓 **Views.** Newsletters, Transactions, Security, Updates, Never read and
+  Big attachments in the sidebar, answered from the local cache in an instant.
 - 🔔 **Desktop.** Notifications with the sender's logo, `mailto:` links, keyboard
   shortcuts.
 

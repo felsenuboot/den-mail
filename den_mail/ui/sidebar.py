@@ -58,7 +58,7 @@ class MailboxRow(Gtk.Box):
         for cls in list(self.icon.get_css_classes()):
             if cls.startswith("label-color-"):
                 self.icon.remove_css_class(cls)
-        if not obj.is_system:
+        if not obj.is_system and not obj.is_view:
             self.icon.add_css_class(f"label-color-{obj.color_index}")
         self.label.set_label(obj.name)
         self.label.remove_css_class("heading")
@@ -376,6 +376,8 @@ class Sidebar(Adw.NavigationPage):
         if obj.role in (ROLE_TRASH, ROLE_JUNK) and obj.total > 0:
             first.append(f"Empty {obj.name}…", "sidebar.empty")
         menu.append_section(obj.name, first)
+        if obj.is_view:   # a local query: nothing to create, rename, colour or delete
+            return menu
         organise = Gio.Menu()
         if obj.may("mayCreateChild"):
             organise.append("New sub-label" if not obj.is_system else "New label inside", "sidebar.new-sublabel")
@@ -432,7 +434,7 @@ class Sidebar(Adw.NavigationPage):
 
     def _on_drag_motion(self, _target, _x, _y, list_item) -> Gdk.DragAction:
         obj = self._mailbox_of(list_item)
-        if obj is None or obj.is_section:
+        if obj is None or obj.is_section or not obj.may("mayAddItems"):
             return 0
         state = _target.get_current_drop().get_display().get_default_seat().get_keyboard().get_modifier_state()
         return Gdk.DragAction.COPY if state & Gdk.ModifierType.CONTROL_MASK else Gdk.DragAction.MOVE
@@ -443,7 +445,8 @@ class Sidebar(Adw.NavigationPage):
     def _on_drop(self, target, value, _x, _y, list_item) -> bool:
         list_item.get_child().remove_css_class("drop-target")
         obj = self._mailbox_of(list_item)
-        if obj is None or obj.is_section or not isinstance(value, str) or not value.startswith(DRAG_PREFIX):
+        if (obj is None or obj.is_section or not obj.may("mayAddItems") or not isinstance(value, str)
+                or not value.startswith(DRAG_PREFIX)):
             return False
         ids = [i for i in value[len(DRAG_PREFIX):].split(",") if i]
         copy = bool(target.get_current_drop().get_actions() & Gdk.DragAction.COPY) and not (

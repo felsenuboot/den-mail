@@ -29,6 +29,7 @@ class MailboxObject(GObject.Object):
     icon_name = GObject.Property(type=str, default="folder-symbolic")
     is_section = GObject.Property(type=bool, default=False)
     color_index = GObject.Property(type=int, default=0)
+    is_view = GObject.Property(type=bool, default=False)   # a local query (#19), not a JMAP mailbox
 
     def __init__(self, data: dict | None = None, depth: int = 0, section_title: str | None = None):
         super().__init__()
@@ -41,6 +42,25 @@ class MailboxObject(GObject.Object):
             self.id = f"section:{section_title}"
         elif data:
             self.update(data)
+
+    @classmethod
+    def for_view(cls, view) -> MailboxObject:
+        """A sidebar row for a den_mail.views.View: no rights, so nothing can be
+        dropped on or created in it, and a per-view default sort."""
+        rights = {r: False for r in ("mayReadItems", "mayAddItems", "mayRemoveItems", "maySetSeen",
+                                     "maySetKeywords", "mayCreateChild", "mayRename", "mayDelete", "maySubmit")}
+        data: dict = {"id": view.id, "name": view.name, "myRights": rights}
+        if view.default_sort == "size":
+            data["sort"] = [{"property": "size", "isAscending": False}]
+        elif view.default_sort == "oldest":
+            data["sort"] = [{"property": "receivedAt", "isAscending": True}]
+        obj = cls()
+        obj.data = data
+        obj.is_view = True
+        obj.id = view.id
+        obj.name = view.name
+        obj.icon_name = view.icon
+        return obj
 
     def update(self, data: dict, color_override: int | None = None) -> None:
         self.data = data
@@ -100,14 +120,24 @@ class MailboxTree:
         self.root = Gio.ListStore(item_type=MailboxObject)
         self.by_id: dict[str, MailboxObject] = {}
         self.labels_section = MailboxObject(section_title="Labels")
+        self.views_section = MailboxObject(section_title="Views")
+        self.views: list[MailboxObject] = []   # local views (#19), shown between the folders and the labels
+        self.show_views = False
         self._all: list[dict] = []
         self.color_overrides: dict[str, int] = {}  # mailbox id -> palette index chosen by the user
+
+    def set_views(self, views: list[MailboxObject]) -> None:
+        for obj in self.views:
+            self.by_id.pop(obj.id, None)
+        self.views = list(views)
+        for obj in self.views:
+            self.by_id[obj.id] = obj
 
     def update(self, mailboxes: list[dict]) -> None:
         self._all = mailboxes
         data_by_id = {m["id"]: m for m in mailboxes}
         for mid in list(self.by_id):
-            if mid not in data_by_id:
+            if mid not in data_by_id and not self.by_id[mid].is_view:
                 del self.by_id[mid]
         children: dict[str | None, list[dict]] = {}
         for m in mailboxes:
@@ -124,6 +154,9 @@ class MailboxTree:
         system = [m for m in top if m.get("role")]
         labels = [m for m in top if not m.get("role")]
         desired_root: list[MailboxObject] = [self._obj(m, 0) for m in system]
+        if self.show_views and self.views:
+            desired_root.append(self.views_section)
+            desired_root += self.views
         if labels:
             desired_root.append(self.labels_section)
         desired_root += [self._obj(m, 0) for m in labels]
@@ -190,7 +223,7 @@ class MailboxTree:
         def walk(store: Gio.ListStore) -> None:
             for i in range(store.get_n_items()):
                 obj = store.get_item(i)
-                if obj.is_section:
+                if obj.is_section or obj.is_view:
                     continue
                 if not obj.is_system:
                     out.append(obj)
@@ -200,12 +233,13 @@ class MailboxTree:
         return out
 
     def all(self) -> list[MailboxObject]:
+        """Every JMAP mailbox in tree order (views are not mailboxes: nothing moves into them)."""
         out: list[MailboxObject] = []
 
         def walk(store: Gio.ListStore) -> None:
             for i in range(store.get_n_items()):
                 obj = store.get_item(i)
-                if not obj.is_section:
+                if not obj.is_section and not obj.is_view:
                     out.append(obj)
                 walk(obj.children)
 

@@ -29,6 +29,7 @@ shot labels "sleep 3; select 1; sleep 2; action win.labels" 9
 shot context-menu "sleep 3; select 1; sleep 2; thread-menu 1" 9
 shot search "sleep 3; search has:attachment" 9
 shot categories "sleep 3; select 4; sleep 2; category-menu" 9
+shot views "sleep 3; view newsletters; sleep 2; select 0" 9
 shot compose "sleep 3; compose; sleep 2; from-popup" 9
 shot identities "sleep 3; identities" 8
 shot masked "sleep 3; masked" 8

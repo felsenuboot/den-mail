@@ -6,6 +6,7 @@ Commands:
   sleep <seconds>      wait
   select <index>       select the conversation at that index in the list
   mailbox <name>       select a mailbox by name
+  view <name>          select a sidebar view, e.g. newsletters or never-read
   search <text>        type into the search box
   action <name>        activate a window action, e.g. win.archive
   compose              open a blank compose window
@@ -64,6 +65,10 @@ def _run(app, steps: list[str]) -> bool:
                 if mb.name.lower() == arg.lower():
                     win.sidebar.select_mailbox(mb.id)
                     break
+        elif cmd == "view" and win:
+            view = win.tree.get("view:" + arg.strip().lower().replace(" ", "-"))
+            if view is None or not win.sidebar.select_mailbox(view.id):
+                log.warning("autopilot: no view %s (are views on?)", arg)
         elif cmd == "search" and win:
             win.threadlist.focus_search()
             win.threadlist.search_entry.set_text(arg)
