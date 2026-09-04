@@ -92,7 +92,8 @@ def test_drafts_saved_offline_are_listed_queued_and_created_on_replay(engine, se
     again = FakeJMAPServer(port=port).start()
     try:
         engine.sync_now()
-        pump(lambda: engine.db.outbox_count() == 0, timeout=20)
+        # the replay deletes the queued row and then the local copy: wait for both (#120)
+        pump(lambda: engine.db.outbox_count() == 0 and engine.db.get_email(local_id) is None, timeout=20)
         created = [e for e in again.data.emails.values() if e["subject"] == "Notes, more"]
         assert len(created) == 1 and drafts in created[0]["mailboxIds"]
         assert engine.db.get_email(local_id) is None
