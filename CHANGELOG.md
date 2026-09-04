@@ -8,10 +8,9 @@ Unreleased changes gather at the top until they are tagged.
 
 ### Features
 - The Fastmail address book, with a token that has the Contacts scope: contacts complete recipients first, and a contact's photo replaces the sender domain's logo (#4, #14)
-
-### Features
 - CI runs the UI headlessly once per autopilot script and keeps the screenshots as an artifact (#11)
 - "Categorise as…" in the context menu keeps your word over the rules; a learned layer trained from those corrections decides where the rules are unsure, sees what you do with a sender's mail, and the message details say why a message got its category (#23, #40)
+- Packaging: a Flatpak manifest and a workflow that attaches a single-file bundle to every release, an AUR PKGBUILD, AppStream metadata, and a per-distribution dependency table in the README (#16)
 
 ## [0.2.0] - 2026-09-04
 

@@ -1,0 +1,58 @@
+# Builds the Flatpak from packaging/flatpak on pull requests that touch the
+# packaging, and on release tags, where the single-file bundle is attached
+# to the GitHub release the Release workflow created. Not a required check:
+# it pulls the GNOME SDK, which takes a while.
+name: Flatpak
+
+on:
+  pull_request:
+    branches: [master]
+    paths: ["packaging/**", "pyproject.toml", "data/**", ".github/workflows/flatpak.yml"]
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    name: Bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install flatpak-builder and the GNOME SDK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          version="$(sed -n 's/^runtime-version: "\(.*\)"/\1/p' packaging/flatpak/io.github.felsenuboot.DenMail.yml)"
+          flatpak install --user -y --noninteractive flathub "org.gnome.Platform//$version" "org.gnome.Sdk//$version"
+      - name: Validate the metainfo
+        run: |
+          sudo apt-get install -y --no-install-recommends appstream
+          appstreamcli validate --no-net data/io.github.felsenuboot.DenMail.metainfo.xml
+      - name: Build
+        run: flatpak-builder --user --repo=repo --force-clean --disable-rofiles-fuse build packaging/flatpak/io.github.felsenuboot.DenMail.yml
+      - name: Compose report, when the build failed
+        if: failure()
+        run: |
+          find .flatpak-builder build -iname '*issue*' -o -iname '*report*' 2>/dev/null | head
+          find build/files/share -maxdepth 2 2>/dev/null | head -40
+      - name: Bundle
+        run: flatpak build-bundle repo den-mail.flatpak io.github.felsenuboot.DenMail
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: den-mail.flatpak
+          path: den-mail.flatpak
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in 1 2 3 4 5 6; do   # the Release workflow creates the release from the same tag
+            gh release upload "$GITHUB_REF_NAME" den-mail.flatpak --clobber && exit 0
+            sleep 30
+          done
+          exit 1

@@ -109,6 +109,16 @@ that section as notes and refuses a tag that does not match `VERSION`.
 `.github/release.yml` groups pull requests by label for GitHub's own
 release-notes generator. Master is protected: pull requests and green CI are
 required, force pushes are blocked, the repository admin can bypass.
+## Packaging
+
+`packaging/flatpak/` holds the Flatpak manifest (GNOME runtime; the app is
+the only module, installed with pip into /app). The Flatpak workflow builds
+it on pull requests that touch the packaging and on release tags, where it
+attaches the single-file bundle to the GitHub release. `packaging/aur/` holds
+the PKGBUILD for a tagged release; after a release, bump `pkgver`, run
+`updpkgsums` and `makepkg --printsrcinfo > .SRCINFO`, and push both to the
+AUR. `data/io.github.felsenuboot.DenMail.metainfo.xml` is the AppStream
+metadata both use; add a `<release>` there with every version.
 
 ## Environment variables
 

@@ -7,7 +7,8 @@ APP=io.github.felsenuboot.DenMail
 BIN=~/.local/bin
 APPS=~/.local/share/applications
 ICONS=~/.local/share/icons/hicolor
-mkdir -p "$BIN" "$APPS" "$ICONS/scalable/apps" "$ICONS/symbolic/apps"
+META=~/.local/share/metainfo
+mkdir -p "$BIN" "$APPS" "$ICONS/scalable/apps" "$ICONS/symbolic/apps" "$META"
 # Leftovers from before the app was renamed to Den Mail.
 OLD=io.github.felsenuboot.FastmailGtk
 rm -f "$BIN/fastmail-gtk" "$APPS/$OLD.desktop" "$ICONS"/*/apps/$OLD.png "$ICONS"/*/apps/$OLD*.svg
@@ -17,7 +18,13 @@ sed "s|^Exec=.*|Exec=$BIN/den-mail %u|" "$HERE/data/$APP.desktop" > "$APPS/$APP.
 chmod 644 "$APPS/$APP.desktop"
 install -m644 "$HERE/data/$APP.svg" "$ICONS/scalable/apps/$APP.svg"
 install -m644 "$HERE/data/$APP-symbolic.svg" "$ICONS/symbolic/apps/$APP-symbolic.svg"
-# Fixed-size PNGs for docks/taskbars that do not rasterise SVG themselves.
+install -m644 "$HERE/data/$APP.metainfo.xml" "$META/$APP.metainfo.xml"
+# Fixed-size PNGs for docks/taskbars that do not rasterise SVG themselves: the
+# shipped ones, and every other size when ImageMagick is around.
+for s in 64 128 256; do
+  mkdir -p "$ICONS/${s}x${s}/apps"
+  install -m644 "$HERE/data/icons/$s.png" "$ICONS/${s}x${s}/apps/$APP.png"
+done
 if command -v magick >/dev/null 2>&1; then
   for s in 16 22 24 32 48 64 96 128 256 512; do
     mkdir -p "$ICONS/${s}x${s}/apps"
