@@ -84,6 +84,17 @@ rules cannot tell apart (notifications from friendly mailboxes with list
 headers, wording in other languages, a person's mail that mentions an invoice)
 is listed in #40, the brief for the learning layers.
 
+## Packaging
+
+`packaging/flatpak/` holds the Flatpak manifest (GNOME runtime; the app is
+the only module, installed with pip into /app). The Flatpak workflow builds
+it on pull requests that touch the packaging and on release tags, where it
+attaches the single-file bundle to the GitHub release. `packaging/aur/` holds
+the PKGBUILD for a tagged release; after a release, bump `pkgver`, run
+`updpkgsums` and `makepkg --printsrcinfo > .SRCINFO`, and push both to the
+AUR. `data/io.github.felsenuboot.DenMail.metainfo.xml` is the AppStream
+metadata both use; add a `<release>` there with every version.
+
 ## Environment variables
 
 | Variable | Purpose |

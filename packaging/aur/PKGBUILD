@@ -1,0 +1,31 @@
+# Maintainer: felsenuboot <https://github.com/felsenuboot>
+# The AUR package of a tagged release: the tarball GitHub serves for the tag.
+# After a release: bump pkgver, run `updpkgsums` and `makepkg --printsrcinfo > .SRCINFO`,
+# then push both files to the AUR repository (ssh://aur@aur.archlinux.org/den-mail.git).
+pkgname=den-mail
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="Fastmail client for GNOME, built on JMAP, GTK 4 and libadwaita"
+arch=('any')
+url="https://github.com/felsenuboot/den-mail"
+license=('MIT')
+depends=('python' 'python-gobject' 'gtk4' 'libadwaita' 'libsecret' 'webkitgtk-6.0')
+optdepends=('python-setproctitle: list the process as den-mail instead of python3')
+makedepends=('python-build' 'python-installer' 'python-wheel' 'python-setuptools')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$pkgname-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+  install -Dm644 data/io.github.felsenuboot.DenMail.desktop -t "$pkgdir/usr/share/applications"
+  install -Dm644 data/io.github.felsenuboot.DenMail.metainfo.xml -t "$pkgdir/usr/share/metainfo"
+  install -Dm644 data/io.github.felsenuboot.DenMail.svg -t "$pkgdir/usr/share/icons/hicolor/scalable/apps"
+  install -Dm644 data/io.github.felsenuboot.DenMail-symbolic.svg -t "$pkgdir/usr/share/icons/hicolor/symbolic/apps"
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+}
