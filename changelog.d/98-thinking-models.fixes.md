@@ -1,1 +1,0 @@
-Assistant: a thinking model (Qwen3 on llama.cpp or Ollama, DeepSeek-R1) no longer leaves a summary hanging and empty; local servers are asked to skip the thinking, answers are capped, the wait can be up to five minutes, and an answer that is reasoning only is reported as such
