@@ -73,7 +73,9 @@ whole update. `./bin/den-mail` runs it without installing anything.
 
 On first start the app asks for a Fastmail API token: create one under
 *Settings → Privacy & Security → API tokens* with the Mail, Submission and
-Masked Email scopes. It is kept in your keyring and only ever sent to Fastmail.
+Masked Email scopes; add Contacts and the address book completes recipients
+and shows contact photos. It is kept in your keyring and only ever sent to
+Fastmail.
 
 Something off? See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 

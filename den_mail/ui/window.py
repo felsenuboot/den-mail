@@ -182,6 +182,10 @@ class MainWindow(Adw.ApplicationWindow):
         e.connect("cache-reset", lambda _e: self._reload_current())
         e.connect("identities-changed", lambda _e: setattr(self, "identities", self.db.get_identities()))
         e.connect("rules-applied", lambda _e, hits: rules.bump_hits(self.config, hits))
+        # Contact photos (#14) and completion (#4) come from the address book in the cache.
+        self.avatars.contact_photo = self.db.contact_photo_for
+        self.avatars.download_blob = e.fetch_blob
+        e.connect("contacts-changed", lambda _e: self._on_contacts_changed())
         set_cid_resolver(self._resolve_cid)
         e.start()
         self.stack.set_visible_child_name("main")
@@ -628,6 +632,13 @@ class MainWindow(Adw.ApplicationWindow):
             self._schedule_view_refresh()
         elif self.current_mailbox is not None and self.current_mailbox.is_view:
             self._goto_role(ROLE_INBOX)
+
+    def _on_contacts_changed(self) -> None:
+        self.avatars.forget_contacts()
+        for row in list(self.threadlist._rows):
+            row.refresh_avatar()
+        for card in self.conversation.cards.values():
+            card.refresh_avatar()
 
     def _on_sync_status(self, _engine, status: str, message: str) -> None:
         self.threadlist.set_syncing(status == "syncing")
@@ -1245,6 +1256,7 @@ class MainWindow(Adw.ApplicationWindow):
                           on_screener=self.set_screener,
                           on_open=lambda name: self.lookup_action(name).activate(None),
                           rules_count=len(rules.load_rules(self.config)),
+                          contact_count=self.db.contact_count() if self.db else 0,
                           )
         if page:
             self.preferences_dialog.set_visible_page_name(page)

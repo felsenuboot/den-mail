@@ -178,6 +178,15 @@ dialog links to Fastmail's own rules settings.
 
 ![Always for this sender](../data/screenshots/rules.png)
 
+## Address book
+
+With a token that has the Contacts scope, the app keeps your Fastmail
+address book in its cache: recipient completion offers your contacts first
+(by name or address), then the addresses seen in cached mail, and a contact
+with a photo shows it in the list and the conversation instead of the
+sender domain's logo. Without the scope nothing changes; the Account page in
+Preferences says which it is.
+
 ## Writing mail
 
 The From field lists your starred identities first; "Show all identities…"
