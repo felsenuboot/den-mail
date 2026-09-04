@@ -19,7 +19,9 @@ def test_cache_knows_senders_and_keeps_decisions(db):  # noqa: F811
     db.upsert_emails([email("a", "Hi", "anna@example.net", "Anna", to="me@example.com"),
                       email("s", "Re", "me@example.com", to="paul@example.net", mailboxes=("mb-sent",), seen=True)])
     assert db.knows_sender("Anna@Example.net")          # cached as a sender
+    assert not db.knows_sender("anna@example.net", {"a"})   # ... but not by the batch being judged (#42)
     assert db.knows_sender("paul@example.net")          # written to
+    assert not db.knows_sender("me2@example.net")       # a recipient of cached mail is not a known sender
     assert db.knows_sender("me@example.com") and db.knows_sender("x@example.org")   # own addresses never screen
     assert not db.knows_sender("new@shop.example")
     db.screener_set(["New@Shop.example"], "pending")
@@ -72,8 +74,9 @@ def test_engine_screens_first_time_senders_only_while_enabled(engine, server):  
     new = server.deliver("Offer", frm={"name": "Shop", "email": "new@shop.example"})
     known = server.deliver("Hello", frm={"name": "Anna", "email": "anna@example.net"})
     again = server.deliver("Hi again", frm={"name": "Stranger", "email": "stranger@example.net"})
+    # the rows may land through the running sync's thread step; the decision comes with the next one (#42)
+    pump(lambda: engine.db.screener_decision("new@shop.example") == "pending", timeout=15)
     pump(lambda: all(engine.db.get_email(i) is not None for i in (new, known, again)), timeout=15)
-    assert engine.db.screener_decision("new@shop.example") == "pending"
     assert engine.db.screener_decision("anna@example.net") is None      # seen before
     assert engine.db.screener_decision("stranger@example.net") is None  # cached before the switch
     def announced() -> set[str]:   # each delivery is its own push, sync and announcement
