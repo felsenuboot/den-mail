@@ -1323,37 +1323,9 @@ class SyncEngine(GObject.Object):
                    in_reply_to_id: str | None = None, forwarded_id: str | None = None,
                    send_at: str | None = None) -> None:
         """Submit `draft`; with `send_at` (a UTCDate) the server holds it until then (#6) and
-<<<<<<< HEAD
         the message waits in the Scheduled folder, where it can still be cancelled.  Offline,
         the message is queued and `on_done` gets an empty id (#8)."""
         def job() -> None:
-=======
-        the message waits in the Scheduled folder, where it can still be cancelled."""
-        def job() -> None:
-            session = self.client.session
-            acc = session.account_id
-            drafts = self.roles.get(ROLE_DRAFTS)
-            sent = self.roles.get(ROLE_SENT)
-            later = self.roles.get(ROLE_SCHEDULED) if send_at else None
-            req = Request()
-            c_set = req.add("Email/set", {"accountId": acc, "create": {"draft": self._draft_object(draft)}})
-            on_success: dict[str, Any] = {f"keywords/{KW_DRAFT}": None}
-            if drafts:
-                on_success[f"mailboxIds/{drafts}"] = None
-            if later or sent:
-                on_success[f"mailboxIds/{later or sent}"] = True
-            sub: dict[str, Any] = {"identityId": identity_id, "emailId": "#draft"}
-            if send_at:
-                sub["sendAt"] = send_at
-            c_sub = req.add("EmailSubmission/set", {
-                "accountId": session.submission_account_id,
-                "create": {"sub": sub},
-                "onSuccessUpdateEmail": {"#sub": on_success},
-            })
-            c_del = None
-            if replace_id:
-                c_del = req.add("Email/set", {"accountId": acc, "destroy": [replace_id]})
->>>>>>> master
             try:
                 new_id = self._submit(draft, identity_id, replace_id, in_reply_to_id, forwarded_id, send_at)
             except TransportError as e:
@@ -1365,29 +1337,11 @@ class SyncEngine(GObject.Object):
             except (MethodError, SetError) as e:
                 self._callback(on_error, e.description or getattr(e, "type", str(e)))
                 return
-<<<<<<< HEAD
-=======
-            new_id = resp.get(c_set)["created"]["draft"]["id"]
-            if send_at:
-                self.db.set_submission(new_id, resp.get(c_sub)["created"]["sub"]["id"], send_at)
-            if c_del:
-                self.db.delete_emails([replace_id])
-                self._emit("emails-destroyed", [replace_id])
-            from .actions import EmailAction
-
-            if in_reply_to_id:
-                self._job_perform(EmailAction([in_reply_to_id], "Answered", keyword_changes={"$answered": True},
-                                              undoable=False), None)
-            if forwarded_id:
-                self._job_perform(EmailAction([forwarded_id], "Forwarded", keyword_changes={"$forwarded": True},
-                                              undoable=False), None)
->>>>>>> master
             self._incremental_sync()
             self._callback(on_done, new_id)
 
         self.enqueue(PRIO_ACTION, job, "send")
 
-<<<<<<< HEAD
     def _submit(self, draft: dict, identity_id: str, replace_id: str | None, in_reply_to_id: str | None,
                 forwarded_id: str | None, send_at: str | None) -> str:
         """One request: create the message, submit it, destroy the draft it replaces.
@@ -1434,8 +1388,6 @@ class SyncEngine(GObject.Object):
                                           undoable=False), None)
         return new_id
 
-=======
->>>>>>> master
     def cancel_scheduled(self, email_id: str, on_done: Callable[[], None] | None = None,
                          on_error: Callable[[str], None] | None = None) -> None:
         """Take a scheduled message back before its time (#6): the submission is cancelled
