@@ -61,6 +61,31 @@ def store_token(token: str, account: str = "default") -> bool:
         return False
 
 
+def load_secret(account: str) -> str | None:
+    """Any other secret of the app under the same schema (the assistant's API keys, #69)."""
+    try:
+        return Secret.password_lookup_sync(SCHEMA, _attrs(account), None)
+    except Exception as e:  # noqa: BLE001
+        log.warning("secret lookup failed: %s", e)
+        return None
+
+
+def store_secret(account: str, secret: str, label: str) -> bool:
+    try:
+        Secret.password_store_sync(SCHEMA, _attrs(account), Secret.COLLECTION_DEFAULT, label, secret, None)
+        return True
+    except Exception as e:  # noqa: BLE001
+        log.error("secret store failed: %s", e)
+        return False
+
+
+def clear_secret(account: str) -> None:
+    try:
+        Secret.password_clear_sync(SCHEMA, _attrs(account), None)
+    except Exception as e:  # noqa: BLE001
+        log.warning("secret clear failed: %s", e)
+
+
 def clear_token(account: str = "default") -> None:
     try:
         Secret.password_clear_sync(SCHEMA, _attrs(account), None)

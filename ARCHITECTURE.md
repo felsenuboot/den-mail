@@ -144,6 +144,20 @@ WebKitGTK view that has JavaScript markup disabled, an ephemeral network
 session, and a registered `fmcid` scheme handler that serves inline parts from
 the blob cache. Without WebKit, `html/totext.py` converts HTML to Pango markup.
 
+## Assistant
+
+`llm/` is the one place that talks to a language model. A provider is a file
+with a class (`complete(system, user, json_schema=None) -> str`, `check()`)
+and a `SPEC` describing it for Preferences; `PROVIDERS` in `llm/__init__.py`
+is the registry. Ollama, any OpenAI-compatible server and Anthropic ship.
+`build(config)` turns the settings into a provider; API keys are read from
+the keyring (`secrets.load_secret`, account `assistant:<provider>`), never
+from the config file. Features hold the window's `Assistant` and call
+`ask()`, which enforces the per-day request budget, remembers the last
+error, and tells its listeners so the status bar can show the count. The
+assistant is off by default; the Preferences page says whether the mail text
+stays on the machine for the chosen server.
+
 ## Testing
 
 `tests/fake_server.py` is an in-process JMAP server with a fixture account

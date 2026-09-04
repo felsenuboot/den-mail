@@ -15,7 +15,7 @@ Commands:
   undo-send            press Undo on the newest pending send
   config <key> <json>  set a preference for this run
   masked | identities | preferences | rules | cleanup   open that dialog
-  preferences <general|inbox|account>   open that Preferences page
+  preferences <general|inbox|assistant|account>   open that Preferences page
   sender-rule <address>   open the "Always for this sender" prompt
   screen allow|block <address>   decide a screened sender
   lock | unlock        the lock screen (unlock skips the prompt)
