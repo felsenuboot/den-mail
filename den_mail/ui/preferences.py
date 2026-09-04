@@ -6,6 +6,8 @@ from collections.abc import Callable
 
 from gi.repository import Adw, GLib, Gtk
 
+from .. import version_string
+
 REMOTE_OPTIONS = ["ask", "always", "never"]
 UNDO_SEND_OPTIONS = [0, 5, 10, 20, 30]
 SCHEME_OPTIONS = ["system", "light", "dark"]
@@ -426,6 +428,7 @@ class PreferencesDialog(Adw.PreferencesDialog):
                 if uri not in session.capabilities:
                     caps.add_row(Adw.ActionRow(title=uri, subtitle="account capability"))
             account.add(caps)
+        account.add(Adw.ActionRow(title="Version", subtitle=version_string()))   # with the commit from a checkout (#112)
         clear = Adw.ButtonRow(title="Clear local cache and resync")
         clear.connect("activated", lambda *_: on_clear_cache())
         account.add(clear)
