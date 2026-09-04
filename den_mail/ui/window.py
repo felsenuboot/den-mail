@@ -356,6 +356,7 @@ class MainWindow(Adw.ApplicationWindow):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", lambda _a, _p, fn=fn: self.engine and fn())
             self.add_action(action)
+        self.lookup_action("lock").set_enabled(bool(self.config.get("lock_enabled")))   # off until enabled (#65)
         # Parameterised actions used by the conversation context menu.
         for name, fn in (
             ("find-sender", self._find_sender),
@@ -1287,7 +1288,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def lock(self) -> None:
         """Hide everything behind the lock page; compose and thread windows go too."""
-        if self.locked or self.stack.get_visible_child_name() in ("login", "loading"):
+        if not self.config.get("lock_enabled") or self.locked or self.stack.get_visible_child_name() in ("login", "loading"):
             return
         self.locked = True
         self._before_lock = self.stack.get_visible_child_name() or "main"
@@ -1314,10 +1315,17 @@ class MainWindow(Adw.ApplicationWindow):
             return
         stored = self.config.get("lock_passphrase") or ""
         if not stored:
-            self._unlocked()   # nothing to check against: the lock was only a curtain
+            # No way to check anyone: the passphrase was removed after enabling. Open, and switch the lock off.
+            self.config.set("lock_enabled", False)
+            self.apply_lock_settings()
+            self._unlocked()
+            self._toast("No passphrase or PIN is set, so the lock is off; set one under Account in Preferences", 6)
             return
+        pin = self.config.get("lock_kind") == "pin"
         entry = Gtk.PasswordEntry(show_peek_icon=True, activates_default=True)
-        dlg = Adw.AlertDialog(heading="Unlock Den Mail", body="Your Den Mail passphrase.")
+        if pin:
+            entry.set_input_purpose(Gtk.InputPurpose.PIN)
+        dlg = Adw.AlertDialog(heading="Unlock Den Mail", body="Your Den Mail PIN." if pin else "Your Den Mail passphrase.")
         dlg.set_extra_child(entry)
         dlg.add_response("cancel", "Cancel")
         dlg.add_response("ok", "Unlock")
@@ -1331,7 +1339,7 @@ class MainWindow(Adw.ApplicationWindow):
             if lock.check_passphrase(entry.get_text(), stored):
                 self._unlocked()
             else:
-                self._toast("Wrong passphrase", 4)
+                self._toast("Wrong PIN" if pin else "Wrong passphrase", 4)
 
         dlg.connect("response", on_response)
         dlg.present(self)
@@ -1348,6 +1356,7 @@ class MainWindow(Adw.ApplicationWindow):
     def apply_lock_settings(self) -> None:
         """After a change in Preferences: the idle timer and the session watch follow the switches."""
         enabled = bool(self.config.get("lock_enabled"))
+        self.lookup_action("lock").set_enabled(enabled)
         self.idle.set_minutes(int(self.config.get("lock_idle_minutes", 0)) if enabled else 0)
         if enabled and not self._session_subs:
             self._session_subs = lock.watch_session_lock(self.lock_from_session)

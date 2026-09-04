@@ -176,8 +176,19 @@ class PreferencesDialog(Adw.PreferencesDialog):
                          "Hides the mail behind a lock page; unlocking asks for a passphrase set here. The system's "
                          "own prompt needs the polkit policy file installed (see the README). A privacy screen, "
                          "not a security boundary: the cache and the token are not encrypted."))
-        group.add(_switch(config, "lock_enabled", False, "Lock screen", "Lock from the main menu or Ctrl+Shift+L",
-                          lambda _on: changed()))
+        enable = Adw.SwitchRow(title="Lock screen", subtitle="Adds Lock to the main menu and Ctrl+Shift+L",
+                               active=config.get("lock_enabled", False))
+
+        def on_enable(row, _p):
+            if row.get_active() and not polkit and not config.get("lock_passphrase"):
+                # Nothing could ask for anything yet: set a passphrase or PIN first, or the switch stays off (#65).
+                self._set_passphrase(config, self._passphrase_row, then=lambda ok: row.set_active(ok))
+                return
+            config.set("lock_enabled", row.get_active())
+            changed()
+
+        enable.connect("notify::active", on_enable)
+        group.add(enable)
         idle = Adw.ComboRow(title="Lock when idle", model=Gtk.StringList.new(
             ["Never", "After 1 minute", "After 5 minutes", "After 15 minutes", "After 30 minutes", "After an hour"]))
         current = int(config.get("lock_idle_minutes", 0))
@@ -186,24 +197,35 @@ class PreferencesDialog(Adw.PreferencesDialog):
         group.add(idle)
         group.add(_switch(config, "lock_with_session", True, "Lock with the session",
                           "When the desktop locks or the screensaver starts"))
+        self._passphrase_row = None
         if not polkit:
+            kind = Adw.ComboRow(title="Unlock with", model=Gtk.StringList.new(["A passphrase", "A PIN"]))
+            kind.set_selected(1 if config.get("lock_kind") == "pin" else 0)
+            kind.connect("notify::selected", lambda r, _p: config.set("lock_kind", "pin" if r.get_selected() else "passphrase"))
+            group.add(kind)
             has = bool(config.get("lock_passphrase"))
-            row = Adw.ActionRow(title="Passphrase", subtitle="Set" if has else "None yet: the lock page opens without asking",
+            row = Adw.ActionRow(title="Passphrase or PIN", subtitle="Set" if has else "None yet: needed before the lock can be enabled",
                                 activatable=True)
             row.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
             row.connect("activated", lambda *_: self._set_passphrase(config, row))
             group.add(row)
+            self._passphrase_row = row
         return group
 
-    def _set_passphrase(self, config, row: Adw.ActionRow) -> None:
+    def _set_passphrase(self, config, row: Adw.ActionRow | None, then=None) -> None:
         from .. import lock
 
-        first = Gtk.PasswordEntry(show_peek_icon=True, placeholder_text="Passphrase")
+        pin = config.get("lock_kind") == "pin"
+        what = "PIN" if pin else "passphrase"
+        first = Gtk.PasswordEntry(show_peek_icon=True, placeholder_text=what.capitalize())
         second = Gtk.PasswordEntry(show_peek_icon=True, placeholder_text="Again", activates_default=True)
+        if pin:
+            for e in (first, second):
+                e.set_input_purpose(Gtk.InputPurpose.PIN)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         box.append(first)
         box.append(second)
-        dlg = Adw.AlertDialog(heading="Den Mail passphrase", body="Asked for when unlocking. Leave both empty to remove it.")
+        dlg = Adw.AlertDialog(heading=f"Den Mail {what}", body="Asked for when unlocking. Leave both empty to remove it.")
         dlg.set_extra_child(box)
         dlg.add_response("cancel", "Cancel")
         dlg.add_response("ok", "Set")
@@ -213,12 +235,17 @@ class PreferencesDialog(Adw.PreferencesDialog):
 
         def on_response(_d, response):
             if response != "ok":
+                if then is not None:
+                    then(bool(config.get("lock_passphrase")))
                 return
-            if first.get_text() != second.get_text():
-                self._set_passphrase(config, row)
+            if first.get_text() != second.get_text() or (pin and not first.get_text().isdigit() and first.get_text()):
+                self._set_passphrase(config, row, then)
                 return
             config.set("lock_passphrase", lock.hash_passphrase(first.get_text()) if first.get_text() else "")
-            row.set_subtitle("Set" if first.get_text() else "None yet: the lock page opens without asking")
+            if row is not None:
+                row.set_subtitle("Set" if first.get_text() else "None yet: needed before the lock can be enabled")
+            if then is not None:
+                then(bool(first.get_text()))
 
         dlg.connect("response", on_response)
         dlg.present(self)
@@ -231,7 +258,7 @@ class PreferencesDialog(Adw.PreferencesDialog):
         page = Adw.PreferencesPage(title="Account", icon_name="avatar-default-symbolic", name="account")
         page.add(self._privacy_group(config, on_lock_changed))
 
-        sync = Adw.PreferencesGroup(title="Sync & notifications")
+        sync = Adw.PreferencesGroup(title="Sync and notifications")
         sync.add(_switch(config, "notify_new_mail", True, "Notify about new mail"))
         poll = Adw.SpinRow.new_with_range(30, 3600, 30)
         poll.set_title("Fallback poll interval (seconds)")

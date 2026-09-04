@@ -35,6 +35,7 @@ DEFAULTS: dict[str, Any] = {
     "lock_idle_minutes": 0,  # lock after this long without activity; 0 = never
     "lock_with_session": True,  # lock when the desktop session locks
     "lock_passphrase": "",  # salted PBKDF2 hash; used where no polkit policy is installed
+    "lock_kind": "passphrase",  # "passphrase" or "pin": what the local secret is, for the entry's keypad
     "window": {"width": 1400, "height": 900, "maximized": False},
     "signature_position": "below",
 }

@@ -246,7 +246,8 @@ when the desktop session locks. Unlocking uses the system's own
 authentication prompt (password, fingerprint, whatever PAM is set up for)
 where the polkit policy file is installed, which the AUR package does and
 `install.sh` shows the one command for; elsewhere, a Flatpak in particular,
-a passphrase set in Preferences. This is a privacy screen, not a security
+a passphrase or a PIN set in Preferences, which the lock needs before it
+can be switched on. This is a privacy screen, not a security
 boundary: the cache and the token are not encrypted by it.
 
 ## Preferences
