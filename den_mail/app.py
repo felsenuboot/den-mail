@@ -74,10 +74,19 @@ class FastmailApp(Adw.Application):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", cb)
             self.add_action(action)
+        # A new-mail notification's click (#93): bring the window up and open that message.
+        open_mail = Gio.SimpleAction.new("open-mail", GLib.VariantType.new("s"))
+        open_mail.connect("activate", lambda _a, p: self._open_mail(p.get_string()))
+        self.add_action(open_mail)
         # Remote-controllable (gapplication action <id> set-theme "'light'") for debugging theme switches.
         theme = Gio.SimpleAction.new("set-theme", GLib.VariantType.new("s"))
         theme.connect("activate", self._set_theme)
         self.add_action(theme)
+
+    def _open_mail(self, email_id: str) -> None:
+        self.activate()   # creates or presents the window, hidden or not
+        if self.window is not None:
+            self.window.open_mail(email_id)
 
     def _set_theme(self, _action, param) -> None:
         from .ui.preferences import apply_color_scheme
