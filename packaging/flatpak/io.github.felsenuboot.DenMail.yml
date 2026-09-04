@@ -29,10 +29,9 @@ modules:
       - pip3 install --prefix=/app --no-deps --no-build-isolation .
       - install -Dm644 data/io.github.felsenuboot.DenMail.desktop -t /app/share/applications
       - install -Dm644 data/io.github.felsenuboot.DenMail.metainfo.xml -t /app/share/metainfo
-      - install -Dm644 data/io.github.felsenuboot.DenMail.svg -t /app/share/icons/hicolor/scalable/apps
-      - install -Dm644 data/io.github.felsenuboot.DenMail-symbolic.svg -t /app/share/icons/hicolor/symbolic/apps
-      # appstreamcli compose wants a raster icon of at least 64 px
-      - for s in 64 128 256; do install -Dm644 data/icons/$s.png /app/share/icons/hicolor/${s}x${s}/apps/io.github.felsenuboot.DenMail.png; done
+      # Raster icons only: flatpak-builder's export validator does not recognise the
+      # SVG ("Format not recognized"), and the desktop and its docks take PNGs.
+      - for s in 64 128 256 512; do install -Dm644 data/icons/$s.png /app/share/icons/hicolor/${s}x${s}/apps/io.github.felsenuboot.DenMail.png; done
     sources:
       - type: dir
         path: ../..
