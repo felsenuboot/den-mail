@@ -2,6 +2,7 @@
 # Regenerates the tour screenshots from the fake account: one autopilot script per
 # picture, taken with grim inside a headless cage session (see docs/DEVELOPMENT.md).
 # Needs cage, grim, magick and a fake server: python -m tests.fake_server 18081
+# (the summary shot also starts tests/fake_llm.py, a canned model, on 18082)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; ROOT="$(cd "$HERE/../.." && pwd)"
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
@@ -9,12 +10,14 @@ export DEN_MAIL_SESSION_URL=http://127.0.0.1:18081/session DEN_MAIL_TOKEN=fake-t
 export XDG_DATA_HOME=$WORK/data XDG_CONFIG_HOME=$WORK/config XDG_CACHE_HOME=$WORK/cache ROOT WORK
 
 shot() {  # name, autopilot script, seconds before the capture
+  rm -rf "$WORK/config"   # every picture starts from default preferences; the cache stays
   DEN_MAIL_AUTOPILOT="$2" WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 \
     timeout 90 cage -- sh -c "(cd \"\$ROOT\" && exec python3 -m den_mail) >\"\$WORK/$1.log\" 2>&1 & sleep $3; grim \"\$WORK/$1.png\"; kill %1" \
     >/dev/null 2>&1 || true
   cp "$WORK/$1.png" "$HERE/$1.png" && echo "made $1"
 }
 frames() {  # name, autopilot script, number of frames, seconds between frames (for a GIF)
+  rm -rf "$WORK/config"
   DEN_MAIL_AUTOPILOT="$2" WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 \
     timeout 120 cage -- sh -c "(cd \"\$ROOT\" && exec python3 -m den_mail) >\"\$WORK/$1.log\" 2>&1 & sleep 3; for i in \$(seq -w 1 $3); do grim \"\$WORK/$1-\$i.png\"; sleep $4; done; kill %1" \
     >/dev/null 2>&1 || true
@@ -39,6 +42,13 @@ shot cleanup "sleep 4; cleanup" 9
 # the screener needs a first-time sender to arrive while the app runs: deliver one from the fake
 # server (its deliver() method) about 9 seconds in, with {"screener": true} in the config
 shot preferences "sleep 3; preferences inbox" 8
+shot lock "sleep 3; config lock_method \"pin\"; preferences account" 8
+shot assistant "sleep 3; config assistant_enabled true; preferences assistant" 8
+(cd "$ROOT" && exec python3 -m tests.fake_llm 18082) >"$WORK/llm.log" 2>&1 &
+LLM=$!
+sleep 1
+shot summary "sleep 3; config assistant_enabled true; config assistant_provider \"openai\"; config assistant_url \"http://127.0.0.1:18082/v1\"; config assistant_model \"fake-summariser\"; select 1; sleep 2; action win.summarise" 10
+kill $LLM 2>/dev/null || true
 # the theme split: light above the diagonal, dark below it
 magick "$HERE/inbox-light.png" \( "$HERE/inbox-dark.png" \( -size 1280x720 xc:black -fill white -draw "polygon 1280,0 1280,720 0,720" \) -alpha off -compose copy_opacity -composite \) -compose over -composite "$HERE/theme-split.png" && echo "made theme-split"
 rm -f "$HERE/inbox-light.png"
