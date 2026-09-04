@@ -12,7 +12,7 @@ action muxer, so menus keep showing them next to their items.
 
 from __future__ import annotations
 
-from gi.repository import Gdk, GLib, Gtk
+from gi.repository import Adw, Gdk, GLib, Gtk
 
 # Action → accelerators. The first one is the one menus show.
 ACCELS: dict[str, list[str]] = {
@@ -102,8 +102,13 @@ class Chords:
         return None
 
 
-def install(window: Gtk.Window) -> None:
-    """Route the win.* shortcuts and chords through `window` in the bubble phase."""
+def install(window: Adw.Window | Adw.ApplicationWindow) -> None:
+    """Route the win.* shortcuts and chords through the window's content in the bubble phase.
+
+    The controllers sit on the content rather than the window: libadwaita presents
+    its dialogs beside the content, so a key pressed in a modal dialog never passes
+    through them and cannot act on the conversations behind it."""
+    host = window.get_content()
     ctrl = Gtk.ShortcutController(scope=Gtk.ShortcutScope.LOCAL,
                                   propagation_phase=Gtk.PropagationPhase.BUBBLE)
     for action, accels in ACCELS.items():
@@ -114,7 +119,7 @@ def install(window: Gtk.Window) -> None:
         for accel in reversed(accels):
             ctrl.add_shortcut(Gtk.Shortcut.new(Gtk.ShortcutTrigger.parse_string(accel),
                                                Gtk.NamedAction.new(action)))
-    window.add_controller(ctrl)
+    host.add_controller(ctrl)
 
     chords = Chords()
 
@@ -129,4 +134,4 @@ def install(window: Gtk.Window) -> None:
 
     keys = Gtk.EventControllerKey(propagation_phase=Gtk.PropagationPhase.BUBBLE)
     keys.connect("key-pressed", on_key)
-    window.add_controller(keys)
+    host.add_controller(keys)
