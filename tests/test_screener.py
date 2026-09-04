@@ -34,6 +34,33 @@ def test_cache_knows_senders_and_keeps_decisions(db):  # noqa: F811
     assert db.screener_decision("new@shop.example") is None
 
 
+def test_inbox_badge_leaves_out_held_mail(db):  # noqa: F811
+    from den_mail.models.mailbox import MailboxObject
+
+    db.upsert_emails([
+        email("h1", "Hello", "new@shop.example", "Shop"),
+        email("h2", "Hello again", "new@shop.example", "Shop", thread="T-h1"),
+        email("h3", "Read one", "new@shop.example", "Shop", seen=True),
+        email("h4", "Elsewhere", "new@shop.example", "Shop", mailboxes=("mb-work",)),
+        email("k1", "Known", "anna@example.net", "Anna"),
+    ])
+    assert db.screener_held_unread("mb-inbox") == 0
+    db.screener_set(["new@shop.example"], "pending")
+    assert db.screener_held_unread("mb-inbox") == 2          # unread, in the Inbox, still pending
+    assert db.screener_held_unread("mb-work") == 1
+    inbox = MailboxObject({"id": "mb-inbox", "name": "Inbox", "role": "inbox", "unreadEmails": 3, "totalEmails": 5})
+    assert inbox.unread == 3
+    inbox.set_held(db.screener_held_unread("mb-inbox"))
+    assert inbox.unread == 1 and inbox.total == 5
+    inbox.update({"id": "mb-inbox", "name": "Inbox", "role": "inbox", "unreadEmails": 4, "totalEmails": 6})
+    assert inbox.unread == 2                                  # a server update keeps the deduction
+    inbox.set_held(10)
+    assert inbox.unread == 0                                  # never below zero
+    db.screener_set(["new@shop.example"], "allow")
+    inbox.set_held(db.screener_held_unread("mb-inbox"))
+    assert inbox.unread == 4
+
+
 def test_screener_view_lists_pending_senders_and_the_inbox_hides_them(db):  # noqa: F811
     db.upsert_emails([
         email("a", "Hello", "new@shop.example", "Shop", when="2026-09-03T10:00:00Z"),

@@ -606,6 +606,14 @@ class Database:
     def screener_pending(self) -> set[str]:
         return {r["email"] for r in self.conn().execute("SELECT email FROM screener WHERE decision='pending'")}
 
+    def screener_held_unread(self, mailbox_id: str) -> int:
+        """Unread messages in the mailbox from senders the screener still holds (#62)."""
+        row = self.conn().execute(
+            "SELECT COUNT(*) AS n FROM emails e JOIN email_mailboxes em ON em.email_id = e.id"
+            " WHERE em.mailbox_id = ? AND e.seen = 0"
+            " AND e.from_email IN (SELECT email FROM screener WHERE decision = 'pending')", (mailbox_id,)).fetchone()
+        return int(row["n"] or 0)
+
     def is_correspondent(self, addr: str) -> bool:
         """Has the user ever sent mail to this address?"""
         addr = (addr or "").strip().lower()

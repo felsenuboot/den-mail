@@ -11,6 +11,7 @@ Unreleased changes gather at the top until they are tagged.
 - An assistant layer behind the coming summaries: an Assistant page in Preferences chooses Ollama on this machine, any OpenAI-compatible API or Anthropic, with the server, the model, a key kept in the keyring, a requests-per-day limit, a Test button and a note on whether mail text leaves the machine; off by default (#69)
 
 ### Fixes
+- With the screener on, the Inbox badge no longer counts the unread mail it holds back; the Screener view's badge does (#62)
 - The five CodeQL alerts open on master are gone: an attribution regex restructured, an unused result, a wrapper lambda, an unused import and a procedure's return value (#72)
 
 ## [0.4.0] - 2026-09-04
