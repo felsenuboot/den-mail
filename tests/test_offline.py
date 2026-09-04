@@ -53,6 +53,93 @@ def test_changes_and_sends_queue_offline_and_replay_when_back(engine, server):  
         again.stop()
 
 
+def _draft(subject: str, text: str) -> dict:
+    return {"from": [{"email": "felix@example.com"}], "to": [{"email": "anna@example.net"}], "subject": subject,
+            "textBody": [{"partId": "t", "type": "text/plain"}], "bodyValues": {"t": {"value": text}}}
+
+
+def test_drafts_saved_offline_are_listed_queued_and_created_on_replay(engine, server):  # noqa: F811
+    from den_mail.jmap.types import ROLE_DRAFTS
+
+    drafts = engine.roles[ROLE_DRAFTS]
+    created_ids = []
+    engine.connect("draft-created", lambda _e, local, new: created_ids.append((local, new)))
+    key = engine.load_query(mailbox_query_spec(drafts))
+    pump(lambda: any(a[0] == key for a in engine.events.get("query-updated", [])))
+    before = list(engine.db.get_query(key)["ids"])
+    port = server.server_port
+    server.stop()
+    saved = []
+    engine.save_draft(_draft("Notes", "first words"), None, saved.append, lambda m: saved.append(("error", m)))
+    pump(lambda: saved, timeout=15)
+    local_id = saved[0]
+    assert engine.is_local(local_id) and not engine.online
+    # in the cache, with its body, in the Drafts list first, and queued once
+    e = engine.db.get_email(local_id)
+    assert e["subject"] == "Notes" and drafts in e["mailboxIds"] and e["keywords"].get("$draft")
+    assert engine.db.get_email_body(local_id)["bodyValues"]["t"]["value"] == "first words"
+    assert engine.db.get_query(key)["ids"] == [local_id, *before]
+    assert [r["kind"] for r in engine.db.outbox_list()] == ["draft"]
+    # a later save while still offline replaces the queued row and the placeholder, no chain
+    engine.save_draft(_draft("Notes, more", "more words"), local_id, saved.append, lambda m: saved.append(("error", m)))
+    pump(lambda: len(saved) == 2, timeout=15)
+    assert saved[1] == local_id
+    rows = engine.db.outbox_list()
+    assert len(rows) == 1 and rows[0]["payload"]["draft"]["subject"] == "Notes, more"
+    assert engine.db.get_email(local_id)["subject"] == "Notes, more"
+    assert engine.db.get_query(key)["ids"].count(local_id) == 1
+    # the server comes back: the draft is created there, the placeholder goes, the window learns the id
+    again = FakeJMAPServer(port=port).start()
+    try:
+        engine.sync_now()
+        pump(lambda: engine.db.outbox_count() == 0, timeout=20)
+        created = [e for e in again.data.emails.values() if e["subject"] == "Notes, more"]
+        assert len(created) == 1 and drafts in created[0]["mailboxIds"]
+        assert engine.db.get_email(local_id) is None
+        assert local_id not in engine.db.get_query(key)["ids"]
+        pump(lambda: created_ids, timeout=10)
+        assert created_ids[-1] == (local_id, created[0]["id"])
+        # saving again with the server id replaces the server draft the usual way
+        engine.save_draft(_draft("Notes, final", "final"), created[0]["id"], saved.append, lambda m: saved.append(("error", m)))
+        pump(lambda: len(saved) == 3, timeout=15)
+        assert not engine.is_local(saved[2]) and created[0]["id"] not in again.data.emails
+    finally:
+        again.stop()
+
+
+def test_sending_a_draft_saved_offline_supersedes_it(engine, server):  # noqa: F811
+    identity = engine.db.get_identities()[0]["id"]
+    port = server.server_port
+    server.stop()
+    saved, sent_ids = [], []
+    engine.save_draft(_draft("On the road", "draft text"), None, saved.append, lambda m: saved.append(("error", m)))
+    pump(lambda: saved, timeout=15)
+    local_id = saved[0]
+    engine.send_email(_draft("On the road", "sent text"), identity, local_id, sent_ids.append,
+                      lambda m: sent_ids.append(("error", m)))
+    pump(lambda: sent_ids, timeout=15)
+    assert sent_ids == [""]
+    assert [r["kind"] for r in engine.db.outbox_list()] == ["send"]      # the draft row is gone
+    assert engine.db.get_email(local_id) is None
+    assert engine.db.outbox_list()[0]["payload"]["replace_id"] is None   # nothing on the server to destroy
+    again = FakeJMAPServer(port=port).start()
+    try:
+        engine.sync_now()
+        pump(lambda: engine.db.outbox_count() == 0, timeout=20)
+        assert [e for e in again.data.emails.values() if e["subject"] == "On the road"]
+    finally:
+        again.stop()
+
+
+def test_discarding_a_local_draft_drops_it(engine, server):  # noqa: F811
+    server.stop()
+    saved = []
+    engine.save_draft(_draft("Never mind", "x"), None, saved.append, lambda m: saved.append(("error", m)))
+    pump(lambda: saved, timeout=15)
+    engine.discard_draft(saved[0])
+    pump(lambda: engine.db.outbox_count() == 0 and engine.db.get_email(saved[0]) is None, timeout=10)
+
+
 def test_a_queued_change_the_server_rejects_is_reported_and_dropped(engine, server):  # noqa: F811
     port = server.server_port
     server.stop()

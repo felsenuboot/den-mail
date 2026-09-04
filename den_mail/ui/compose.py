@@ -178,6 +178,7 @@ class ComposeWindow(Adw.Window):
 
         self._install_actions()
         self.connect("close-request", self._on_close_request)
+        self._draft_handler = self.engine.connect("draft-created", self._on_draft_created) if self.engine else 0
         # Suggestion navigation is handled at the window level, in the capture phase, so no
         # widget between the window and the entry can swallow Up/Down/Return first.
         keys = Gtk.EventControllerKey()
@@ -676,7 +677,9 @@ class ComposeWindow(Adw.Window):
             self.draft_id = new_id
             self.dirty = False
             if not quiet:
-                toast(self.parent_window if close else self, "Draft saved")
+                toast(self.parent_window if close else self,
+                      "Offline: the draft is kept here and saved with the next sync" if self.engine.is_local(new_id)
+                      else "Draft saved")
             if close:
                 self.destroy()
 
@@ -685,13 +688,16 @@ class ComposeWindow(Adw.Window):
 
         self.engine.save_draft(email, self.draft_id, done, failed)
 
+    def _on_draft_created(self, _engine, local_id: str, new_id: str) -> None:
+        """A draft saved offline reached the server (#61): later saves replace the server's copy."""
+        if self.draft_id == local_id:
+            self.draft_id = new_id
+
     def discard(self) -> None:
         def do_discard() -> None:
             self.dirty = False
             if self.draft_id:
-                from ..store.actions import destroy
-
-                self.engine.perform(destroy([self.draft_id]))
+                self.engine.discard_draft(self.draft_id)
             self._destroy_after_dialog()
 
         if self._has_content():
@@ -734,6 +740,9 @@ class ComposeWindow(Adw.Window):
         if self._autosave:
             GLib.source_remove(self._autosave)
             self._autosave = 0
+        if self._draft_handler:
+            self.engine.disconnect(self._draft_handler)
+            self._draft_handler = 0
         if self.on_closed:
             self.on_closed(self)
         Adw.Window.destroy(self)
