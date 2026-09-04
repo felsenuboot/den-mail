@@ -15,6 +15,7 @@ from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full, deliv
 from ..models.thread import ThreadObject, format_date_long
 from ..summaries import Summariser
 from ..unsubscribe import identity_for, parse_list_unsubscribe
+from .a11y import watch as _a11y_watch
 from .message_body import MessageBody, warm_up_renderer
 from .widgets import avatar, confirm, copy_text, human_size, open_uri, toast
 
@@ -125,6 +126,7 @@ def default_app_name(att: dict) -> str | None:
 class MessageCard(Gtk.Box):
     def __init__(self, view: ConversationView, email: dict, expanded: bool):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
+        _a11y_watch(self)   # (#123)
         self.view = view
         self.email = email
         self.email_id = email["id"]
@@ -208,7 +210,7 @@ class MessageCard(Gtk.Box):
         danger.append("Delete this message", f"conv.trash::{self.email_id}")
         menu.append_section(None, danger)
         self.force_original_colours = False
-        more = Gtk.MenuButton(icon_name="view-more-symbolic", menu_model=menu)
+        more = Gtk.MenuButton(icon_name="view-more-symbolic", menu_model=menu, tooltip_text="More actions for this message")
         more.add_css_class("flat")
         actions.append(more)
         header.append(actions)
@@ -1074,7 +1076,7 @@ class ConversationView(Adw.NavigationPage):
             words = ", ".join(t.split(":", 1)[-1] for t in s.evidence[:3])
             box.set_tooltip_text(f"The app thinks this belongs under {self.tree.path_name(s.label_id)} "
                                  f"({s.probability:.0%}, going by {words}). Click to add the label.")
-            add = Gtk.Button(icon_name="list-add-symbolic")
+            add = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="Add this label")
             add.add_css_class("flat")
             add.add_css_class("circular")
             add.connect("clicked", lambda _b, m=s.label_id: self.on_add_label(m))

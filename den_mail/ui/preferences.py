@@ -7,6 +7,7 @@ from collections.abc import Callable
 from gi.repository import Adw, GLib, Gtk
 
 from .. import version_string
+from .a11y import watch as _a11y_watch
 
 REMOTE_OPTIONS = ["ask", "always", "never"]
 UNDO_SEND_OPTIONS = [0, 5, 10, 20, 30]
@@ -107,6 +108,7 @@ class PreferencesDialog(Adw.PreferencesDialog):
             from .assistant import assistant_page
             self.add(assistant_page(self, config, assistant))
         self.add(self._account_page(config, session, on_sign_out, on_clear_cache, contact_count, on_lock_changed))
+        _a11y_watch(self)   # icon-only buttons get their tooltip as accessible name (#123)
 
     # ------------------------------------------------------------- General
 

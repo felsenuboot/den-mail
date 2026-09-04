@@ -14,6 +14,7 @@ from ..store import actions
 from ..store.actions import UndoRecord
 from ..summaries import Summariser
 from ..unsubscribe import parse_list_unsubscribe
+from .a11y import watch as _a11y_watch
 from .newsletters import run_unsubscribe
 from .widgets import avatar, chip, confirm, human_size, toast
 
@@ -145,6 +146,7 @@ class CleanupDialog(Adw.Dialog):
         self.toast_overlay = Adw.ToastOverlay(child=view)
         self.set_child(self.toast_overlay)
         self.reload()
+        _a11y_watch(self)   # icon-only buttons get their tooltip as accessible name (#123)
 
     # ------------------------------------------------------------- loading
 

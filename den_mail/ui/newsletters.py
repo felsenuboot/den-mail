@@ -10,6 +10,7 @@ from ..models.thread import format_date
 from ..newsletters import Sender, fetch_list_mail, group_senders
 from ..store import actions
 from ..unsubscribe import UnsubscribePlan, identity_for
+from .a11y import watch as _a11y_watch
 from .widgets import open_uri, toast
 
 Done = Callable[[UnsubscribePlan], None]
@@ -145,6 +146,7 @@ class NewslettersDialog(Adw.Dialog):
         view.add_bottom_bar(bar)
         self.toast_overlay = Adw.ToastOverlay(child=view)
         self.set_child(self.toast_overlay)
+        _a11y_watch(self)   # icon-only buttons get their tooltip as accessible name (#123)
         self.reload()
 
     # ------------------------------------------------------------- loading

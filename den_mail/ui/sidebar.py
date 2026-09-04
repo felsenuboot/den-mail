@@ -93,7 +93,8 @@ class Sidebar(Adw.NavigationPage):
         title = Adw.WindowTitle(title=APP_NAME, subtitle=account_name)
         title.set_tooltip_text(f"{APP_NAME} {version_string()}")   # the version at a glance (#112)
         header.set_title_widget(title)
-        menu_button = Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=primary_menu, primary=True)
+        menu_button = Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=primary_menu, primary=True,
+                                     tooltip_text="Main menu")
         header.pack_end(menu_button)
         view.add_top_bar(header)
 

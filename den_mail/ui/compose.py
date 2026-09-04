@@ -19,6 +19,7 @@ from ..html.compose import (
 )
 from ..jmap.types import delivered_to
 from ..models.identity import IdentityObject
+from .a11y import watch as _a11y_watch
 from .widgets import AddressCompletion, confirm, human_size, toast
 
 AUTOSAVE_SECONDS = 30
@@ -94,7 +95,7 @@ class ComposeWindow(Adw.Window):
         menu = Gio.Menu()
         menu.append("Save draft", "compose.save")
         menu.append("Discard", "compose.discard")
-        header.pack_end(Gtk.MenuButton(icon_name="view-more-symbolic", menu_model=menu))
+        header.pack_end(Gtk.MenuButton(icon_name="view-more-symbolic", menu_model=menu, tooltip_text="More"))
         view.add_top_bar(header)
 
         # --- header fields as Adwaita rows
@@ -175,6 +176,7 @@ class ComposeWindow(Adw.Window):
         view.set_content(content)
         self.toast_overlay = Adw.ToastOverlay(child=view)
         self.set_content(self.toast_overlay)
+        _a11y_watch(self)   # icon-only buttons get their tooltip as accessible name (#123)
 
         self._install_actions()
         self.connect("close-request", self._on_close_request)
@@ -478,7 +480,7 @@ class ComposeWindow(Adw.Window):
         box.spinner = Adw.Spinner()
         box.spinner.set_visible(False)
         box.append(box.spinner)
-        remove = Gtk.Button(icon_name="window-close-symbolic")
+        remove = Gtk.Button(icon_name="window-close-symbolic", tooltip_text="Remove attachment")
         remove.add_css_class("flat")
         remove.add_css_class("circular")
         remove.connect("clicked", lambda *_: self._remove_attachment(box))

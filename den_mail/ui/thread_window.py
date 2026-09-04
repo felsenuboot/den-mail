@@ -7,6 +7,7 @@ from gi.repository import Adw, Gio, Gtk
 from .. import shortcuts
 from ..models.thread import ThreadObject
 from ..store import actions
+from .a11y import watch as _a11y_watch
 from .conversation import ConversationView
 from .labels import MailboxPickerPopover
 
@@ -38,6 +39,7 @@ class ThreadWindow(Adw.Window):
             "notify::active", lambda b, _p: self.move_popover._rebuild() if b.get_active() else None)
         self.toast_overlay = Adw.ToastOverlay(child=self.conversation)
         self.set_content(self.toast_overlay)
+        _a11y_watch(self)   # icon-only buttons get their tooltip as accessible name (#123)
         self._install_actions()
         self._handlers = [
             main.engine.connect("emails-changed", self._on_emails_changed),

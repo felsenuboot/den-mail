@@ -9,6 +9,7 @@ from gi.repository import Adw, GLib, Gtk
 from .. import rules
 from ..classify.rules import CATEGORIES, CATEGORY_NAMES
 from ..models.mailbox import MailboxTree
+from .a11y import watch as _a11y_watch
 from .widgets import open_uri, toast
 
 ACTION_LABELS = ["Label as…", "Archive", "Mark as read", "Delete"]
@@ -186,6 +187,7 @@ class RulesDialog(Adw.Dialog):
         self.toast_overlay = Adw.ToastOverlay(child=view)
         self.set_child(self.toast_overlay)
         self.reload()
+        _a11y_watch(self)   # icon-only buttons get their tooltip as accessible name (#123)
 
     def reload(self) -> None:
         for row in self.rows:
