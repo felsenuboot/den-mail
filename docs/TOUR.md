@@ -34,9 +34,9 @@ colours.
 ## Grouping and bulk actions
 
 **Group by sender** (or by organisation, which merges `lippu.vr.fi` and
-`tili.vr.fi`) works on top of any sort order. Each sender is a row: click it
-to select the whole group, use the arrow to fold it, and the button in the
-header folds or unfolds everything.
+`tili.vr.fi`) works on top of any sort order. Each sender is a card: its
+header row selects the whole group, the arrow at its end folds it, and the
+button in the header bar folds or unfolds everything.
 
 ![The list grouped by sender, two groups folded](../data/screenshots/group-sender.png)
 
@@ -76,7 +76,8 @@ expands to every alias and wildcard address in the account.
 ## Identities and Masked Email
 
 The identities dialog is where you star the aliases you actually send from.
-Masked Email addresses can be created, described, disabled and deleted.
+Masked Email addresses can be created, described, switched off and deleted;
+clicking one copies it.
 
 | Identities & aliases | Masked Email |
 | --- | --- |

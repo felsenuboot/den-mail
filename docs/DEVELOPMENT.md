@@ -97,4 +97,7 @@ The images in `data/screenshots/` and `docs/TOUR.md` are made from the fake
 account in a headless cage session (see above): one autopilot script per
 picture, `grim` inside the session, and `magick` to assemble a GIF from a handful
 of frames (only for a workflow that a still cannot show) or to split a light
-and a dark capture diagonally. Regenerate them after UI changes so the tour stays honest.
+and a dark capture diagonally. `data/screenshots/make.sh` does all of it (start
+`python -m tests.fake_server 18081` first); run it after UI changes so the tour
+stays honest. Stop a stuck session by the PID of the process you started, never
+by name: `pkill Xwayland` also hits the desktop's own Xwayland.
