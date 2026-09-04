@@ -40,23 +40,17 @@ you own in the From field.
 
 ## How fast is it
 
-Measured against Fastmail's own clients on the same account, machine and
-network, five runs each on an idle desktop (medians, milliseconds;
-[method and full results](docs/BENCHMARK.md)):
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/benchmark/overview-dark.svg">
+  <img alt="den-mail against Fastmail's desktop app and web client: start-up, folder switch, search, opening a message, memory and idle CPU" src="docs/benchmark/overview-light.svg">
+</picture>
 
-| | den-mail | Fastmail desktop app | Fastmail web |
-| --- | --- | --- | --- |
-| launch to a usable inbox | **300** | 1412 | 868 |
-| switch to a folder of 2,900 conversations | 118 | 209 | **112** |
-| search | **177** | 224 | 199 |
-| open a message, body painted | **66** | 136 | 154 |
-| memory with a message open (PSS, MiB) | **341** | 642 | 511 |
-| CPU seconds for the whole scenario | **2.3** | 4.6 | 3.1 |
-| CPU at rest with a message open, % of a core | **0.1** | 2.8 | 0.6 |
-
-The local cache is what makes the difference: folders and the inbox come from
-SQLite and the server's answer only refreshes them. Without a cache (first
-start) den-mail needs 2.5 s to the inbox, like any client syncing from scratch.
+Same account, machine and network, an idle desktop, medians of five or more
+runs; lower is better. The local cache is what makes the difference: folders
+and the inbox come from SQLite and the server's answer only refreshes them.
+Without a cache (first start) den-mail needs 2.5 s to the inbox, like any
+client syncing from scratch. Method, full table and the rows behind the
+picture: [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
 | Light and dark theme | Group by sender |
 | --- | --- |

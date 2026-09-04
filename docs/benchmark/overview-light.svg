@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="952" height="466" viewBox="0 0 952 466" font-family="Inter, Cantarell, -apple-system, 'Segoe UI', system-ui, sans-serif" role="img" aria-label="den-mail against Fastmail's desktop app and web client">
+<rect width="952" height="466" fill="#fcfcfb"/>
+<text x="24" y="28" font-size="17" font-weight="700" fill="#0b0b0b">den-mail against Fastmail's own clients</text>
+<text x="24" y="48" font-size="13" fill="#52514e">Same account, machine and network, an idle desktop, five runs each, medians. Lower is better everywhere.</text>
+<rect x="816" y="18" width="12" height="12" rx="2" fill="#1baf7a"/>
+<text x="834" y="28" font-size="13" fill="#52514e">Fastmail web</text>
+<rect x="691" y="18" width="12" height="12" rx="2" fill="#eb6834"/>
+<text x="709" y="28" font-size="13" fill="#52514e">Fastmail app</text>
+<rect x="596" y="18" width="12" height="12" rx="2" fill="#2a78d6"/>
+<text x="614" y="28" font-size="13" fill="#52514e">den-mail</text>
+<text x="24" y="70" font-size="14" font-weight="600" fill="#0b0b0b">Launch to a usable inbox</text>
+<line x1="132" y1="78" x2="132" y2="166" stroke="#e4e3df" stroke-width="1"/>
+<text x="122" y="97" text-anchor="end" font-size="13" fill="#0b0b0b">den-mail</text>
+<rect x="132" y="84" width="53.6" height="18" rx="4" fill="#2a78d6"/>
+<rect x="132" y="84" width="4" height="18" fill="#2a78d6"/>
+<text x="193.6" y="97" font-size="13" fill="#0b0b0b">300 ms</text>
+<text x="122" y="127" text-anchor="end" font-size="13" fill="#0b0b0b">Fastmail app</text>
+<rect x="132" y="114" width="254.0" height="18" rx="4" fill="#eb6834"/>
+<rect x="132" y="114" width="4" height="18" fill="#eb6834"/>
+<text x="394.0" y="127" font-size="13" fill="#0b0b0b">1,418 ms</text>
+<text x="122" y="157" text-anchor="end" font-size="13" fill="#0b0b0b">Fastmail web</text>
+<rect x="132" y="144" width="155.6" height="18" rx="4" fill="#1baf7a"/>
+<rect x="132" y="144" width="4" height="18" fill="#1baf7a"/>
+<text x="295.6" y="157" font-size="13" fill="#0b0b0b">868 ms</text>
+<text x="488" y="70" font-size="14" font-weight="600" fill="#0b0b0b">Switch to a folder of 2,900 conversations</text>
+<line x1="596" y1="78" x2="596" y2="166" stroke="#e4e3df" stroke-width="1"/>
+<text x="586" y="97" text-anchor="end" font-size="13" fill="#0b0b0b">den-mail</text>
+<rect x="596" y="84" width="147.5" height="18" rx="4" fill="#2a78d6"/>
+<rect x="596" y="84" width="4" height="18" fill="#2a78d6"/>
+<text x="751.5" y="97" font-size="13" fill="#0b0b0b">118 ms</text>
+<text x="586" y="127" text-anchor="end" font-size="13" fill="#0b0b0b">Fastmail app</text>
+<rect x="596" y="114" width="254.0" height="18" rx="4" fill="#eb6834"/>
+<rect x="596" y="114" width="4" height="18" fill="#eb6834"/>
+<text x="858.0" y="127" font-size="13" fill="#0b0b0b">204 ms</text>
+<text x="586" y="157" text-anchor="end" font-size="13" fill="#0b0b0b">Fastmail web</text>
+<rect x="596" y="144" width="141.3" height="18" rx="4" fill="#1baf7a"/>
+<rect x="596" y="144" width="4" height="18" fill="#1baf7a"/>
+<text x="745.3" y="157" font-size="13" fill="#0b0b0b">114 ms</text>
+<text x="24" y="198" font-size="14" font-weight="600" fill="#0b0b0b">Search</text>
+<line x1="132" y1="206" x2="132" y2="294" stroke="#e4e3df" stroke-width="1"/>
+<text x="122" y="225" text-anchor="end" font-size="13" fill="#0b0b0b">den-mail</text>
+<rect x="132" y="212" width="208.0" height="18" rx="4" fill="#2a78d6"/>
+<rect x="132" y="212" width="4" height="18" fill="#2a78d6"/>
+<text x="348.0" y="225" font-size="13" fill="#0b0b0b">186 ms</text>
+<text x="122" y="255" text-anchor="end" font-size="13" fill="#0b0b0b">Fastmail app</text>
+<rect x="132" y="242" width="254.0" height="18" rx="4" fill="#eb6834"/>
+<rect x="132" y="242" width="4" height="18" fill="#eb6834"/>
+<text x="394.0" y="255" font-size="13" fill="#0b0b0b">226 ms</text>
+<text x="122" y="285" text-anchor="end" font-size="13" fill="#0b0b0b">Fastmail web</text>
+<rect x="132" y="272" width="201.9" height="18" rx="4" fill="#1baf7a"/>
+<rect x="132" y="272" width="4" height="18" fill="#1baf7a"/>
+<text x="341.9" y="285" font-size="13" fill="#0b0b0b">180 ms</text>
+<text x="488" y="198" font-size="14" font-weight="600" fill="#0b0b0b">Open a message, first paint</text>
+<line x1="596" y1="206" x2="596" y2="294" stroke="#e4e3df" stroke-width="1"/>
+<text x="586" y="225" text-anchor="end" font-size="13" fill="#0b0b0b">den-mail</text>
+<rect x="596" y="212" width="114.6" height="18" rx="4" fill="#2a78d6"/>
+<rect x="596" y="212" width="4" height="18" fill="#2a78d6"/>
+<text x="718.6" y="225" font-size="13" fill="#0b0b0b">67 ms</text>
+<text x="586" y="255" text-anchor="end" font-size="13" fill="#0b0b0b">Fastmail app</text>
+<rect x="596" y="242" width="230.9" height="18" rx="4" fill="#eb6834"/>
+<rect x="596" y="242" width="4" height="18" fill="#eb6834"/>
+<text x="834.9" y="255" font-size="13" fill="#0b0b0b">135 ms</text>
+<text x="586" y="285" text-anchor="end" font-size="13" fill="#0b0b0b">Fastmail web</text>
+<rect x="596" y="272" width="254.0" height="18" rx="4" fill="#1baf7a"/>
+<rect x="596" y="272" width="4" height="18" fill="#1baf7a"/>
+<text x="858.0" y="285" font-size="13" fill="#0b0b0b">148 ms</text>
+<text x="24" y="326" font-size="14" font-weight="600" fill="#0b0b0b">Memory with a message open (PSS)</text>
+<line x1="132" y1="334" x2="132" y2="422" stroke="#e4e3df" stroke-width="1"/>
+<text x="122" y="353" text-anchor="end" font-size="13" fill="#0b0b0b">den-mail</text>
+<rect x="132" y="340" width="134.8" height="18" rx="4" fill="#2a78d6"/>
+<rect x="132" y="340" width="4" height="18" fill="#2a78d6"/>
+<text x="274.8" y="353" font-size="13" fill="#0b0b0b">340 MiB</text>
+<text x="122" y="383" text-anchor="end" font-size="13" fill="#0b0b0b">Fastmail app</text>
+<rect x="132" y="370" width="254.0" height="18" rx="4" fill="#eb6834"/>
+<rect x="132" y="370" width="4" height="18" fill="#eb6834"/>
+<text x="394.0" y="383" font-size="13" fill="#0b0b0b">642 MiB</text>
+<text x="122" y="413" text-anchor="end" font-size="13" fill="#0b0b0b">Fastmail web</text>
+<rect x="132" y="400" width="202.3" height="18" rx="4" fill="#1baf7a"/>
+<rect x="132" y="400" width="4" height="18" fill="#1baf7a"/>
+<text x="342.3" y="413" font-size="13" fill="#0b0b0b">511 MiB</text>
+<text x="488" y="326" font-size="14" font-weight="600" fill="#0b0b0b">CPU at rest with a message open</text>
+<line x1="596" y1="334" x2="596" y2="422" stroke="#e4e3df" stroke-width="1"/>
+<text x="586" y="353" text-anchor="end" font-size="13" fill="#0b0b0b">den-mail</text>
+<rect x="596" y="340" width="9.1" height="18" rx="4" fill="#2a78d6"/>
+<rect x="596" y="340" width="4" height="18" fill="#2a78d6"/>
+<text x="613.1" y="353" font-size="13" fill="#0b0b0b">0.1 %</text>
+<text x="586" y="383" text-anchor="end" font-size="13" fill="#0b0b0b">Fastmail app</text>
+<rect x="596" y="370" width="254.0" height="18" rx="4" fill="#eb6834"/>
+<rect x="596" y="370" width="4" height="18" fill="#eb6834"/>
+<text x="858.0" y="383" font-size="13" fill="#0b0b0b">2.8 %</text>
+<text x="586" y="413" text-anchor="end" font-size="13" fill="#0b0b0b">Fastmail web</text>
+<rect x="596" y="400" width="54.4" height="18" rx="4" fill="#1baf7a"/>
+<rect x="596" y="400" width="4" height="18" fill="#1baf7a"/>
+<text x="658.4" y="413" font-size="13" fill="#0b0b0b">0.6 %</text>
+</svg>

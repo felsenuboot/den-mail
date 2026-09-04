@@ -5,6 +5,68 @@ same window size, running the same scenario several times. Everything runs on
 the real desktop session, not the headless harness, because the headless
 compositor renders in software and would penalise nothing but den-mail.
 
+## At a glance
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="benchmark/overview-dark.svg">
+  <img alt="Six bar charts: den-mail against Fastmail's desktop app and web client for start-up, folder switch, search, opening a message, memory and idle CPU" src="benchmark/overview-light.svg">
+</picture>
+
+Measured on 2026-09-04 against Fastmail's own clients on the same account
+(Inbox 39 conversations, Archive 2,901), the same machine (Hyprland on a
+3440x1440 monitor, all clients at 1600x1000) and network, with the desktop
+otherwise idle (load 0.08 at the start, notifications off, idle daemon paused).
+Medians over the quiet runs: eight per client for the timings (five in the main
+round, three in the CPU pass) and three for the CPU figures. den-mail is a88f9f9 on Python 3.14,
+GTK 4.22 and WebKitGTK 2.52; the desktop app is Flathub 1.7.0 (Chrome 150); the
+web client ran in Playwright's Chromium 150 with a logged-in profile. The rows
+are in [`benchmark/results-2026-09-04.jsonl`](benchmark/results-2026-09-04.jsonl);
+`bench/charts.py` draws the picture from them.
+
+| | den-mail warm | den-mail cold | Fastmail app | Fastmail web |
+| --- | --- | --- | --- | --- |
+| launch to a usable inbox, ms | **300** | 2,528 | 1,418 | 868 |
+| switch to Archive, 2,901 conversations, ms | 118 | 458 | 204 | **114** |
+| search "rechnung", ms | 186 | 239 | 226 | **180** |
+| open a message: subject shown, ms | **17** | 125 | 110 | 66 |
+| open a message: body painted, ms | **67** | 179 | 135 | 148 |
+| memory with the message open, PSS, MiB | **340** | 380 | 642 | 511 |
+| memory, RSS summed over the tree, MiB | 1,028 | 1,110 | 994 | 1,304 |
+| CPU seconds for the scenario | **2.3** | 4.0 | 4.6 | 3.0 |
+| CPU over 20 s at rest, % of a core | **0.1** | 0.4 | 2.8 | 0.6 |
+
+Reading the numbers:
+
+- den-mail warm shows a usable inbox in 0.3 s, before either Fastmail client.
+  Cold, with no local data, it needs 2.5 s, almost all of it the first sync;
+  cold folder switches are server fetches for every client.
+- The folder switch and search are level between den-mail and the web client;
+  search is the server's time for everyone.
+- Opening a message: the subject is up in 17 ms and the body painted in 67 ms,
+  half the web client's time, since the message views share one WebKit process
+  that is warmed at start-up.
+- Memory: PSS counts shared pages once and is the figure to compare; the RSS
+  row shows why per-process sums mislead for multi-process apps. den-mail is
+  Python plus WebKit's web and network processes; the app is Electron, the
+  web client is Chromium with one tab.
+- CPU: the scenario costs den-mail 2.3 CPU seconds warm (the cold run's 4 s is
+  the first sync), the web client 3.1 and the Electron app 4.6. At rest with a
+  message open den-mail uses 0.1 % of a core, the web client 0.6 %, the app 2.8 %.
+- `window_ms` (launch to the first window, in the rows) is not comparable across
+  the three: the web value is Chromium started by Playwright, the app value
+  includes `flatpak run`, den-mail's is the interpreter plus GTK.
+- The "listed" moments of the web client and the app are DOM states a few
+  frames before the paint, so their numbers are, if anything, flattering.
+
+An earlier round the same morning, while the machine was in use, put den-mail's
+folder switch at 606 ms and the first paint at 302 ms; both were den-mail's own
+faults and are fixed (#36): the switch mark waited for the server's refresh
+behind a list that was already on screen, and every message spawned its own
+WebKit web process. The same round found that quitting during a first sync
+left the window up for as long as 25 s while worker threads finished their
+requests, which the compositor reported as "not responding"; the window now
+goes down at quit and the process leaves within two seconds.
+
 ## What is measured
 
 | Metric | Meaning | den-mail | web / app |
@@ -92,52 +154,3 @@ is their warm state, so compare them with den-mail's warm numbers.
   web and network processes; for the others it is Electron's or Chromium's
   helpers, which is what the user pays for as well.
 
-## Results, 2026-09-04
-
-Account ich@felixschramm.eu (Inbox 39 conversations, Archive 2,901), Hyprland
-on a 3440x1440 monitor, all clients at 1600x1000, an otherwise idle machine
-(load 0.08 at the start, notifications off, idle daemon paused), five runs
-each, medians with the best run in brackets. den-mail is a88f9f9 on Python
-3.14, GTK 4.22 and WebKitGTK 2.52; the desktop app is Flathub 1.7.0 (Chrome
-150); the web client ran in Playwright's Chromium 150 with a logged-in profile.
-
-| ms unless noted | den-mail warm | den-mail cold | Fastmail app | Fastmail web |
-| --- | --- | --- | --- | --- |
-| launch to a usable inbox | **300** (296) | 2542 (2391) | 1412 (1402) | 868 (853) |
-| switch to Archive, 2,901 conversations | 118 (116) | 460 (456) | 209 (197) | **112** (109) |
-| search "rechnung" | **177** (168) | 217 (183) | 224 (207) | 199 (169) |
-| open a message: subject shown | **17** (17) | 128 (98) | 110 (106) | 75 (50) |
-| open a message: body painted | **66** (64) | 177 (169) | 136 (127) | 154 (142) |
-| memory, PSS with the message open, MiB | **341** (340) | 381 (376) | 642 (641) | 511 (509) |
-| memory, RSS summed over the tree, MiB | 1028 | 1110 | 994 | 1310 |
-| CPU seconds for the scenario | **2.3** | 4.0 | 4.6 | 3.0 |
-| CPU over 20 s at rest, % | **0.1** | 0.4 | 2.8 | 0.6 |
-
-An earlier round the same morning, while the machine was in use, put den-mail's
-folder switch at 606 ms and the first paint at 302 ms; both were den-mail's own
-faults and are fixed (#36): the switch mark waited for the server's refresh
-behind a list that was already on screen, and every message spawned its own
-WebKit web process. Message views now share one process, warmed at start-up.
-
-Reading the numbers:
-
-- `window_ms` (launch to the first window, in `results.jsonl`) is not
-  comparable across the three: the web value is Chromium started by Playwright,
-  the app value includes `flatpak run`, den-mail's is the interpreter plus GTK.
-  The inbox row is the fair start-up figure.
-- den-mail warm shows a usable inbox in 0.3 s, before either Fastmail client.
-  Cold, with no local data, it needs 2.5 s, almost all of it the first sync;
-  cold folder switches are server fetches for every client.
-- Search is the server for everyone.
-- Opening a message: the subject is up in 17 ms and the body painted in 66 ms,
-  a third of the web client's time, now that the web process already exists.
-- Memory: PSS counts shared pages once and is the figure to compare; the RSS
-  row shows why per-process sums mislead for multi-process apps. den-mail is
-  Python plus WebKit's web and network processes; the app is Electron, the
-  web client is Chromium with one tab.
-- CPU: the scenario costs den-mail 2.3 CPU seconds warm (the cold run's 4 s
-  is the first sync), the web client 3.1 and the Electron app 4.6. At rest
-  with a message open den-mail uses 0.1 % of a core, the web client 0.6 %,
-  the app 2.8 %.
-- The "listed" moments of the web client and the app are DOM states a few
-  frames before the paint, so their numbers are, if anything, flattering.
