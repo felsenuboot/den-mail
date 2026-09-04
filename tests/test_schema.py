@@ -91,7 +91,9 @@ def test_cached_body_gets_a_summary_and_transactions_for_sure(db):  # noqa: F811
 def test_engine_summarises_the_fixture_shipping_notice(engine, server):  # noqa: F811
     shipped = next(e for e in server.data.emails.values() if e["subject"].startswith("Your order 4711"))
     engine.fetch_body(shipped["id"])
-    pump(lambda: engine.db.get_email_body(shipped["id"]) is not None, timeout=10)
+    # body-ready comes after the body and its structured row are both written; reading the
+    # body alone could catch the moment in between (#109)
+    pump(lambda: any(a[0] == shipped["id"] for a in engine.events.get("body-ready", [])), timeout=10)
     info = engine.db.get_structured(shipped["id"])
     assert info and info["kind"] == "ParcelDelivery" and "DHL" in info["text"]
     assert engine.db.get_categories([shipped["id"]])[shipped["id"]] == TRANSACTIONS
