@@ -49,6 +49,7 @@ from ..jmap.types import (
     ROLE_DRAFTS,
     ROLE_INBOX,
     ROLE_JUNK,
+    ROLE_SCHEDULED,
     ROLE_SENT,
     ROLE_TRASH,
 )
@@ -1211,22 +1212,29 @@ class SyncEngine(GObject.Object):
 
     def send_email(self, draft: dict, identity_id: str, replace_id: str | None,
                    on_done: Callable[[str], None], on_error: Callable[[str], None] | None = None,
-                   in_reply_to_id: str | None = None, forwarded_id: str | None = None) -> None:
+                   in_reply_to_id: str | None = None, forwarded_id: str | None = None,
+                   send_at: str | None = None) -> None:
+        """Submit `draft`; with `send_at` (a UTCDate) the server holds it until then (#6) and
+        the message waits in the Scheduled folder, where it can still be cancelled."""
         def job() -> None:
             session = self.client.session
             acc = session.account_id
             drafts = self.roles.get(ROLE_DRAFTS)
             sent = self.roles.get(ROLE_SENT)
+            later = self.roles.get(ROLE_SCHEDULED) if send_at else None
             req = Request()
             c_set = req.add("Email/set", {"accountId": acc, "create": {"draft": self._draft_object(draft)}})
             on_success: dict[str, Any] = {f"keywords/{KW_DRAFT}": None}
             if drafts:
                 on_success[f"mailboxIds/{drafts}"] = None
-            if sent:
-                on_success[f"mailboxIds/{sent}"] = True
+            if later or sent:
+                on_success[f"mailboxIds/{later or sent}"] = True
+            sub: dict[str, Any] = {"identityId": identity_id, "emailId": "#draft"}
+            if send_at:
+                sub["sendAt"] = send_at
             c_sub = req.add("EmailSubmission/set", {
                 "accountId": session.submission_account_id,
-                "create": {"sub": {"identityId": identity_id, "emailId": "#draft"}},
+                "create": {"sub": sub},
                 "onSuccessUpdateEmail": {"#sub": on_success},
             })
             c_del = None
@@ -1240,6 +1248,8 @@ class SyncEngine(GObject.Object):
                 self._callback(on_error, e.description or getattr(e, "type", str(e)))
                 return
             new_id = resp.get(c_set)["created"]["draft"]["id"]
+            if send_at:
+                self.db.set_submission(new_id, resp.get(c_sub)["created"]["sub"]["id"], send_at)
             if c_del:
                 self.db.delete_emails([replace_id])
                 self._emit("emails-destroyed", [replace_id])
@@ -1255,6 +1265,39 @@ class SyncEngine(GObject.Object):
             self._callback(on_done, new_id)
 
         self.enqueue(PRIO_ACTION, job, "send")
+
+    def cancel_scheduled(self, email_id: str, on_done: Callable[[], None] | None = None,
+                         on_error: Callable[[str], None] | None = None) -> None:
+        """Take a scheduled message back before its time (#6): the submission is cancelled
+        and the message returns to Drafts."""
+        def job() -> None:
+            sub = self.db.get_submission(email_id)
+            if not sub:
+                self._callback(on_error, "no scheduled submission for this message")
+                return
+            session = self.client.session
+            drafts = self.roles.get(ROLE_DRAFTS)
+            later = self.roles.get(ROLE_SCHEDULED)
+            back: dict[str, Any] = {f"keywords/{KW_DRAFT}": True}
+            if drafts:
+                back[f"mailboxIds/{drafts}"] = True
+            if later:
+                back[f"mailboxIds/{later}"] = None
+            try:
+                res = self.client.call("EmailSubmission/set", {
+                    "accountId": session.submission_account_id,
+                    "update": {sub["submission_id"]: {"undoStatus": "canceled"}},
+                    "onSuccessUpdateEmail": {sub["submission_id"]: back},
+                })
+                check_set_response(res, "updated")
+            except (MethodError, SetError) as e:
+                self._callback(on_error, e.description or getattr(e, "type", str(e)))
+                return
+            self.db.delete_submission(email_id)
+            self._incremental_sync()
+            self._callback(on_done)
+
+        self.enqueue(PRIO_ACTION, job, "cancel-scheduled")
 
     # ------------------------------------------------------------ identities
 

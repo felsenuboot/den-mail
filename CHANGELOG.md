@@ -7,6 +7,9 @@ Unreleased changes gather at the top until they are tagged.
 ## [Unreleased]
 
 ### Features
+- Send later: a clock next to Send schedules the message for a preset or any time; it waits in Scheduled and can be cancelled from the conversation (#6)
+
+### Features
 - CI runs the UI headlessly once per autopilot script and keeps the screenshots as an artifact (#11)
 - "Categorise as…" in the context menu keeps your word over the rules; a learned layer trained from those corrections decides where the rules are unsure, sees what you do with a sender's mail, and the message details say why a message got its category (#23, #40)
 

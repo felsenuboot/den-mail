@@ -259,6 +259,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.conversation.on_remove_label = lambda mid: self._label_toggle(self.tree.get(mid), False)
         self.conversation.screener_check = self._screener_pending
         self.conversation.on_screener_decision = self.screener_decide
+        self.conversation.on_cancel_scheduled = self.cancel_scheduled
         self.labels_popover = MailboxPickerPopover(self.tree, "labels",
                                                    on_toggle=self._label_toggle,
                                                    on_create=self._create_label_and_apply)
@@ -391,6 +392,14 @@ class MainWindow(Adw.ApplicationWindow):
             self._goto_role(ROLE_INBOX)
         self._sync_screened()
         self._schedule_view_refresh()
+
+    def cancel_scheduled(self, email_id: str) -> None:
+        """Take a scheduled message back (#6): it returns to Drafts unsent."""
+        if not email_id:
+            return
+        self.engine.cancel_scheduled(email_id, lambda: self._toast("Send cancelled; the message is back in Drafts"),
+                                     lambda m: self._toast(f"Could not cancel: {m}", 6))
+        self.conversation.scheduled_bar.set_visible(False)
 
     def sender_rule(self, sender: str) -> None:
         """"Always for this sender…" (#22): store a rule, optionally run it over their mail now."""

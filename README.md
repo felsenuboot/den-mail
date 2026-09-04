@@ -23,6 +23,7 @@ offline and follows changes as they happen.
 - 💾 **Offline.** A local cache makes folder switches instant and keeps mail
   readable without a connection; changes arrive by push.
 - ↩️ **Undo.** Every action can be taken back from a toast, sending included.
+- ⏰ **Send later.** Schedule a message for a preset or any time; cancel it until it goes.
 - 🛡️ **Safe HTML.** Sanitised mail, remote content blocked until you allow it,
   dark mode for light-coloured messages.
 - 👤 **Identities.** Send from any alias or wildcard address; manage Masked Email.

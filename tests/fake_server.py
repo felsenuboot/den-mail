@@ -212,6 +212,7 @@ class FakeData:
         archive = self.add_mailbox("Archive", "archive", sort=4)
         junk = self.add_mailbox("Spam", "junk", sort=5)
         trash = self.add_mailbox("Trash", "trash", sort=6)
+        self.add_mailbox("Scheduled", "scheduled", sort=7)
         receipts = self.add_mailbox("Receipts", sort=10)
         work = self.add_mailbox("Work", sort=11)
         projects = self.add_mailbox("Projects", parent=work, sort=12)
@@ -774,12 +775,27 @@ class FakeData:
                 res["notCreated"][cid] = {"type": "invalidProperties", "description": "unknown identity"}
                 continue
             sid = self.new_id("S")
+            send_at = obj.get("sendAt") or _now()
+            pending = send_at > _now()   # a future sendAt is held (#6)
             self.submissions[sid] = {"id": sid, "emailId": email_id, "identityId": obj["identityId"],
-                                     "sendAt": _now(), "undoStatus": "final"}
-            res["created"][cid] = {"id": sid, "sendAt": _now(), "undoStatus": "final"}
+                                     "sendAt": send_at, "undoStatus": "pending" if pending else "final"}
+            res["created"][cid] = {"id": sid, "sendAt": send_at, "undoStatus": "pending" if pending else "final"}
             patch = (args.get("onSuccessUpdateEmail") or {}).get(f"#{cid}")
             if patch:
                 implicit_update[email_id] = patch
+        for sid, patch in (args.get("update") or {}).items():
+            sub = self.submissions.get(sid)
+            if sub is None:
+                res["notUpdated"][sid] = {"type": "notFound"}
+                continue
+            if patch.get("undoStatus") == "canceled" and sub["undoStatus"] == "pending":
+                sub["undoStatus"] = "canceled"
+                res["updated"][sid] = None
+                after = (args.get("onSuccessUpdateEmail") or {}).get(sid)
+                if after:
+                    implicit_update[sub["emailId"]] = after
+            else:
+                res["notUpdated"][sid] = {"type": "cannotUnsend"}
         email_res = None
         if implicit_update:
             email_res = self.email_set({"update": implicit_update}, created_refs)
@@ -1091,7 +1107,7 @@ class FakeJMAPServer(ThreadingHTTPServer):
             "accounts": {ACCOUNT: {"name": "felix@example.com", "isPersonal": True, "isReadOnly": False,
                                    "accountCapabilities": {CAP_MAIL: {"maxMailboxDepth": 10, "maxSizeAttachmentsPerEmail": 50_000_000,
                                                                       "mayCreateTopLevelMailbox": True},
-                                                           CAP_SUBMISSION: {"submissionExtensions": {}, "maxDelayedSend": 0},
+                                                           CAP_SUBMISSION: {"submissionExtensions": {}, "maxDelayedSend": 44236800},
                                                            CAP_MASKED: {}}}},
             "primaryAccounts": {CAP_MAIL: ACCOUNT, CAP_SUBMISSION: ACCOUNT, CAP_MASKED: ACCOUNT},
             "username": "felix@example.com",

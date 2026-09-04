@@ -695,6 +695,17 @@ class ConversationView(Adw.NavigationPage):
         block.connect("clicked", lambda *_: self.on_screener_decision(self._screener_sender, False))
         self.screener_bar.append(block)
         self.content.append(self.screener_bar)
+        # A message waiting in Scheduled (#6): when it goes, and a way to take it back.
+        self.on_cancel_scheduled: Callable[[str], None] = lambda email_id: None
+        self.scheduled_bar = Gtk.Box(spacing=8, visible=False)
+        self.scheduled_bar.add_css_class("screener-bar")
+        self.scheduled_label = Gtk.Label(xalign=0, wrap=True, hexpand=True)
+        self.scheduled_bar.append(self.scheduled_label)
+        self._scheduled_id = ""
+        cancel = Gtk.Button(label="Cancel send", valign=Gtk.Align.CENTER, tooltip_text="Back to Drafts, not sent")
+        cancel.connect("clicked", lambda *_: self.on_cancel_scheduled(self._scheduled_id))
+        self.scheduled_bar.append(cancel)
+        self.content.append(self.scheduled_bar)
         self.cards_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.cards_box.set_margin_top(8)
         self.content.append(self.cards_box)
@@ -843,6 +854,7 @@ class ConversationView(Adw.NavigationPage):
         while child := self.cards_box.get_first_child():
             self.cards_box.remove(child)
         self.screener_bar.set_visible(False)
+        self.scheduled_bar.set_visible(False)
         self.stack.set_visible_child_name("empty")
 
     def show_multi(self, count: int) -> None:
@@ -862,6 +874,7 @@ class ConversationView(Adw.NavigationPage):
         self.subject.set_label(thread.subject)
         self._fill_chips(thread)
         self._fill_screener(thread)
+        self._fill_scheduled(emails)
         if not same_thread:
             self.cards = {}
             while child := self.cards_box.get_first_child():
@@ -888,6 +901,18 @@ class ConversationView(Adw.NavigationPage):
                         card.add_css_class("unread")
         self.stack.set_visible_child_name("thread")
         self._update_flag_button(thread)
+
+    def _fill_scheduled(self, emails: list[dict]) -> None:
+        from .. import schedule
+
+        self._scheduled_id = ""
+        for e in reversed(emails):
+            sub = self.db.get_submission(e["id"]) if self.db else None
+            if sub:
+                self._scheduled_id = e["id"]
+                self.scheduled_label.set_label(f"Scheduled: goes out {schedule.describe(sub['send_at'] or '')}.")
+                break
+        self.scheduled_bar.set_visible(bool(self._scheduled_id))
 
     def _fill_screener(self, thread: ThreadObject) -> None:
         first = thread.summary.from_addresses[0] if thread.summary.from_addresses else {}
