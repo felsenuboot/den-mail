@@ -6,6 +6,9 @@ Unreleased changes gather at the top until they are tagged.
 
 ## [Unreleased]
 
+### Features
+- "Categorise as…" in the context menu keeps your word over the rules; a learned layer trained from those corrections decides where the rules are unsure, sees what you do with a sender's mail, and the message details say why a message got its category (#23, #40)
+
 ## [0.2.0] - 2026-09-04
 
 Milestone *Sender cleanup*, plus the views that came just before it.
