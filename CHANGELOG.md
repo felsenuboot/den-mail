@@ -6,6 +6,9 @@ Unreleased changes gather at the top until they are tagged.
 
 ## [Unreleased]
 
+### Fixes
+- The Search quick link's tooltip is a sentence about what the search does instead of a bare list of operators (#80)
+
 ## [0.5.0] - 2026-09-04
 
 Milestone *Assistant*: a language-model layer with three providers, and summaries on it.
