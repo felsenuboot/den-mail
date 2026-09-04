@@ -6,6 +6,9 @@ Unreleased changes gather at the top until they are tagged.
 
 ## [Unreleased]
 
+### Features
+- An assistant layer behind the coming summaries: an Assistant page in Preferences chooses Ollama on this machine, any OpenAI-compatible API or Anthropic, with the server, the model, a key kept in the keyring, a requests-per-day limit, a Test button and a note on whether mail text leaves the machine; off by default (#69)
+
 ### Fixes
 - The five CodeQL alerts open on master are gone: an attribution regex restructured, an unused result, a wrapper lambda, an unused import and a procedure's return value (#72)
 

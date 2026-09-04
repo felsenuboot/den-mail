@@ -36,6 +36,12 @@ DEFAULTS: dict[str, Any] = {
     "lock_with_session": True,  # lock when the desktop session locks
     "lock_passphrase": "",  # salted PBKDF2 hash; used where no polkit policy is installed
     "lock_kind": "passphrase",  # "passphrase" or "pin": what the local secret is, for the entry's keypad
+    "assistant_enabled": False,  # the assistant layer (#69): features may ask a language model
+    "assistant_provider": "ollama",  # a key of den_mail.llm.PROVIDERS
+    "assistant_url": "",  # blank = the provider's default server
+    "assistant_model": "",  # blank = the provider's default model
+    "assistant_daily_limit": 200,  # requests per day, all features together
+    "assistant_usage": {},  # {"date": ISO day, "count": n}: today's requests
     "window": {"width": 1400, "height": 900, "maximized": False},
     "signature_position": "below",
 }

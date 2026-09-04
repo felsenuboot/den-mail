@@ -15,6 +15,7 @@ from ..config import Config, database_path
 from ..html.body import find_inline_part
 from ..jmap.client import AuthError, JMAPClient, JMAPError
 from ..jmap.types import KW_FLAGGED, ROLE_ARCHIVE, ROLE_DRAFTS, ROLE_INBOX, ROLE_JUNK, ROLE_TRASH
+from ..llm import Assistant
 from ..models.mailbox import MailboxObject, MailboxTree
 from ..models.thread import ThreadListModel, ThreadObject
 from ..store import actions
@@ -78,6 +79,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.identities: list[dict] = []
         self._pending_select_position: int | None = None
         self.avatars = AvatarService(config)
+        self.assistant = Assistant(config)   # the one provider handle every feature shares (#69)
+        self.assistant.listeners.append(lambda _a: GLib.idle_add(self._update_status))
         self.tree.color_overrides = {k: int(v) for k, v in (config.get("label_colors", {}) or {}).items()}
         self.sort = dict(config.get("sort", {"key": "newest", "flagged_first": False, "unread_first": False}))
         # The tip under the placeholder moves on with every start.
@@ -680,13 +683,15 @@ class MainWindow(Adw.ApplicationWindow):
         queued = self.engine.outbox_count()
         waiting = f"{queued} change{'s' if queued != 1 else ''} waiting" if queued else ""
         if msg:
-            self.sidebar.set_status(msg)
+            text = msg
         elif not self.engine.online:
-            self.sidebar.set_status(f"Offline — {waiting}, sent when back" if waiting else "Offline — showing cached mail")
+            text = f"Offline — {waiting}, sent when back" if waiting else "Offline — showing cached mail"
         elif self.engine.push_connected:
-            self.sidebar.set_status("Connected (push)")
+            text = "Connected (push)"
         else:
-            self.sidebar.set_status("Connected (polling)")
+            text = "Connected (polling)"
+        assistant = self.assistant.status()
+        self.sidebar.set_status(f"{text} · {assistant}" if assistant else text)
 
     def _on_new_mail(self, _engine, emails: list[dict]) -> None:
         if not self.config.get("notify_new_mail", True) or self.is_active():
@@ -1376,6 +1381,7 @@ class MainWindow(Adw.ApplicationWindow):
                           on_screener=self.set_screener,
                           on_open=lambda name: self.lookup_action(name).activate(None),
                           on_lock_changed=self.apply_lock_settings,
+                          assistant=self.assistant,
                           rules_count=len(rules.load_rules(self.config)),
                           contact_count=self.db.contact_count() if self.db else 0,
                           )

@@ -129,7 +129,19 @@ metadata both use; add a `<release>` there with every version.
 | `DEN_MAIL_DEBUG=1` | log every JMAP request (method names and sizes, never bodies) |
 | `DEN_MAIL_NO_WEBKIT=1` | force the text renderer for HTML mail |
 | `DEN_MAIL_AUTOPILOT` | script to run after start-up (see above) |
+| `DEN_MAIL_ASSISTANT_KEY` | the assistant's API key instead of the keyring |
 | `DEN_MAIL_TIMING=1` | log `timing:` marks for start-up, folder switch, search and opening (see [BENCHMARK.md](BENCHMARK.md)) |
+
+## Adding an LLM provider
+
+One file in `den_mail/llm/` with a class that has `name`, `__init__(url,
+model, key)`, `complete(system, user, json_schema=None) -> str` and
+`check() -> str`, plus a module-level `SPEC = Spec(key, title, default_url,
+default_model, needs_key, factory)`. Use `llm.http.request_json` for the
+requests so errors come out as `LLMError` with a message fit for the user.
+Add the module to the `PROVIDERS` tuple in `den_mail/llm/__init__.py`;
+Preferences, the keyring entry and the budget need nothing else. Test it the
+way `tests/test_llm.py` does, against the canned local HTTP server.
 
 ## Where things live
 

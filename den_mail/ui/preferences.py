@@ -1,4 +1,4 @@
-"""Preferences dialog: three pages, General, Inbox and Account."""
+"""Preferences dialog: four pages, General, Inbox, Assistant and Account."""
 
 from __future__ import annotations
 
@@ -67,12 +67,17 @@ class PreferencesDialog(Adw.PreferencesDialog):
                  on_screener: Callable[[bool], None] | None = None,
                  on_open: Callable[[str], None] | None = None,
                  rules_count: int = 0, contact_count: int = 0,
-                 on_lock_changed: Callable[[], None] | None = None):
-        """`on_open(action)` activates a window action such as "cleanup" or "rules"."""
+                 on_lock_changed: Callable[[], None] | None = None,
+                 assistant=None):
+        """`on_open(action)` activates a window action such as "cleanup" or "rules";
+        `assistant` is the window's `den_mail.llm.Assistant` (None: no Assistant page)."""
         super().__init__(title="Preferences")
         self.config = config
         self.add(self._general_page(config, on_manage_identities))
         self.add(self._inbox_page(config, on_sidebar_views, on_screener, on_open, rules_count))
+        if assistant is not None:
+            from .assistant import assistant_page
+            self.add(assistant_page(self, config, assistant))
         self.add(self._account_page(config, session, on_sign_out, on_clear_cache, contact_count, on_lock_changed))
 
     # ------------------------------------------------------------- General
