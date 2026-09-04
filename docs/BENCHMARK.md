@@ -88,3 +88,42 @@ is their warm state, so compare them with den-mail's warm numbers.
 - Memory is the whole process tree. For den-mail that is Python plus WebKit's
   web and network processes; for the others it is Electron's or Chromium's
   helpers, which is what the user pays for as well.
+
+## Results, 2026-09-04
+
+Account ich@felixschramm.eu (Inbox 39 conversations, Archive 2,901), Hyprland
+on a 3440x1440 monitor, all clients at 1600x1000, five runs each, medians with
+the best run in brackets. den-mail is commit b0ed1c6 on Python 3.14, GTK 4.22,
+WebKitGTK 2.52; the desktop app is Flathub 1.7.0 (Chrome 150); the web client
+ran in Playwright's Chromium 150.
+
+| metric | app | den-mail cold | den-mail warm | web |
+| --- | --- | --- | --- | --- |
+| window_ms | 1252 (best 1248, n=5) | 719 (best 693, n=5) | 743 (best 720, n=5) | 320 (best 312, n=5) |
+| inbox-listed_at_ms | 1434 (best 1424, n=5) | 2461 (best 2379, n=5) | 578 (best 566, n=5) | 877 (best 860, n=5) |
+| switch-listed_ms | 207 (best 202, n=5) | 448 (best 442, n=5) | 606 (best 597, n=5) | 128 (best 118, n=5) |
+| search-listed_ms | 226 (best 189, n=5) | 216 (best 201, n=5) | 198 (best 175, n=5) | 189 (best 169, n=5) |
+| open-rendered_ms | 167 (best 118, n=5) | 212 (best 197, n=5) | 86 (best 84, n=5) | 84 (best 79, n=5) |
+| open-painted_ms | 208 (best 155, n=5) | 420 (best 404, n=5) | 302 (best 296, n=5) | 159 (best 146, n=5) |
+| rss_peak_mib | 1036 (best 995, n=5) | 1122 (best 1120, n=5) | 1044 (best 1043, n=5) | 1377 (best 1329, n=5) |
+
+Reading the numbers:
+
+- `window_ms` is not comparable across the three: the web value is Chromium
+  started by Playwright, the app value includes `flatpak run`, den-mail's is
+  the interpreter plus GTK. `inbox-listed_at_ms` is the fair start-up figure.
+- den-mail warm shows a usable inbox in 0.58 s, before either Fastmail client.
+  Cold (no local cache) it needs 2.5 s, most of it the first sync.
+- The folder switch is den-mail's weak spot: 0.6 s warm for the 2,901-item
+  Archive against 0.13 s (web) and 0.21 s (app). The list is served from the
+  local cache, so this is the thread model being rebuilt on the main thread
+  (`set_email_ids`, one summary query per conversation), not the network.
+- Search is a wash: every client waits for the server.
+- Opening a message: den-mail hands the body to WebKit as fast as the web
+  client shows the subject (86 ms), but WebKit's own load to the first paint
+  takes 0.3 s against 0.16 s for the web client, where the body arrives in
+  the already running renderer.
+- Memory is the sum of resident sizes over the process tree, which counts
+  shared pages once per process; it flatters nobody in particular but is
+  not a precise figure. All three sit around 1 GiB; den-mail's is Python
+  plus WebKit's web and network processes.

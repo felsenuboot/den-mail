@@ -28,7 +28,7 @@ def main() -> int:
     needle, cmd = sys.argv[1].lower(), sys.argv[i + 1:]
     before = {c["address"] for c in clients()}
     t0 = time.perf_counter()
-    proc = subprocess.Popen(cmd)
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # no pipe for the app to hold open
     deadline = t0 + 120
     while time.perf_counter() < deadline:
         for c in clients():

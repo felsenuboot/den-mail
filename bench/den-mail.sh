@@ -32,6 +32,7 @@ row = {"client": "den-mail", "mode": mode, "run": int(run), "rss_peak_mib": int(
 row.pop("pid", None); row.pop("address", None)
 for m in re.finditer(r"timing: (\S+) at=(\d+)(?: took=(\d+))?", open(log, errors="replace").read()):
     event, at, took = m.groups()
+    if event + "_at_ms" in row: continue  # the first pair of a kind (the switch to Archive, not back)
     row[event + "_at_ms"] = int(at)
     if took: row[event + "_ms"] = int(took)
 print(json.dumps(row))

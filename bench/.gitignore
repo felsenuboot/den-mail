@@ -1,3 +1,4 @@
 profile/
 logs/
 results.jsonl
+venv/

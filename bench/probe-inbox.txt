@@ -1,0 +1,378 @@
+- link "Mail":
+  - /url: https://app.fastmail.com/mail/?u=bd494074
+- link "Contacts":
+  - /url: https://app.fastmail.com/contacts/?u=bd494074
+- link "4 Calendar":
+  - /url: https://app.fastmail.com/calendar/?u=bd494074
+- link "Notes":
+  - /url: https://app.fastmail.com/notes/?u=bd494074
+- link "Files":
+  - /url: https://app.fastmail.com/files/?u=bd494074
+- button "Hide sidebar"
+- button "Mail"
+- textbox "Search mail"
+- link "Settings":
+  - /url: /settings/?u=bd494074
+- button "Help"
+- button "Account":
+  - img
+  - text: Account
+- link "Compose":
+  - /url: https://app.fastmail.com/mail/Inbox/compose?u=bd494074
+- button
+- heading "Labels" [level=2]
+- button "Find"
+- button "Create folder"
+- list:
+  - listitem:
+    - link "Scheduled":
+      - /url: https://app.fastmail.com/mail/Scheduled/?u=bd494074
+  - listitem:
+    - link "Inbox":
+      - /url: https://app.fastmail.com/mail/Inbox/?u=bd494074
+  - listitem:
+    - link "ToDo":
+      - /url: https://app.fastmail.com/mail/ToDo/?u=bd494074
+  - listitem:
+    - link "Outlook":
+      - /url: https://app.fastmail.com/mail/Outlook/?u=bd494074
+  - listitem:
+    - link "Work":
+      - /url: https://app.fastmail.com/mail/Work/?u=bd494074
+    - button "Show/hide subfolders" [expanded]
+  - listitem:
+    - link "Applications":
+      - /url: https://app.fastmail.com/mail/Work.Applications/?u=bd494074
+    - button "Show/hide subfolders" [expanded]
+  - listitem:
+    - link "Stepstone":
+      - /url: https://app.fastmail.com/mail/Work.Applications.Stepstone/?u=bd494074
+  - listitem:
+    - link "Pending":
+      - /url: https://app.fastmail.com/mail/Work.Applications.Pending/?u=bd494074
+  - listitem:
+    - link "Accepted":
+      - /url: https://app.fastmail.com/mail/Work.Applications.Accepted/?u=bd494074
+  - listitem:
+    - link "Rejected":
+      - /url: https://app.fastmail.com/mail/Work.Applications.Rejected/?u=bd494074
+  - listitem:
+    - link "Jobsearch":
+      - /url: https://app.fastmail.com/mail/Work.Jobsearch/?u=bd494074
+    - button "Show/hide subfolders" [expanded]
+  - listitem:
+    - link "Jack":
+      - /url: https://app.fastmail.com/mail/Work.Jobsearch.Jack/?u=bd494074
+  - listitem:
+    - link "Freizeit":
+      - /url: https://app.fastmail.com/mail/Freizeit/?u=bd494074
+    - button "Show/hide subfolders" [expanded]
+  - listitem:
+    - link "Travel":
+      - /url: https://app.fastmail.com/mail/Freizeit.Travel/?u=bd494074
+    - button "Show/hide subfolders" [expanded]
+  - listitem:
+    - link "Accommodation":
+      - /url: https://app.fastmail.com/mail/Freizeit.Travel.Accommodation/?u=bd494074
+  - listitem:
+    - link "Flights":
+      - /url: https://app.fastmail.com/mail/Freizeit.Travel.Flights/?u=bd494074
+  - listitem:
+    - link "Trains":
+      - /url: https://app.fastmail.com/mail/Freizeit.Travel.Trains/?u=bd494074
+  - listitem:
+    - link "Shopping":
+      - /url: https://app.fastmail.com/mail/Freizeit.Shopping/?u=bd494074
+    - button "Show/hide subfolders" [expanded]
+  - listitem:
+    - link "Amazon":
+      - /url: https://app.fastmail.com/mail/Freizeit.Shopping.Amazon/?u=bd494074
+  - listitem:
+    - link "Fashion":
+      - /url: https://app.fastmail.com/mail/Freizeit.Shopping.Fashion/?u=bd494074
+  - listitem:
+    - link "Payback":
+      - /url: https://app.fastmail.com/mail/Freizeit.Shopping.Payback/?u=bd494074
+  - listitem:
+    - link "Technik":
+      - /url: https://app.fastmail.com/mail/Freizeit.Shopping.Technik/?u=bd494074
+  - listitem:
+    - link "Other":
+      - /url: https://app.fastmail.com/mail/Freizeit.Other/?u=bd494074
+    - button "Show/hide subfolders" [expanded]
+  - listitem:
+    - link "Japanese":
+      - /url: https://app.fastmail.com/mail/Freizeit.Other.Japanese/?u=bd494074
+  - listitem:
+    - link "DRK":
+      - /url: https://app.fastmail.com/mail/Freizeit.Other.DRK/?u=bd494074
+  - listitem:
+    - link "Keys":
+      - /url: https://app.fastmail.com/mail/Freizeit.Other.Keys/?u=bd494074
+  - listitem:
+    - link "Steam":
+      - /url: https://app.fastmail.com/mail/Freizeit.Other.Steam/?u=bd494074
+  - listitem:
+    - link "Streaming":
+      - /url: https://app.fastmail.com/mail/Freizeit.Other.Streaming/?u=bd494074
+  - listitem:
+    - link "Boot":
+      - /url: https://app.fastmail.com/mail/Freizeit.Other.Boot/?u=bd494074
+  - listitem:
+    - link "Music":
+      - /url: https://app.fastmail.com/mail/Freizeit.Other.Music/?u=bd494074
+  - listitem:
+    - link "Organisation":
+      - /url: https://app.fastmail.com/mail/Organisation/?u=bd494074
+    - button "Show/hide subfolders" [expanded]
+  - listitem:
+    - link "Amt":
+      - /url: https://app.fastmail.com/mail/Organisation.Amt/?u=bd494074
+  - listitem:
+    - link "Banking":
+      - /url: https://app.fastmail.com/mail/Organisation.Banking/?u=bd494074
+  - listitem:
+    - link "Domains":
+      - /url: https://app.fastmail.com/mail/Organisation.Domains/?u=bd494074
+  - listitem:
+    - link "Finance":
+      - /url: https://app.fastmail.com/mail/Organisation.Finance/?u=bd494074
+  - listitem:
+    - link "Fotos":
+      - /url: https://app.fastmail.com/mail/Organisation.Fotos/?u=bd494074
+  - listitem:
+    - link "Insurance":
+      - /url: https://app.fastmail.com/mail/Organisation.Insurance/?u=bd494074
+    - button "Show/hide subfolders" [expanded]
+  - listitem:
+    - link "Hansemerkur":
+      - /url: https://app.fastmail.com/mail/Organisation.Insurance.Hansemerkur/?u=bd494074
+  - listitem:
+    - link "Invoices":
+      - /url: https://app.fastmail.com/mail/Organisation.Invoices/?u=bd494074
+  - listitem:
+    - link "Japan":
+      - /url: https://app.fastmail.com/mail/Organisation.Japan/?u=bd494074
+  - listitem:
+    - link "Mobilfunk":
+      - /url: https://app.fastmail.com/mail/Organisation.Mobilfunk/?u=bd494074
+  - listitem:
+    - link "Paypal":
+      - /url: https://app.fastmail.com/mail/Organisation.Paypal/?u=bd494074
+  - listitem:
+    - link "Rechnungen-Verträge":
+      - /url: https://app.fastmail.com/mail/Organisation.Rechnungen-Vertr%C3%A4ge/?u=bd494074
+  - listitem:
+    - link "Universität":
+      - /url: https://app.fastmail.com/mail/Universit%C3%A4t/?u=bd494074
+    - button "Show/hide subfolders"
+  - listitem:
+    - link "News":
+      - /url: https://app.fastmail.com/mail/News/?u=bd494074
+  - listitem:
+    - link "Snoozed":
+      - /url: https://app.fastmail.com/mail/Snoozed/?u=bd494074
+  - listitem:
+    - link "All mail":
+      - /url: https://app.fastmail.com/mail/Archive/?u=bd494074
+  - listitem:
+    - link "Drafts":
+      - /url: https://app.fastmail.com/mail/Drafts/?u=bd494074
+  - listitem:
+    - link "Sent":
+      - /url: https://app.fastmail.com/mail/Sent/?u=bd494074
+  - listitem:
+    - link "Spam 179":
+      - /url: https://app.fastmail.com/mail/Spam/?u=bd494074
+  - listitem:
+    - link "Trash":
+      - /url: https://app.fastmail.com/mail/Trash/?u=bd494074
+  - listitem:
+    - link "Templates":
+      - /url: https://app.fastmail.com/mail/Templates/?u=bd494074
+  - listitem:
+    - link "Document":
+      - /url: https://app.fastmail.com/mail/Document/?u=bd494074
+    - button "Show/hide subfolders" [expanded]
+  - listitem:
+    - link "Consumed":
+      - /url: https://app.fastmail.com/mail/Document.Consumed/?u=bd494074
+  - listitem:
+    - link "Japan":
+      - /url: https://app.fastmail.com/mail/Japan/?u=bd494074
+  - listitem:
+    - link "Rotex":
+      - /url: https://app.fastmail.com/mail/Rotex/?u=bd494074
+  - listitem:
+    - link "Startup":
+      - /url: https://app.fastmail.com/mail/Startup/?u=bd494074
+- link "4% of 50 GB":
+  - /url: https://www.fastmail.help/hc/en-us/articles/1500000277382-Account-limits#storagelimits
+- button "Filter"
+- button "Sort newest first"
+- button "Actions"
+- grid:
+  - rowgroup:
+    - row "VR train tickets Your tickets 18.9. Helsinki – Kuopio (19:14 - 23:23) Thank you for your purchase and for choosing a low-emission way to travel! Here are the details of your journey and a receipt for your purchase.You can also find your journey, ticket and receipt in the VR Matkalla app or by going to our website, logging in and 1 Sep":
+      - gridcell
+      - gridcell "VR train tickets"
+      - gridcell "Your tickets 18.9. Helsinki – Kuopio (19:14 - 23:23)"
+      - gridcell "Thank you for your purchase and for choosing a low-emission way to travel! Here are the details of your journey and a receipt for your purchase.You can also find your journey, ticket and receipt in the VR Matkalla app or by going to our website, logging in and"
+      - gridcell "1 Sep"
+      - checkbox "Your tickets 18.9. Helsinki – Kuopio (19:14 - 23:23)"
+  - rowgroup:
+    - 'row "Paytrail Payment confirmation - Vr.fi korttimaksu Please do not reply to this automated email, replies will not be read. Hi! You have made a card or mobile payment via Paytrail''s payment service. Payee: Vr.fi korttimaksu 1 Sep"':
+      - gridcell
+      - gridcell "Paytrail"
+      - gridcell "Payment confirmation - Vr.fi korttimaksu"
+      - 'gridcell "Please do not reply to this automated email, replies will not be read. Hi! You have made a card or mobile payment via Paytrail''s payment service. Payee: Vr.fi korttimaksu"'
+      - gridcell "1 Sep"
+      - checkbox "Payment confirmation - Vr.fi korttimaksu"
+  - rowgroup:
+    - 'row "Lufthansa Booking Thank you for booking with us | From Düsseldorf to Helsinki on 17 September 2026 Your trip to Helsinki: all booking details Please do not reply to this email. Booking code: 94U74C Booking Confirmation Thank you for booking with us Dear 1 Sep"':
+      - gridcell
+      - gridcell "Lufthansa Booking"
+      - gridcell "Thank you for booking with us | From Düsseldorf to Helsinki on 17 September 2026"
+      - 'gridcell "Your trip to Helsinki: all booking details Please do not reply to this email. Booking code: 94U74C Booking Confirmation Thank you for booking with us Dear"'
+      - gridcell "1 Sep"
+      - checkbox "Thank you for booking with us | From Düsseldorf to Helsinki on 17 September 2026"
+  - rowgroup:
+    - row "Scandic Hotels Buchungsbestätigung — Marski by Scandic Im Browser anschauen Hotels Angebote Buchung Vielen Dank für Ihre Buchung! Reservierungsnummer 1212879469 Hotel Marski by Scandic Ankunft Donnerstag, 17. September 2026 1 Sep":
+      - gridcell
+      - gridcell "Scandic Hotels"
+      - gridcell "Buchungsbestätigung — Marski by Scandic"
+      - gridcell "Im Browser anschauen Hotels Angebote Buchung Vielen Dank für Ihre Buchung! Reservierungsnummer 1212879469 Hotel Marski by Scandic Ankunft Donnerstag, 17. September 2026"
+      - gridcell "1 Sep"
+      - checkbox "Buchungsbestätigung — Marski by Scandic"
+  - rowgroup:
+    - row "Noreply-FGR@deutschebahn.com Ihr Fahrgastrechteantrag – 26V42576615 – D1D7C Hallo Felix Schramm, Ihr Anliegen vom 30.08.2026 wurde abschließend bearbeitet. Die detaillierten Informationen zu Ihrem Fall finden Sie im Anhang zu dieser E-Mail. 1 Sep":
+      - gridcell
+      - gridcell "Noreply-FGR@deutschebahn.com"
+      - gridcell "Ihr Fahrgastrechteantrag – 26V42576615 – D1D7C"
+      - gridcell "Hallo Felix Schramm, Ihr Anliegen vom 30.08.2026 wurde abschließend bearbeitet. Die detaillierten Informationen zu Ihrem Fall finden Sie im Anhang zu dieser E-Mail."
+      - gridcell "1 Sep"
+      - checkbox "Ihr Fahrgastrechteantrag – 26V42576615 – D1D7C"
+  - rowgroup:
+    - row "Bella Forristal (80,000 Hours) Our list of high-impact careers Hi there, I’m Bella, and I lead outreach at 80,000 Hours. Last week, we said you should start off by learning about why we’re worried about risks... Hi there, 1 Sep":
+      - gridcell
+      - gridcell "Bella Forristal (80,000 Hours)"
+      - gridcell "Our list of high-impact careers"
+      - gridcell "Hi there, I’m Bella, and I lead outreach at 80,000 Hours. Last week, we said you should start off by learning about why we’re worried about risks... Hi there,"
+      - gridcell "1 Sep"
+      - checkbox "Our list of high-impact careers"
+  - rowgroup:
+    - 'row "80,000 Hours Job Board 105 new roles Roles in communications, policy, operations, and more ... View this email in your browser Hi everybody! This week: 105 new roles Communications roles 15 highlights from around the world 31 Aug"':
+      - gridcell
+      - gridcell "80,000 Hours Job Board"
+      - gridcell "105 new roles"
+      - 'gridcell "Roles in communications, policy, operations, and more ... View this email in your browser Hi everybody! This week: 105 new roles Communications roles 15 highlights from around the world"'
+      - gridcell "31 Aug"
+      - checkbox "105 new roles"
+  - rowgroup:
+    - 'row "no-reply@mvg.de Ihre Rechnung #403806215993# Guten Tag Felix Schramm, vielen Dank, dass Sie unsere Dienste genutzt haben! Rechnungsnummer: 403806215993 Rechnungsdatum: 31.08.2026 Gesamtpreis: 3,74 EUR 31 Aug"':
+      - gridcell
+      - gridcell "no-reply@mvg.de"
+      - 'gridcell "Ihre Rechnung #403806215993#"'
+      - 'gridcell "Guten Tag Felix Schramm, vielen Dank, dass Sie unsere Dienste genutzt haben! Rechnungsnummer: 403806215993 Rechnungsdatum: 31.08.2026 Gesamtpreis: 3,74 EUR"'
+      - gridcell "31 Aug"
+      - 'checkbox "Ihre Rechnung #403806215993#"'
+  - rowgroup:
+    - row "Matthias Zühlke, me 3 Ihre Bewerbung bei syte Hallo Herr Schramm, danke für Ihre Rückmeldung! Wir melden uns, falls sich etwas Passendes ergibt. Alles Gute! Viele Grüße Matthias Zühlke Co-Founder & CEO 📞 ‭+49 160 96678242 30 Aug":
+      - gridcell
+      - gridcell "Matthias Zühlke, me 3"
+      - gridcell "Ihre Bewerbung bei syte"
+      - gridcell "Hallo Herr Schramm, danke für Ihre Rückmeldung! Wir melden uns, falls sich etwas Passendes ergibt. Alles Gute! Viele Grüße Matthias Zühlke Co-Founder & CEO 📞 ‭+49 160 96678242"
+      - gridcell "30 Aug"
+      - checkbox "Ihre Bewerbung bei syte"
+  - rowgroup:
+    - row "Schramm, Marcus Anna Abschluss 28 Aug":
+      - gridcell
+      - gridcell "Schramm, Marcus"
+      - gridcell "Anna Abschluss"
+      - gridcell
+      - gridcell "28 Aug"
+      - checkbox "Anna Abschluss"
+  - rowgroup:
+    - 'row "Wiley Online Library Wiley Online Library Article Event Alert (doi:10.1002/tie.21549) You have signed up to receive alerts when the following article is cited: Sociocultural Integration in Mergers and Acquisitions: Unresolved Paradoxes and Directions for Future Research 28 Aug"':
+      - gridcell
+      - gridcell "Wiley Online Library"
+      - gridcell "Wiley Online Library Article Event Alert (doi:10.1002/tie.21549)"
+      - 'gridcell "You have signed up to receive alerts when the following article is cited: Sociocultural Integration in Mergers and Acquisitions: Unresolved Paradoxes and Directions for Future Research"'
+      - gridcell "28 Aug"
+      - checkbox "Wiley Online Library Article Event Alert (doi:10.1002/tie.21549)"
+  - rowgroup:
+    - 'row "me, mail@kaypawlik.de 3 Lebenslauf für Syte Ich habe Deine Unterlagen weitergeleitet. Mal sehen, ob Du durch seinen KI-Filter kommst…. Von: Felix Schramm <ich@felixschramm.eu> Gesendet: Montag, 24. August 2026 14:31 25 Aug"':
+      - gridcell
+      - gridcell "me, mail@kaypawlik.de 3"
+      - gridcell "Lebenslauf für Syte"
+      - 'gridcell "Ich habe Deine Unterlagen weitergeleitet. Mal sehen, ob Du durch seinen KI-Filter kommst…. Von: Felix Schramm <ich@felixschramm.eu> Gesendet: Montag, 24. August 2026 14:31"'
+      - gridcell "25 Aug"
+      - checkbox "Lebenslauf für Syte"
+  - rowgroup:
+    - row "Benjamin Todd (80,000 Hours) Where to start with 80,000 Hours (claim your free book and see what else we have to offer) Hi, I’m Benjamin, the founder and president of 80,000 Hours. Welcome to our newsletter! We’re an independent nonprofit that provides free research.... facebook.com/80000Hours 25 Aug":
+      - gridcell
+      - gridcell "Benjamin Todd (80,000 Hours)"
+      - gridcell "Where to start with 80,000 Hours (claim your free book and see what else we have to offer)"
+      - gridcell "Hi, I’m Benjamin, the founder and president of 80,000 Hours. Welcome to our newsletter! We’re an independent nonprofit that provides free research.... facebook.com/80000Hours"
+      - gridcell "25 Aug"
+      - checkbox "Where to start with 80,000 Hours (claim your free book and see what else we have to offer)"
+  - rowgroup:
+    - row "Noreply-FGR@deutschebahn.com Ihr Fahrgastrechteantrag – 26V25584350 – 3A914 Hallo Felix Schramm, Ihr Anliegen vom 23.08.2026 wurde abschließend bearbeitet. Die detaillierten Informationen zu Ihrem Fall finden Sie im Anhang zu dieser E-Mail. 24 Aug":
+      - gridcell
+      - gridcell "Noreply-FGR@deutschebahn.com"
+      - gridcell "Ihr Fahrgastrechteantrag – 26V25584350 – 3A914"
+      - gridcell "Hallo Felix Schramm, Ihr Anliegen vom 23.08.2026 wurde abschließend bearbeitet. Die detaillierten Informationen zu Ihrem Fall finden Sie im Anhang zu dieser E-Mail."
+      - gridcell "24 Aug"
+      - checkbox "Ihr Fahrgastrechteantrag – 26V25584350 – 3A914"
+  - rowgroup:
+    - row "Louiza Ghezali via LinkedIn Louiza just messaged you 6 new messages await your response 22 Aug":
+      - gridcell
+      - gridcell "Louiza Ghezali via LinkedIn"
+      - gridcell "Louiza just messaged you"
+      - gridcell "6 new messages await your response"
+      - gridcell "22 Aug"
+      - checkbox "Louiza just messaged you"
+  - rowgroup:
+    - row "Psychotherapie McMonagle Modusmodell Von meinem iPhone gesendet 20 Aug":
+      - gridcell
+      - gridcell "Psychotherapie McMonagle"
+      - gridcell "Modusmodell"
+      - gridcell "Von meinem iPhone gesendet"
+      - gridcell "20 Aug"
+      - checkbox "Modusmodell"
+  - rowgroup:
+    - row "Maureen McMonagle Einladung zu Ihrem Videotermin Guten Tag, hiermit werden Sie zu einer gemeinsamen Videosprechstunde mit Maureen McMonagle eingeladen. Um den virtuellen Raum zu betreten, klicken Sie kurz vor dem geplanten Termin einfach auf den entsprechenden, unten 20 Aug":
+      - gridcell
+      - gridcell "Maureen McMonagle"
+      - gridcell "Einladung zu Ihrem Videotermin"
+      - gridcell "Guten Tag, hiermit werden Sie zu einer gemeinsamen Videosprechstunde mit Maureen McMonagle eingeladen. Um den virtuellen Raum zu betreten, klicken Sie kurz vor dem geplanten Termin einfach auf den entsprechenden, unten"
+      - gridcell "20 Aug"
+      - checkbox "Einladung zu Ihrem Videotermin"
+  - rowgroup:
+    - row "Sam at 404 Media Zuck's super duper future Shocking ICE tech, pickup artists on Instagram, and more in this week's roundup. 14 Aug":
+      - gridcell
+      - gridcell "Sam at 404 Media"
+      - gridcell "Zuck's super duper future"
+      - gridcell "Shocking ICE tech, pickup artists on Instagram, and more in this week's roundup."
+      - gridcell "14 Aug"
+      - checkbox "Zuck's super duper future"
+  - rowgroup:
+    - 'row "no-reply@mail.kvb.mobilesticket.de Welcome to the VRS eezy HandyTicket Welcome and thank you for your interest in the VRS HandyTicket. Use of the Apps: To be able to use the VRS HandyTicket, please search for \"KVB-App\", \"OVAG-App\", 13 Aug"':
+      - gridcell
+      - gridcell "no-reply@mail.kvb.mobilesticket.de"
+      - gridcell "Welcome to the VRS eezy HandyTicket"
+      - 'gridcell "Welcome and thank you for your interest in the VRS HandyTicket. Use of the Apps: To be able to use the VRS HandyTicket, please search for \"KVB-App\", \"OVAG-App\","'
+      - gridcell "13 Aug"
+      - checkbox "Welcome to the VRS eezy HandyTicket"
+  - rowgroup:
+    - row "no-reply@mail.kvb.mobilesticket.de Verification code for VRS eezy App registration Please verify your email address by entering in the following code. 815443 Kind regards VRS HandyTicket Team Kölner Verkehrs-Betriebe AG Scheidtweilerstr. 38, 50933 Köln 13 Aug":
+      - gridcell
+      - gridcell "no-reply@mail.kvb.mobilesticket.de"
+      - gridcell "Verification code for VRS eezy App registration"
+      - gridcell "Please verify your email address by entering in the following code. 815443 Kind regards VRS HandyTicket Team Kölner Verkehrs-Betriebe AG Scheidtweilerstr. 38, 50933 Köln"
+      - gridcell "13 Aug"
+      - checkbox "Verification code for VRS eezy App registration"
+- paragraph: 1–10 of 36
+- button "Show sidebar"
+- heading "Choose something to read" [level=1]
+- paragraph: Drag to resize.
