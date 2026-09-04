@@ -743,8 +743,21 @@ class MainWindow(Adw.ApplicationWindow):
         n.set_body(e.get("subject") or "(no subject)")
         if icon_path is not None:
             n.set_icon(Gio.FileIcon.new(Gio.File.new_for_path(str(icon_path))))
-        n.set_default_action("app.activate")
+        n.set_default_action_and_target("app.open-mail", GLib.Variant("s", e["id"]))
         app.send_notification(f"mail-{e['id']}", n)
+
+    def open_mail(self, email_id: str) -> None:
+        """A notification was clicked (#93): show that message's conversation, in the list
+        when it is there, else in a thread window."""
+        if not self.db or not self.engine or self.locked:
+            return
+        thread_id = self.db.thread_of_email(email_id)
+        if not thread_id:
+            return
+        if thread_id in self.model.by_thread and not self.inner.get_collapsed():
+            self.threadlist.select_thread(thread_id)
+        else:
+            self.open_thread_by_id(thread_id)
 
     def _resolve_cid(self, email_id: str, cid: str, done) -> None:
         body = self.db.get_email_body(email_id) if self.db else None
