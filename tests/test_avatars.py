@@ -82,7 +82,8 @@ def test_direct_lookup_falls_back_to_the_home_page_icon(service, monkeypatch):
     monkeypatch.setattr(service, "_decode", staticmethod(lambda data: pix if data == b"PNG" else None))
     service.config.set("avatar_source", "direct")
     assert service._lookup("shop.example") is pix
-    assert fetched[-1] == "https://shop.example/static/i.png" and "https://shop.example/" in fetched
+    assert fetched[-1] == "https://shop.example/static/i.png"
+    assert fetched.count("https://shop.example/") == 1                # the home page, once
     service.config.set("avatar_source", "proxy")
     fetched.clear()
     assert service._lookup("shop.example") is None
