@@ -58,6 +58,16 @@ Sending is one request: `Email/set create` (draft) + `EmailSubmission/set` with
 `onSuccessUpdateEmail` moving the message from Drafts to Sent, plus the
 destruction of any previous draft.
 
+## Offline outbox
+
+When `Email/set` or the send request cannot reach the server (a transport
+error, not a JMAP error), the engine keeps the local change, stores the
+patch, the destroy list or the message in the `outbox` table and marks
+itself offline (#8). Every successful sync ends by replaying the outbox in
+order and stopping at the first transport error; a queued change the server
+rejects raises `action-failed` and is dropped. Sends go through the same
+`_submit` as a live send, so scheduled messages queue too.
+
 ## Labels
 
 Fastmail labels are JMAP mailboxes; a message lists all of them in

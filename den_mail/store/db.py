@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS sender_deletions (
     email TEXT PRIMARY KEY, deleted INTEGER DEFAULT 0, deleted_unread INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS screener (email TEXT PRIMARY KEY, decision TEXT NOT NULL, ts REAL);
 CREATE TABLE IF NOT EXISTS submissions (email_id TEXT PRIMARY KEY, submission_id TEXT NOT NULL, send_at TEXT);
+CREATE TABLE IF NOT EXISTS outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, payload TEXT NOT NULL, created REAL, attempts INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT, json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS contact_emails (email TEXT PRIMARY KEY, contact_id TEXT, name TEXT);
 CREATE TABLE IF NOT EXISTS bayes_docs (category TEXT PRIMARY KEY, docs INTEGER NOT NULL);
@@ -189,7 +191,8 @@ class Database:
             c = self.conn()
             for table in ("mailboxes", "emails", "email_mailboxes", "threads", "identities", "masked_emails",
                           "query_cache", "addresses", "classification", "correspondents", "sender_deletions",
-                          "screener", "bayes_docs", "bayes_tokens", "submissions", "contacts", "contact_emails"):
+                          "screener", "bayes_docs", "bayes_tokens", "submissions", "contacts", "contact_emails",
+                          "outbox"):
                 # table names come from the literal tuple above (Bandit B608)
                 c.execute(f"DELETE FROM {table}")  # nosec B608
             c.execute("DELETE FROM meta WHERE key LIKE 'state:%'")
@@ -756,6 +759,31 @@ class Database:
     def thread_of_email(self, email_id: str) -> str | None:
         row = self.conn().execute("SELECT thread_id FROM emails WHERE id=?", (email_id,)).fetchone()
         return row["thread_id"] if row else None
+
+    # ---------------------------------------------------------------- outbox
+
+    def outbox_add(self, kind: str, payload: dict) -> int:
+        """Queue a change or a message the server could not be reached for (#8)."""
+        with self._write_lock:
+            cur = self.conn().execute("INSERT INTO outbox(kind, payload, created) VALUES (?,?,?)",
+                                      (kind, json.dumps(payload), time.time()))
+            return int(cur.lastrowid)
+
+    def outbox_list(self) -> list[dict]:
+        rows = self.conn().execute("SELECT id, kind, payload, created, attempts FROM outbox ORDER BY id").fetchall()
+        return [{"id": r["id"], "kind": r["kind"], "payload": json.loads(r["payload"]), "created": r["created"],
+                 "attempts": r["attempts"]} for r in rows]
+
+    def outbox_count(self) -> int:
+        return int(self.conn().execute("SELECT COUNT(*) AS n FROM outbox").fetchone()["n"] or 0)
+
+    def outbox_delete(self, row_id: int) -> None:
+        with self._write_lock:
+            self.conn().execute("DELETE FROM outbox WHERE id=?", (row_id,))
+
+    def outbox_bump(self, row_id: int) -> None:
+        with self._write_lock:
+            self.conn().execute("UPDATE outbox SET attempts = attempts + 1 WHERE id=?", (row_id,))
 
     # ----------------------------------------------------------- submissions
 
