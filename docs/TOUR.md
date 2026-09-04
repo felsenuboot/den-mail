@@ -125,6 +125,20 @@ you have already left shows the date.
 
 ![Newsletters dialog](../data/screenshots/newsletters.png)
 
+## Screener
+
+*Screen first-time senders* in Preferences (off by default) holds mail from
+anyone the app has never seen, as a sender, a recipient or someone you
+wrote to, in a *Screener* view instead of the Inbox, without a
+notification. Open a conversation there and choose *Let through* (their
+mail reaches the Inbox, this and every later one) or *Screen out* (their
+mail is archived now, and a rule archives it from then on). The same two
+choices sit in the conversation's context menu. The Inbox subtitle counts
+what is being held. Only mail that arrives while the app runs is screened;
+the backlog is never touched.
+
+![The screener's question](../data/screenshots/screener.png)
+
 ## Clean up
 
 *Clean up…* in the main menu lists every sender in the local cache, the

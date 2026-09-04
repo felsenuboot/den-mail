@@ -27,6 +27,7 @@ DEFAULTS: dict[str, Any] = {
     "thread_page_size": 50,
     "sidebar_width": 260,
     "sidebar_views": True,  # the Views section (#19): local lists such as Newsletters and Never read
+    "screener": False,  # first-time senders wait in the Screener view until let through (#24)
     "window": {"width": 1400, "height": 900, "maximized": False},
     "signature_position": "below",
 }
@@ -69,8 +70,10 @@ def database_path(account_key: str) -> Path:
 
 
 class Config:
-    def __init__(self) -> None:
-        self.path = config_dir() / "config.json"
+    def __init__(self, path: Path | None = None) -> None:
+        """`path` overrides the config file (tests: GLib caches the user config
+        directory per process, so an environment override only works once)."""
+        self.path = path or config_dir() / "config.json"
         self._data: dict[str, Any] = json.loads(json.dumps(DEFAULTS))
         self.load()
 

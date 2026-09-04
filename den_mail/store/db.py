@@ -55,6 +55,7 @@ CREATE INDEX IF NOT EXISTS classification_category ON classification(category);
 CREATE TABLE IF NOT EXISTS correspondents (email TEXT PRIMARY KEY, last_written TEXT);
 CREATE TABLE IF NOT EXISTS sender_deletions (
     email TEXT PRIMARY KEY, deleted INTEGER DEFAULT 0, deleted_unread INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS screener (email TEXT PRIMARY KEY, decision TEXT NOT NULL, ts REAL);
 """
 
 # Columns the sidebar views (#19) filter and sort on, added to caches from before
@@ -166,7 +167,8 @@ class Database:
         with self._write_lock:
             c = self.conn()
             for table in ("mailboxes", "emails", "email_mailboxes", "threads", "identities", "masked_emails",
-                          "query_cache", "addresses", "classification", "correspondents", "sender_deletions"):
+                          "query_cache", "addresses", "classification", "correspondents", "sender_deletions",
+                          "screener"):
                 # table names come from the literal tuple above (Bandit B608)
                 c.execute(f"DELETE FROM {table}")  # nosec B608
             c.execute("DELETE FROM meta WHERE key LIKE 'state:%'")
@@ -459,6 +461,34 @@ class Database:
                 " ON CONFLICT(email) DO UPDATE SET deleted=deleted+excluded.deleted,"
                 " deleted_unread=deleted_unread+excluded.deleted_unread",
                 [(addr, d, u) for addr, (d, u) in rows.items()])
+
+    # ------------------------------------------------------------ screener
+
+    def knows_sender(self, addr: str) -> bool:
+        """Has this address appeared in cached mail (as sender or recipient), been
+        written to, or been screened already?  The screener (#24) treats anyone
+        else as a first-time sender."""
+        addr = (addr or "").strip().lower()
+        if not addr or self.is_own_address(addr):
+            return True
+        c = self.conn()
+        return (c.execute("SELECT 1 FROM addresses WHERE email=?", (addr,)).fetchone() is not None
+                or c.execute("SELECT 1 FROM correspondents WHERE email=?", (addr,)).fetchone() is not None
+                or c.execute("SELECT 1 FROM screener WHERE email=?", (addr,)).fetchone() is not None)
+
+    def screener_set(self, addrs: list[str] | set[str], decision: str) -> None:
+        """decision: "pending" (in the Screener), "allow" (reaches the Inbox) or "block"."""
+        rows = [((a or "").strip().lower(), decision, time.time()) for a in addrs if (a or "").strip()]
+        if rows:
+            with self._write_lock:
+                self.conn().executemany("INSERT OR REPLACE INTO screener(email, decision, ts) VALUES (?,?,?)", rows)
+
+    def screener_decision(self, addr: str) -> str | None:
+        row = self.conn().execute("SELECT decision FROM screener WHERE email=?", ((addr or "").strip().lower(),)).fetchone()
+        return row["decision"] if row else None
+
+    def screener_pending(self) -> set[str]:
+        return {r["email"] for r in self.conn().execute("SELECT email FROM screener WHERE decision='pending'")}
 
     def is_correspondent(self, addr: str) -> bool:
         """Has the user ever sent mail to this address?"""

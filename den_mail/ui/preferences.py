@@ -41,7 +41,8 @@ class PreferencesDialog(Adw.PreferencesDialog):
 
     def __init__(self, config, session, on_sign_out: Callable[[], None], on_clear_cache: Callable[[], None],
                  on_manage_identities: Callable[[], None] | None = None,
-                 on_sidebar_views: Callable[[bool], None] | None = None):
+                 on_sidebar_views: Callable[[bool], None] | None = None,
+                 on_screener: Callable[[bool], None] | None = None):
         super().__init__(title="Preferences")
         self.config = config
         page = Adw.PreferencesPage(title="General", icon_name="preferences-system-symbolic")
@@ -116,6 +117,18 @@ class PreferencesDialog(Adw.PreferencesDialog):
                                    active=config.get("open_links_new_window", False))
         new_window.connect("notify::active", lambda r, _p: config.set("open_links_new_window", r.get_active()))
         reading.add(new_window)
+        screener = Adw.SwitchRow(title="Screen first-time senders",
+                                 subtitle="Mail from a sender you have never seen waits in the Screener view, out of the "
+                                          "Inbox, until you let them through or screen them out",
+                                 active=config.get("screener", False))
+
+        def on_screen(row, _p):
+            config.set("screener", row.get_active())
+            if on_screener is not None:
+                on_screener(row.get_active())
+
+        screener.connect("notify::active", on_screen)
+        reading.add(screener)
         trusted = Adw.ExpanderRow(title="Trusted senders",
                                   subtitle="Remote content loads automatically from these addresses")
         self._fill_trusted(trusted, config)

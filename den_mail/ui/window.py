@@ -61,7 +61,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.engine: SyncEngine | None = None
         self.tree = MailboxTree()
         # The sidebar views (#19): local queries, listed between the folders and the labels.
-        self.tree.set_views([MailboxObject.for_view(v) for v in views.VIEWS])
+        self.tree.set_views([MailboxObject.for_view(v) for v in views.sidebar_views(bool(config.get("screener")))])
         self.tree.show_views = bool(config.get("sidebar_views", True))
         self._view_ids: list[str] = []      # what the current view lists, in order
         self._view_shown = 0                # how many of them the list has been given
@@ -249,6 +249,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.conversation = ConversationView(self.db, self.engine, self.tree, self.config, self._compose_from,
                                              self._email_action, avatars=self.avatars)
         self.conversation.on_remove_label = lambda mid: self._label_toggle(self.tree.get(mid), False)
+        self.conversation.screener_check = self._screener_pending
+        self.conversation.on_screener_decision = self.screener_decide
         self.labels_popover = MailboxPickerPopover(self.tree, "labels",
                                                    on_toggle=self._label_toggle,
                                                    on_create=self._create_label_and_apply)
@@ -323,6 +325,8 @@ class MainWindow(Adw.ApplicationWindow):
         for name, fn in (
             ("find-sender", self._find_sender),
             ("sender-rule", self.sender_rule),
+            ("screen-allow", lambda addr: self.screener_decide(addr, True)),
+            ("screen-block", lambda addr: self.screener_decide(addr, False)),
             ("toggle-label", lambda mid: self._label_toggle(self.tree.get(mid), not self._selection_has_label(mid))),
             ("move-to", lambda mid: self.tree.get(mid) and self._move_to(self.tree.get(mid))),
         ):
@@ -339,6 +343,44 @@ class MainWindow(Adw.ApplicationWindow):
         self.threadlist.scope.set_selected(1)
         self.threadlist.focus_search()
         self.threadlist.search_entry.set_text(f"from:{email}")
+
+    # ------------------------------------------------------------ screener
+
+    def _screener_pending(self, sender: str) -> bool:
+        return bool(self.config.get("screener")) and self.db is not None and self.db.screener_decision(sender) == "pending"
+
+    def _sync_screened(self) -> None:
+        """The Inbox hides the threads of senders the screener holds (#24)."""
+        mb = self.current_mailbox
+        inbox = mb is not None and mb.role == ROLE_INBOX and not self.threadlist.search_active
+        pending = self.db.screener_pending() if inbox and self.config.get("screener") else set()
+        self.model.set_screened(pending)
+
+    def screener_decide(self, sender: str, allow: bool) -> None:
+        """"Let through" puts the sender's mail in the Inbox; "Screen out" archives it, now and
+        by a rule from now on (#24, #22)."""
+        sender = sender.strip().lower()
+        if not sender:
+            return
+        self.db.screener_set([sender], "allow" if allow else "block")
+        if allow:
+            self._toast(f"{sender} reaches the Inbox from now on")
+        else:
+            rule = rules.add_rule(self.config, rules.Rule("sender", sender, "archive"))
+            self.engine.act_on_sender(sender, lambda ids: rules.combine(ids, [rule], self.engine.roles),
+                                      self._after_action)
+            self._toast(f"Mail from {sender} is archived from now on (a rule; see Rules…)")
+        self.conversation.screener_bar.set_visible(False)
+        self._schedule_view_refresh()
+
+    def set_screener(self, on: bool) -> None:
+        """The Preferences switch: the Screener view comes and goes with it."""
+        self.tree.set_views([MailboxObject.for_view(v) for v in views.sidebar_views(on)])
+        self.tree.refresh()
+        if not on and self.current_mailbox is not None and self.current_mailbox.id == views.SCREENER:
+            self._goto_role(ROLE_INBOX)
+        self._sync_screened()
+        self._schedule_view_refresh()
 
     def sender_rule(self, sender: str) -> None:
         """"Always for this sender…" (#22): store a rule, optionally run it over their mail now."""
@@ -365,6 +407,11 @@ class MainWindow(Adw.ApplicationWindow):
                 item = Gio.MenuItem.new("Always for this sender…", None)
                 item.set_action_and_target_value("win.sender-rule", GLib.Variant("s", sender["email"]))
                 top.append_item(item)
+                if self._screener_pending(sender["email"]):
+                    for label, name in (("Let through", "win.screen-allow"), ("Screen out", "win.screen-block")):
+                        item = Gio.MenuItem.new(label, None)
+                        item.set_action_and_target_value(name, GLib.Variant("s", sender["email"]))
+                        top.append_item(item)
         menu.append_section(None, top)
         if not many:
             reply = Gio.Menu()
@@ -471,13 +518,14 @@ class MainWindow(Adw.ApplicationWindow):
     def _schedule_view_refresh(self) -> None:
         """Views are answered from the cache, so every change to it may move their
         counts and, for the one on screen, its rows; coalesced, as changes come in bursts."""
-        if not self._view_timer and self.engine and self.tree.show_views:
+        if not self._view_timer and self.engine and (self.tree.show_views or self.config.get("screener")):
             self._view_timer = GLib.timeout_add(300, self._refresh_views)
 
     def _refresh_views(self) -> bool:
         self._view_timer = 0
         if not self.engine or not self.db:
             return False
+        self._sync_screened()
         for view_id, (total, unread) in views.all_counts(self.db, self.engine.trash_junk_ids()).items():
             obj = self.tree.get(view_id)
             if obj is not None:
@@ -511,6 +559,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.model.trash_junk = set(self.engine.trash_junk_ids())
         self.model.loading = True
         self.model.clear()
+        self.model.set_screened(set())
         self.selected = []   # else _keep_selected would carry the last mailbox's thread into the view
         self.conversation.clear()
         self._view_search = search
@@ -620,6 +669,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.model.loading = True
         self.model.clear()
         self.selected = []   # GTK reports no selection change for an emptied model
+        self._sync_screened()
         self.conversation.clear()
         self._set_empty_text()
         s = self._sort_for_mailbox(mb)
@@ -706,6 +756,8 @@ class MainWindow(Adw.ApplicationWindow):
             sub = f"{live.unread} unread" if live.unread else "No unread"
         elif live.unread and live.role not in (ROLE_TRASH, ROLE_JUNK):
             sub = f"{live.unread} unread · {sub}" if sub else f"{live.unread} unread"
+        if self.model.hidden_by_screener:
+            sub = f"{sub} · {self.model.hidden_by_screener} screened" if sub else f"{self.model.hidden_by_screener} screened"
         self.threadlist.set_title(live.name, sub)
 
     def _on_search(self, text: str, scope: str) -> None:
@@ -1155,6 +1207,7 @@ class MainWindow(Adw.ApplicationWindow):
                           on_clear_cache=lambda: self.engine.enqueue(0, self.engine.reset_cache, "reset"),
                           on_manage_identities=lambda: IdentitiesDialog(self.engine, self.db, self.config).present(self),
                           on_sidebar_views=self.set_sidebar_views,
+                          on_screener=self.set_screener,
                           ).present(self)
 
     def show_cleanup(self) -> None:

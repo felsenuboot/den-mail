@@ -16,6 +16,7 @@ Commands:
   config <key> <json>  set a preference for this run
   masked | identities | preferences | rules | cleanup   open that dialog
   sender-rule <address>   open the "Always for this sender" prompt
+  screen allow|block <address>   decide a screened sender
   cleanup-all <mark_read|archive|trash|unsubscribe>   select every sender in the open cleanup dialog and run that
   resize <w> <h>       resize the main window
   unread-filter on|off   toggle the unread filter button
@@ -131,6 +132,9 @@ def _run(app, steps: list[str]) -> bool:
         elif cmd == "cleanup-all" and win and getattr(win, "cleanup_dialog", None):
             win.cleanup_dialog.select_all.set_active(True)
             win.cleanup_dialog.run(arg.strip())
+        elif cmd == "screen" and win:
+            decision, _, addr = arg.strip().partition(" ")
+            win.screener_decide(addr.strip(), decision == "allow")
         elif cmd == "sender-rule" and win:
             win.sender_rule(arg.strip())
         elif cmd in ("masked", "identities", "preferences", "rules", "cleanup") and win:

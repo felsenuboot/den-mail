@@ -48,7 +48,7 @@ def engine(server, tmp_path, monkeypatch):
     client = JMAPClient(server.token, server.session_url)
     client.fetch_session()
     db = Database(tmp_path / "test.sqlite3")
-    eng = SyncEngine(client, db, Config())
+    eng = SyncEngine(client, db, Config(tmp_path / "config.json"))
     events: dict[str, list] = {}
 
     def record(name):

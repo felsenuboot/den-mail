@@ -19,6 +19,7 @@ from .store.db import Database
 from .store.sync import resolve_mailbox, search_date, search_tokens
 
 VIEW_PREFIX = "view:"
+SCREENER = "view:screener"
 NEVER_READ = "view:never-read"
 BIG_ATTACHMENTS = "view:big-attachments"
 
@@ -41,6 +42,9 @@ class View:
 
 
 VIEWS: tuple[View, ...] = (
+    View(SCREENER, "Screener", "dialog-question-symbolic",
+         "Mail from senders you have never seen before waits here while the screener is on; "
+         "let a sender through or screen them out from the conversation."),
     View("view:newsletters", "Newsletters", "fm-newsletter-symbolic",
          "No cached message was sorted into Newsletters.", category=NEWSLETTERS),
     View("view:transactions", "Transactions", "fm-receipt-symbolic",
@@ -61,6 +65,11 @@ _BY_ID = {v.id: v for v in VIEWS}
 
 def is_view_id(mailbox_id: str | None) -> bool:
     return bool(mailbox_id) and mailbox_id.startswith(VIEW_PREFIX)
+
+
+def sidebar_views(screener: bool) -> list[View]:
+    """The views the sidebar offers; the Screener only while screening is on (#24)."""
+    return [v for v in VIEWS if v.id != SCREENER or screener]
 
 
 def get_view(view_id: str) -> View | None:
@@ -180,6 +189,8 @@ def _where(db: Database, view: View, trash_junk: list[str], unread_only: bool, s
         sql, p = _never_read_senders(db, trash_junk, now)
         conds.append(f"e.seen = 0 AND e.from_email IN ({sql})")
         params += p
+    elif view.id == SCREENER:
+        conds.append("e.from_email IN (SELECT email FROM screener WHERE decision = 'pending')")
     elif view.id == BIG_ATTACHMENTS:
         conds.append("e.has_attachment = 1 AND e.size >= ?")
         params.append(BIG_ATTACHMENT_BYTES)

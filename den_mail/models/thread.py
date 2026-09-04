@@ -176,6 +176,7 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
         self.threads: list[ThreadObject] = []
         self.items: list[GObject.Object] = []
         self.category_filter: str | None = None
+        self.screened: set[str] = set()   # senders whose mail waits in the Screener (#24)
         self.by_thread: dict[str, ThreadObject] = {}
         self.groups: dict[str, SenderGroup] = {}
         self.collapsed: set[str] = set()
@@ -224,7 +225,20 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
             self.category_filter = category
             self._apply_filter()
 
+    def set_screened(self, senders: set[str]) -> None:
+        """Hide the threads of these senders (the Inbox while the screener holds them)."""
+        senders = {s.strip().lower() for s in senders}
+        if senders != self.screened:
+            self.screened = senders
+            self._apply_filter()
+
+    @property
+    def hidden_by_screener(self) -> int:
+        return sum(1 for t in self.all_threads if t.sender_email.lower() in self.screened) if self.screened else 0
+
     def _passes(self, thread: ThreadObject) -> bool:
+        if self.screened and thread.sender_email.lower() in self.screened:
+            return False
         return self.category_filter is None or thread.category == self.category_filter
 
     def _apply_filter(self) -> None:
@@ -332,7 +346,7 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
             summary = self._summary(tid)
             if summary is not None:
                 obj.update(summary, self.label_namer(summary.mailbox_ids))
-        if thread_ids and self.category_filter and [t for t in self.all_threads if self._passes(t)] != self.threads:
+        if thread_ids and (self.category_filter or self.screened) and [t for t in self.all_threads if self._passes(t)] != self.threads:
             self._apply_filter()  # a reclassified message moved in or out of the filter
         elif thread_ids and self.grouped:
             for group in self.groups.values():

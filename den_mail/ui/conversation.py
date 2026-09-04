@@ -596,6 +596,22 @@ class ConversationView(Adw.NavigationPage):
         self.content.append(self.subject_row)
         self.chips = Adw.WrapBox(child_spacing=6, line_spacing=6)
         self.content.append(self.chips)
+        # The screener's question (#24): shown while the sender waits for a decision.
+        self.screener_check: Callable[[str], bool] = lambda email: False
+        self.on_screener_decision: Callable[[str, bool], None] = lambda email, allow: None
+        self.screener_bar = Gtk.Box(spacing=8, visible=False)
+        self.screener_bar.add_css_class("screener-bar")
+        self.screener_label = Gtk.Label(xalign=0, wrap=True, hexpand=True)
+        self.screener_bar.append(self.screener_label)
+        self._screener_sender = ""
+        allow = Gtk.Button(label="Let through", valign=Gtk.Align.CENTER, tooltip_text="Their mail goes to the Inbox, now and in future")
+        allow.add_css_class("suggested-action")
+        allow.connect("clicked", lambda *_: self.on_screener_decision(self._screener_sender, True))
+        self.screener_bar.append(allow)
+        block = Gtk.Button(label="Screen out", valign=Gtk.Align.CENTER, tooltip_text="Archive their mail, now and in future")
+        block.connect("clicked", lambda *_: self.on_screener_decision(self._screener_sender, False))
+        self.screener_bar.append(block)
+        self.content.append(self.screener_bar)
         self.cards_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.cards_box.set_margin_top(8)
         self.content.append(self.cards_box)
@@ -743,6 +759,7 @@ class ConversationView(Adw.NavigationPage):
         self.cards = {}
         while child := self.cards_box.get_first_child():
             self.cards_box.remove(child)
+        self.screener_bar.set_visible(False)
         self.stack.set_visible_child_name("empty")
 
     def show_multi(self, count: int) -> None:
@@ -761,6 +778,7 @@ class ConversationView(Adw.NavigationPage):
         self.thread_id = thread.thread_id
         self.subject.set_label(thread.subject)
         self._fill_chips(thread)
+        self._fill_screener(thread)
         if not same_thread:
             self.cards = {}
             while child := self.cards_box.get_first_child():
@@ -787,6 +805,17 @@ class ConversationView(Adw.NavigationPage):
                         card.add_css_class("unread")
         self.stack.set_visible_child_name("thread")
         self._update_flag_button(thread)
+
+    def _fill_screener(self, thread: ThreadObject) -> None:
+        first = thread.summary.from_addresses[0] if thread.summary.from_addresses else {}
+        sender = (first.get("email") or "").strip().lower()
+        pending = bool(sender) and self.screener_check(sender)
+        self._screener_sender = sender if pending else ""
+        if pending:
+            who = first.get("name") or sender
+            self.screener_label.set_label(f"First-time sender: {who} ({sender}). Let their mail into the Inbox?"
+                                          if first.get("name") else f"First-time sender: {sender}. Let their mail into the Inbox?")
+        self.screener_bar.set_visible(pending)
 
     def _fill_chips(self, thread: ThreadObject) -> None:
         while child := self.chips.get_first_child():

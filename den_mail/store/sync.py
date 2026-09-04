@@ -622,11 +622,15 @@ class SyncEngine(GObject.Object):
             created = resp.get(c_new)["list"]
             updated = resp.get(c_upd)["list"]
             if created:
+                screened = self._screen(created)       # first-time senders, decided before the batch is cached
                 self.db.upsert_emails(created)
                 changed_ids += [e["id"] for e in created]
+                if screened:
+                    self.db.screener_set(screened, "pending")
                 created = self._apply_rules(created)   # a rule may archive or read a message before it is announced
                 for e in created:
-                    if inbox and (e.get("mailboxIds") or {}).get(inbox) and not (e.get("keywords") or {}).get(KW_SEEN):
+                    if (inbox and (e.get("mailboxIds") or {}).get(inbox) and not (e.get("keywords") or {}).get(KW_SEEN)
+                            and client_rules.sender_of(e) not in screened):
                         new_mail.append(e)
             if updated:
                 # only refresh emails we already know; others are irrelevant until queried
@@ -679,6 +683,23 @@ class SyncEngine(GObject.Object):
             self._emit("emails-destroyed", destroyed_ids)
         if new_mail:
             self._emit("new-mail", new_mail)
+
+    # -------------------------------------------------------------- screener
+
+    def _screen(self, created: list[dict]) -> set[str]:
+        """With the screener on (#24): the senders of this batch's Inbox mail that the
+        cache has never seen, as sender, recipient or correspondent."""
+        inbox = self.roles.get(ROLE_INBOX)
+        if not inbox or not self.config.get("screener", False):
+            return set()
+        out: set[str] = set()
+        for e in created:
+            if not (e.get("mailboxIds") or {}).get(inbox):
+                continue
+            addr = client_rules.sender_of(e)
+            if addr and addr not in out and not self.db.knows_sender(addr):
+                out.add(addr)
+        return out
 
     # ----------------------------------------------------------------- rules
 

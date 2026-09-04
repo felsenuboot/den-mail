@@ -64,14 +64,13 @@ def test_plan_groups_new_inbox_mail_by_the_rules_that_fired():
     assert rules.plan([], emails, {}, ROLES, "in") == ([], {})
 
 
-def test_rules_round_trip_through_the_config(tmp_path, monkeypatch):
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    config = Config()
+def test_rules_round_trip_through_the_config(tmp_path):
+    config = Config(tmp_path / "config.json")
     assert rules.load_rules(config) == []
     rule = rules.add_rule(config, rules.Rule("sender", "A@B.example", "label", "L1", "Work"))
     again = rules.add_rule(config, rules.Rule("sender", "a@b.example", "label", "L1", "Work"))  # replaces
     other = rules.add_rule(config, rules.Rule("sender", "a@b.example", "archive"))
-    loaded = rules.load_rules(Config())
+    loaded = rules.load_rules(Config(tmp_path / "config.json"))
     assert [r.id for r in loaded] == [again.id, other.id] and loaded[0].value == "a@b.example"
     assert rule.id != again.id and loaded[0].created and loaded[0].hits == 0
     rules.bump_hits(config, {again.id: 3, "unknown": 1})

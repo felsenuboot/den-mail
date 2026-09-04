@@ -36,6 +36,8 @@ offline and follows changes as they happen.
   and wording; a chip on the row and a filter in the list header.
 - 👓 **Views.** Newsletters, Transactions, Security, Updates, Never read and
   Big attachments in the sidebar, answered from the local cache in an instant.
+- 🚪 **Screener.** Optionally hold mail from first-time senders outside the
+  Inbox until you let them through or screen them out.
 - 🧹 **Clean up.** Senders ranked by how pointless their mail looks, with
   bulk archive, delete, mark read and unsubscribe per sender.
 - 📐 **Rules.** Always label, archive, read or delete mail from a sender,

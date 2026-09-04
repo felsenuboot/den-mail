@@ -96,6 +96,17 @@ which queries the server for every message from the address outside Trash
 and Spam, caches the ones it never listed, and performs one action, so the
 dialog's undo covers them all.
 
+## Screener
+
+With the screener on (#24), the engine checks each created message in the
+Inbox before caching the batch: a sender the cache has never seen (the
+`addresses`, `correspondents` and `screener` tables) is stored as pending in
+`screener`, the message raises no notification, and the Screener view lists
+the pending senders' mail. `ThreadListModel.set_screened` hides their
+threads from the Inbox. Letting a sender through stores `allow`; screening
+them out stores `block`, adds an archive rule for the address and runs it
+over their mail now through `act_on_sender`.
+
 ## Rules
 
 Client-side rules (`den_mail/rules.py`, #22) are stored in the config file
