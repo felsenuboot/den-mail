@@ -21,8 +21,10 @@ offline and follows changes as they happen.
 
 - 🏷️ **Labels.** Nested, several per message, drag and drop, as in Fastmail.
 - 💾 **Offline.** A local cache makes folder switches instant and keeps mail
-  readable without a connection; changes arrive by push.
+  readable without a connection; changes arrive by push, and what you do or
+  send while offline queues and goes out when the connection is back.
 - ↩️ **Undo.** Every action can be taken back from a toast, sending included.
+- ⏰ **Send later.** Schedule a message for a preset or any time; cancel it until it goes.
 - 🛡️ **Safe HTML.** Sanitised mail, remote content blocked until you allow it,
   dark mode for light-coloured messages.
 - 👤 **Identities.** Send from any alias or wildcard address; manage Masked Email.

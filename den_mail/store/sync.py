@@ -51,6 +51,7 @@ from ..jmap.types import (
     ROLE_DRAFTS,
     ROLE_INBOX,
     ROLE_JUNK,
+    ROLE_SCHEDULED,
     ROLE_SENT,
     ROLE_TRASH,
 )
@@ -321,6 +322,7 @@ class SyncEngine(GObject.Object):
         "cache-reset": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "rules-applied": (GObject.SignalFlags.RUN_FIRST, None, (object,)),   # {rule id: hits} (#22)
         "contacts-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
+        "outbox-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),     # queued changes came or went (#8)
     }
 
     def __init__(self, client: JMAPClient, db: Database, config: Config):
@@ -456,6 +458,7 @@ class SyncEngine(GObject.Object):
         else:
             self._incremental_sync()
         self._set_online(True)
+        self._replay_outbox()
         self._emit("sync-status", "idle", "")
         self.enqueue(PRIO_BACKFILL, self._job_seed_correspondents, "seed-correspondents")
         self.enqueue(PRIO_BACKFILL, self._job_backfill_headers, "backfill-headers")
@@ -621,6 +624,7 @@ class SyncEngine(GObject.Object):
         try:
             self._incremental_sync()
             self._set_online(True)
+            self._replay_outbox()
         finally:
             self._emit("sync-status", "idle", "")
 
@@ -1078,6 +1082,8 @@ class SyncEngine(GObject.Object):
             try:
                 res = self.client.call("Email/set", {"accountId": acc, "destroy": ids})
                 check_set_response(res, "destroyed")
+            except TransportError as e:
+                self._hold("destroy", {"ids": ids, "description": action.description}, e)
             except (MethodError, SetError) as e:
                 self._emit("action-failed", f"Could not delete: {e.description or e}")
                 self.sync_now()
@@ -1119,6 +1125,14 @@ class SyncEngine(GObject.Object):
         self._emit("mailboxes-changed")
         try:
             res = self.client.call("Email/set", {"accountId": acc, "update": patches})
+        except TransportError as e:
+            # Offline (#8): the change stays applied locally and goes out with the next sync.
+            self._hold("update", {"patches": patches, "description": action.description}, e)
+            record = None
+            if isinstance(action, EmailAction) and action.undoable and originals:
+                record = UndoRecord(action.description, dict(originals))
+            self._callback(on_done, record)
+            return
         except MethodError as e:
             self._revert(originals)
             self._emit("action-failed", f"{action.description} failed: {e.description or e.type}")
@@ -1166,6 +1180,50 @@ class SyncEngine(GObject.Object):
             if old_unread != new_unread:
                 t, u = deltas.get(m, (0, 0))
                 deltas[m] = (t, u + (new_unread - old_unread))
+
+    # ---------------------------------------------------------------- outbox
+
+    def _hold(self, kind: str, payload: dict, error: Exception) -> None:
+        self.db.outbox_add(kind, payload)
+        log.info("offline: queued %s (%s)", kind, error)
+        self._set_online(False, str(error))
+        self._emit("outbox-changed")
+
+    def outbox_count(self) -> int:
+        return self.db.outbox_count()
+
+    def _replay_outbox(self) -> None:
+        """Send what was queued while offline, in order; stop at the first network error."""
+        rows = self.db.outbox_list()
+        if not rows:
+            return
+        acc = self.client.session.account_id
+        for row in rows:
+            kind, payload = row["kind"], row["payload"]
+            self.db.outbox_bump(row["id"])
+            try:
+                if kind == "update":
+                    res = self.client.call("Email/set", {"accountId": acc, "update": payload["patches"]})
+                    failed = res.get("notUpdated") or {}
+                    if failed:
+                        first = next(iter(failed.values()))
+                        self._emit("action-failed", f"{payload.get('description', 'A change')} could not be applied"
+                                                    f" after all: {first.get('description') or first.get('type')}")
+                elif kind == "destroy":
+                    res = self.client.call("Email/set", {"accountId": acc, "destroy": payload["ids"]})
+                elif kind == "send":
+                    self._submit(payload["draft"], payload["identity_id"], payload.get("replace_id"),
+                                 payload.get("in_reply_to_id"), payload.get("forwarded_id"), payload.get("send_at"))
+                    self._emit("sync-status", "idle", f"Sent: {payload['draft'].get('subject') or '(no subject)'}")
+            except TransportError as e:
+                self._set_online(False, str(e))
+                return
+            except (MethodError, SetError) as e:
+                self._emit("action-failed", f"{payload.get('description') or 'A queued message'} failed: "
+                                            f"{e.description or getattr(e, 'type', e)}")
+            self.db.outbox_delete(row["id"])
+        self._emit("outbox-changed")
+        self._incremental_sync()
 
     # ------------------------------------------------------------ mailboxes
 
@@ -1244,6 +1302,10 @@ class SyncEngine(GObject.Object):
             try:
                 res = self.client.call("Email/set", args)
                 check_set_response(res, "created")
+            except TransportError as e:
+                self._set_online(False, str(e))
+                self._callback(on_error, "offline; the draft stays in this window")
+                return
             except (MethodError, SetError) as e:
                 self._callback(on_error, e.description or getattr(e, "type", str(e)))
                 return
@@ -1258,50 +1320,106 @@ class SyncEngine(GObject.Object):
 
     def send_email(self, draft: dict, identity_id: str, replace_id: str | None,
                    on_done: Callable[[str], None], on_error: Callable[[str], None] | None = None,
-                   in_reply_to_id: str | None = None, forwarded_id: str | None = None) -> None:
+                   in_reply_to_id: str | None = None, forwarded_id: str | None = None,
+                   send_at: str | None = None) -> None:
+        """Submit `draft`; with `send_at` (a UTCDate) the server holds it until then (#6) and
+        the message waits in the Scheduled folder, where it can still be cancelled.  Offline,
+        the message is queued and `on_done` gets an empty id (#8)."""
         def job() -> None:
-            session = self.client.session
-            acc = session.account_id
-            drafts = self.roles.get(ROLE_DRAFTS)
-            sent = self.roles.get(ROLE_SENT)
-            req = Request()
-            c_set = req.add("Email/set", {"accountId": acc, "create": {"draft": self._draft_object(draft)}})
-            on_success: dict[str, Any] = {f"keywords/{KW_DRAFT}": None}
-            if drafts:
-                on_success[f"mailboxIds/{drafts}"] = None
-            if sent:
-                on_success[f"mailboxIds/{sent}"] = True
-            c_sub = req.add("EmailSubmission/set", {
-                "accountId": session.submission_account_id,
-                "create": {"sub": {"identityId": identity_id, "emailId": "#draft"}},
-                "onSuccessUpdateEmail": {"#sub": on_success},
-            })
-            c_del = None
-            if replace_id:
-                c_del = req.add("Email/set", {"accountId": acc, "destroy": [replace_id]})
             try:
-                resp = self.client.send(req)
-                check_set_response(resp.get(c_set), "created")
-                check_set_response(resp.get(c_sub), "created")
+                new_id = self._submit(draft, identity_id, replace_id, in_reply_to_id, forwarded_id, send_at)
+            except TransportError as e:
+                self._hold("send", {"draft": draft, "identity_id": identity_id, "replace_id": replace_id,
+                                     "in_reply_to_id": in_reply_to_id, "forwarded_id": forwarded_id,
+                                     "send_at": send_at}, e)
+                self._callback(on_done, "")
+                return
             except (MethodError, SetError) as e:
                 self._callback(on_error, e.description or getattr(e, "type", str(e)))
                 return
-            new_id = resp.get(c_set)["created"]["draft"]["id"]
-            if c_del:
-                self.db.delete_emails([replace_id])
-                self._emit("emails-destroyed", [replace_id])
-            from .actions import EmailAction
-
-            if in_reply_to_id:
-                self._job_perform(EmailAction([in_reply_to_id], "Answered", keyword_changes={"$answered": True},
-                                              undoable=False), None)
-            if forwarded_id:
-                self._job_perform(EmailAction([forwarded_id], "Forwarded", keyword_changes={"$forwarded": True},
-                                              undoable=False), None)
             self._incremental_sync()
             self._callback(on_done, new_id)
 
         self.enqueue(PRIO_ACTION, job, "send")
+
+    def _submit(self, draft: dict, identity_id: str, replace_id: str | None, in_reply_to_id: str | None,
+                forwarded_id: str | None, send_at: str | None) -> str:
+        """One request: create the message, submit it, destroy the draft it replaces.
+        Returns the new message id; raises MethodError, SetError or TransportError."""
+        session = self.client.session
+        acc = session.account_id
+        drafts = self.roles.get(ROLE_DRAFTS)
+        sent = self.roles.get(ROLE_SENT)
+        later = self.roles.get(ROLE_SCHEDULED) if send_at else None
+        req = Request()
+        c_set = req.add("Email/set", {"accountId": acc, "create": {"draft": self._draft_object(draft)}})
+        on_success: dict[str, Any] = {f"keywords/{KW_DRAFT}": None}
+        if drafts:
+            on_success[f"mailboxIds/{drafts}"] = None
+        if later or sent:
+            on_success[f"mailboxIds/{later or sent}"] = True
+        sub: dict[str, Any] = {"identityId": identity_id, "emailId": "#draft"}
+        if send_at:
+            sub["sendAt"] = send_at
+        c_sub = req.add("EmailSubmission/set", {
+            "accountId": session.submission_account_id,
+            "create": {"sub": sub},
+            "onSuccessUpdateEmail": {"#sub": on_success},
+        })
+        c_del = None
+        if replace_id:
+            c_del = req.add("Email/set", {"accountId": acc, "destroy": [replace_id]})
+        resp = self.client.send(req)
+        check_set_response(resp.get(c_set), "created")
+        check_set_response(resp.get(c_sub), "created")
+        new_id = resp.get(c_set)["created"]["draft"]["id"]
+        if send_at:
+            self.db.set_submission(new_id, resp.get(c_sub)["created"]["sub"]["id"], send_at)
+        if c_del:
+            self.db.delete_emails([replace_id])
+            self._emit("emails-destroyed", [replace_id])
+        from .actions import EmailAction
+
+        if in_reply_to_id:
+            self._job_perform(EmailAction([in_reply_to_id], "Answered", keyword_changes={"$answered": True},
+                                          undoable=False), None)
+        if forwarded_id:
+            self._job_perform(EmailAction([forwarded_id], "Forwarded", keyword_changes={"$forwarded": True},
+                                          undoable=False), None)
+        return new_id
+
+    def cancel_scheduled(self, email_id: str, on_done: Callable[[], None] | None = None,
+                         on_error: Callable[[str], None] | None = None) -> None:
+        """Take a scheduled message back before its time (#6): the submission is cancelled
+        and the message returns to Drafts."""
+        def job() -> None:
+            sub = self.db.get_submission(email_id)
+            if not sub:
+                self._callback(on_error, "no scheduled submission for this message")
+                return
+            session = self.client.session
+            drafts = self.roles.get(ROLE_DRAFTS)
+            later = self.roles.get(ROLE_SCHEDULED)
+            back: dict[str, Any] = {f"keywords/{KW_DRAFT}": True}
+            if drafts:
+                back[f"mailboxIds/{drafts}"] = True
+            if later:
+                back[f"mailboxIds/{later}"] = None
+            try:
+                res = self.client.call("EmailSubmission/set", {
+                    "accountId": session.submission_account_id,
+                    "update": {sub["submission_id"]: {"undoStatus": "canceled"}},
+                    "onSuccessUpdateEmail": {sub["submission_id"]: back},
+                })
+                check_set_response(res, "updated")
+            except (MethodError, SetError) as e:
+                self._callback(on_error, e.description or getattr(e, "type", str(e)))
+                return
+            self.db.delete_submission(email_id)
+            self._incremental_sync()
+            self._callback(on_done)
+
+        self.enqueue(PRIO_ACTION, job, "cancel-scheduled")
 
     # ------------------------------------------------------------ identities
 

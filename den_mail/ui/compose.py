@@ -82,6 +82,10 @@ class ComposeWindow(Adw.Window):
         self.send_button.set_tooltip_text("Send (Ctrl+Return)")
         self.send_button.connect("clicked", lambda *_: self.send())
         header.pack_end(self.send_button)
+        # Send later (#6): the presets, and a picker for any other time.
+        self.later_button = Gtk.MenuButton(icon_name="fm-scheduled-symbolic", tooltip_text="Send later",
+                                           menu_model=self._build_later_menu())
+        header.pack_end(self.later_button)
         attach = Gtk.Button(icon_name="fm-attachment-symbolic", tooltip_text="Attach files")
         attach.connect("clicked", lambda *_: self.pick_attachments())
         header.pack_end(attach)
@@ -535,7 +539,71 @@ class ComposeWindow(Adw.Window):
 
     # ----------------------------------------------------------- actions
 
-    def send(self) -> None:
+    def _build_later_menu(self) -> Gio.Menu:
+        from .. import schedule
+
+        group = Gio.SimpleActionGroup()
+        later = Gio.SimpleAction.new("send-later", GLib.VariantType.new("s"))
+        later.connect("activate", lambda _a, p: self.send(send_at=p.get_string()))
+        group.add_action(later)
+        pick = Gio.SimpleAction.new("pick-time", None)
+        pick.connect("activate", lambda *_: self._pick_time())
+        group.add_action(pick)
+        self.insert_action_group("later", group)
+        menu = Gio.Menu()
+        section = Gio.Menu()
+        for label, when in schedule.presets():
+            item = Gio.MenuItem.new(f"{label} ({when.strftime('%a %H:%M')})", None)
+            item.set_action_and_target_value("later.send-later", GLib.Variant("s", schedule.to_utc(when)))
+            section.append_item(item)
+        menu.append_section("Send later", section)
+        section = Gio.Menu()
+        section.append("Pick a time…", "later.pick-time")
+        menu.append_section(None, section)
+        return menu
+
+    def _pick_time(self) -> None:
+        from datetime import datetime
+
+        from .. import schedule
+
+        calendar = Gtk.Calendar()
+        hour = Gtk.SpinButton.new_with_range(0, 23, 1)
+        minute = Gtk.SpinButton.new_with_range(0, 59, 5)
+        now = datetime.now().astimezone()
+        hour.set_value(min(23, now.hour + 1))
+        minute.set_value(0)
+        row = Gtk.Box(spacing=6, halign=Gtk.Align.CENTER)
+        row.append(Gtk.Label(label="at"))
+        row.append(hour)
+        row.append(Gtk.Label(label=":"))
+        row.append(minute)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.append(calendar)
+        box.append(row)
+        dlg = Adw.AlertDialog(heading="Send later", body="The message waits in Scheduled until then; it can be cancelled there.")
+        dlg.set_extra_child(box)
+        dlg.add_response("cancel", "Cancel")
+        dlg.add_response("ok", "Schedule")
+        dlg.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_default_response("ok")
+        dlg.set_close_response("cancel")
+
+        def on_response(_d, response):
+            if response != "ok":
+                return
+            date = calendar.get_date()
+            when = datetime(date.get_year(), date.get_month(), date.get_day_of_month(),
+                            int(hour.get_value()), int(minute.get_value())).astimezone()
+            if when <= datetime.now().astimezone():
+                toast(self, "That time has passed")
+                return
+            self.send(send_at=schedule.to_utc(when))
+
+        dlg.connect("response", on_response)
+        dlg.present(self)
+
+    def send(self, send_at: str | None = None) -> None:
         if self._sending:
             return
         email = self.build_email()
@@ -547,37 +615,51 @@ class ComposeWindow(Adw.Window):
             toast(self, "Attachments are still uploading")
             return
         if not email["subject"].strip():
-            confirm(self, "Send without a subject?", "The message has no subject.", "Send", False, self._do_send)
+            confirm(self, "Send without a subject?", "The message has no subject.", "Send", False,
+                    lambda: self._do_send(send_at))
             return
-        self._do_send()
+        self._do_send(send_at)
 
-    def _do_send(self) -> None:
+    def _do_send(self, send_at: str | None = None) -> None:
+        from .. import schedule
+
         self._sending = True
         self.send_button.set_sensitive(False)
+        self.later_button.set_sensitive(False)
         email = self.build_email()
         ident = self._identity()
         reply_id = self.source["id"] if self.mode in ("reply", "reply-all") and self.source else None
         fwd_id = self.source["id"] if self.mode == "forward" and self.source else None
 
-        def done(_new_id: str) -> None:
+        def done(new_id: str) -> None:
             self.dirty = False
-            toast(self.parent_window, "Message sent")
+            if not new_id:   # queued while offline (#8)
+                toast(self.parent_window, "Offline: the message goes out when the connection is back", 6)
+            else:
+                toast(self.parent_window, f"Scheduled for {schedule.describe(send_at)}" if send_at else "Message sent")
             self.destroy()
 
         def failed(message: str) -> None:
             self._sending = False
             self.send_button.set_sensitive(True)
+            self.later_button.set_sensitive(True)
             dlg = Adw.AlertDialog(heading="Could not send", body=message)
             dlg.add_response("ok", "OK")
             dlg.present(self)
 
         seconds = int(self.config.get("undo_send_seconds", 10)) if self.config else 0
-        schedule = getattr(self.parent_window, "schedule_send", None)
-        if seconds > 0 and schedule is not None:
+        schedule_send = getattr(self.parent_window, "schedule_send", None)
+        if send_at or not self.engine.online:
+            # A scheduled message needs no undo countdown (it can be cancelled until it goes); offline,
+            # the draft could not be parked on the server anyway, so the message is queued as it is.
+            self.engine.send_email(email, ident.id, self.draft_id, done, failed, in_reply_to_id=reply_id,
+                                   forwarded_id=fwd_id, send_at=send_at)
+            return
+        if seconds > 0 and schedule_send is not None:
             # Undo send (#7): park the message as a draft and let the main window count down.
             def saved(draft_id: str) -> None:
                 self.dirty = False
-                schedule(email, ident.id, draft_id, reply_id, fwd_id, seconds)
+                schedule_send(email, ident.id, draft_id, reply_id, fwd_id, seconds)
                 self.destroy()
 
             self.engine.save_draft(email, self.draft_id, saved, failed)
