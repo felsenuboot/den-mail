@@ -33,7 +33,8 @@ offline and follows changes as they happen.
 - 🔍 **Search.** Operators for sender, subject, state, label, folder and date.
 - 🗂️ **Categories.** Every message is sorted locally into Primary, Transactions,
   Security, Updates, Newsletters, Lists or Promotions from its headers, sender
-  and wording; a chip on the row and a filter in the list header.
+  and wording; a chip on the row and a filter in the list header. Correct one
+  and the app learns from it.
 - 👓 **Views.** Newsletters, Transactions, Security, Updates, Never read and
   Big attachments in the sidebar, answered from the local cache in an instant.
 - 🚪 **Screener.** Optionally hold mail from first-time senders outside the

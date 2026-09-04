@@ -9,6 +9,7 @@ from typing import ClassVar
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gsk, Gtk
 
 from .. import launch
+from ..classify.rules import CATEGORY_NAMES
 from ..html.body import assemble_body
 from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full, delivered_to
 from ..models.thread import ThreadObject, format_date_long
@@ -283,6 +284,14 @@ class MessageCard(Gtk.Box):
         mid = (e.get("messageId") or [""])[0]
         if mid:
             row = Gtk.Label(label=f"Message-ID: {mid}", xalign=0, wrap=True, selectable=True)
+            row.add_css_class("caption")
+            self.details.append(row)
+        why = self.view.db.get_classification(self.email_id) if self.view.db else None
+        if why:
+            source = {"user": "your choice", "bayes": why.get("reason") or "learned from your corrections"}.get(
+                why["source"], f"rule: {why.get('reason') or 'no signals'}")
+            row = Gtk.Label(label=f"Category: {CATEGORY_NAMES.get(why['category'], why['category'])} · {source}",
+                            xalign=0, wrap=True, selectable=True)
             row.add_css_class("caption")
             self.details.append(row)
 
