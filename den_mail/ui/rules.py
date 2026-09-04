@@ -156,9 +156,7 @@ class RulesDialog(Adw.Dialog):
         page = Adw.PreferencesPage()
         self.list_group = Adw.PreferencesGroup(
             title="Rules in Den Mail",
-            description=("These rules belong to Den Mail: they run on this computer while the app is open, on mail "
-                         "that lands in the Inbox. They are not the rules in your Fastmail settings, which run on "
-                         "the server for every device and do not appear here (see below)."))
+            description="Den Mail's own: run on this computer while the app is open, on mail landing in the Inbox.")
         page.add(self.list_group)
         self.empty = Adw.ActionRow(title="No rules yet", subtitle="Right-click a conversation and choose “Always for this sender…”, or add one below.")
         self.empty.add_css_class("dim-label")
@@ -173,7 +171,7 @@ class RulesDialog(Adw.Dialog):
 
         server = Adw.PreferencesGroup(
             title="Rules in Fastmail",
-            description="Made in Fastmail's settings; they run on the server, whether Den Mail is open or not, and for every app.")
+            description="Made in Fastmail's settings, run on the server for every app; not shown here.")
         session = getattr(engine.client, "session", None)
         sieve = bool(session and rules.CAP_SIEVE in (session.capabilities or {}))
         link = Adw.ActionRow(title="Open Fastmail's rules settings", activatable=True,

@@ -54,8 +54,9 @@ def avatar(name: str, size: int = 32) -> Adw.Avatar:
     return Adw.Avatar(text=name or "?", show_initials=True, size=size)
 
 
-def chip(text: str, css: str = "chip") -> Gtk.Label:
-    lbl = Gtk.Label(label=text, ellipsize=3, max_width_chars=30)
+def chip(text: str, css: str = "chip", ellipsize: bool = True) -> Gtk.Label:
+    """A small pill label; `ellipsize=False` for chips that must never be cut short (#124)."""
+    lbl = Gtk.Label(label=text, ellipsize=3 if ellipsize else 0, max_width_chars=30)
     lbl.add_css_class(css)
     return lbl
 

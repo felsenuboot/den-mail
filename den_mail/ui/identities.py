@@ -58,10 +58,7 @@ class IdentitiesDialog(Adw.Dialog):
         self.groups.clear()
         favs = len(self.config.favorite_identities()) if self.config else 0
         group = Adw.PreferencesGroup(title="Send-as addresses",
-                                     description="Aliases and identities configured in your Fastmail account. "
-                                                 "Wildcard entries (*@domain) let you send from any address at "
-                                                 "that domain. Star the ones you use: the compose window then "
-                                                 f"lists only those ({favs} starred).")
+                                     description=f"Star the addresses you send from; the compose window lists those first ({favs} starred).")
         identities = sorted(self.db.get_identities(),
                             key=lambda i: ((i.get("email") or "").startswith("*@"), (i.get("email") or "").lower()))
         self.rows = []

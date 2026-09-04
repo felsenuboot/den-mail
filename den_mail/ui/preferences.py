@@ -196,9 +196,8 @@ class PreferencesDialog(Adw.PreferencesDialog):
         cleanup.add(_link("Clean up…", "Senders ranked by how pointless their mail looks; archive, delete, "
                           "mark read or unsubscribe from many at once", opener("cleanup")))
         cleanup.add(_link("Rules…", (f"{rules_count} rule{'s' if rules_count != 1 else ''}: " if rules_count
-                                     else "None yet: ") + "what happens to mail from a sender, domain, list or "
-                          "category as it arrives; Den Mail's own rules, run while it is open, apart from the ones in "
-                          "your Fastmail settings. Right-click a conversation for “Always for this sender…”",
+                                     else "None yet: ") + "label, archive, read or delete mail from a sender, domain, "
+                          "list or category as it arrives; Den Mail's own, apart from Fastmail's",
                           opener("rules")))
         cleanup.add(_link("Newsletters…", "Every sender with an unsubscribe header, and a way to leave them all",
                           opener("newsletters")))
@@ -214,10 +213,11 @@ class PreferencesDialog(Adw.PreferencesDialog):
             title="First-time senders",
             description="Mail from senders you have never seen waits in a Screener view until you decide.")
         screener.add(_switch(config, "screener", False, "Screen first-time senders", "", on_screener))
-        screener.add(_switch(config, "label_suggestions", True, "Suggest labels",
-                             "Learned from the mail you have labelled: a \"Work?\" chip on a conversation that "
-                             "lacks the label, applied with one click; folders are never suggested"))
         page.add(screener)
+        learning = Adw.PreferencesGroup(title="Learning", description="What the app picks up from your own decisions.")
+        learning.add(_switch(config, "label_suggestions", True, "Suggest labels",
+                             "A chip offers a label learned from the mail you have labelled"))
+        page.add(learning)
         return page
 
     # ------------------------------------------------------------- Privacy

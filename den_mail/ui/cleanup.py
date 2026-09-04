@@ -40,8 +40,9 @@ class SenderRow(Adw.ExpanderRow):
         self.score.set_tooltip_text("Pointless score: volume, unread and deleted-unread shares, an unsubscribe header;"
                                     " below zero once you have written to the sender")
         self.add_suffix(self.score)
+        self.set_subtitle_lines(1)   # the subtitle gives way, never the chips at the end (#124)
         if stats.category != PRIMARY:
-            c = chip(CATEGORY_NAMES.get(stats.category, stats.category), "chip")
+            c = chip(CATEGORY_NAMES.get(stats.category, stats.category), "chip", ellipsize=False)
             c.add_css_class("chip-category")
             c.add_css_class(f"category-{stats.category}")
             c.set_valign(Gtk.Align.CENTER)
