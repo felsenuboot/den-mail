@@ -457,6 +457,7 @@ class SyncEngine(GObject.Object):
         self.enqueue(PRIO_BACKFILL, self._job_seed_correspondents, "seed-correspondents")
         self.enqueue(PRIO_BACKFILL, self._job_backfill_headers, "backfill-headers")
         self.enqueue(PRIO_BACKFILL, self._job_reclassify_after_upgrade, "reclassify")
+        self.enqueue(PRIO_BACKFILL, self._job_retrain_bayes, "retrain")
 
     def _job_reclassify_after_upgrade(self) -> None:
         """A cache classified by older rules is run through the current ones once."""
@@ -467,6 +468,26 @@ class SyncEngine(GObject.Object):
         if ids:
             log.info("reclassified %d cached messages with rules %s", len(ids), RULES_VERSION)
             self._emit("emails-changed", ids)
+
+    def retrain_bayes(self) -> None:
+        """After a correction (#23): rebuild the learned model and let it look at the
+        messages the rules were unsure about."""
+        self.enqueue(PRIO_BACKGROUND, self._job_retrain_bayes, "retrain")
+
+    def _job_retrain_bayes(self) -> None:
+        corrections = self.db.corrections_count()
+        if corrections == 0 and (self.db.get_meta("bayes_corrections") or "0") == "0":
+            return   # nothing to learn from yet
+        size, n = self.db.retrain_bayes()
+        log.info("learned model: %d documents, %d corrections, %s", size, n, "ready" if self.db.bayes_ready else "silent")
+        if self.db.bayes_ready:
+            ids = self.db.unsure_ids()
+            if ids:
+                before = self.db.get_categories(ids)
+                self.db.reclassify(ids)
+                changed = [i for i, cat in self.db.get_categories(ids).items() if before.get(i) != cat]
+                if changed:
+                    self._emit("emails-changed", changed)
 
     def _job_seed_correspondents(self) -> None:
         """Once per cache: who the user has written to, from the Sent folder (#18).

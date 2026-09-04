@@ -335,6 +335,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("find-sender", self._find_sender),
             ("sender-rule", self.sender_rule),
             ("screen-allow", lambda addr: self.screener_decide(addr, True)),
+            ("categorise", self.categorise),
             ("screen-block", lambda addr: self.screener_decide(addr, False)),
             ("toggle-label", lambda mid: self._label_toggle(self.tree.get(mid), not self._selection_has_label(mid))),
             ("move-to", lambda mid: self.tree.get(mid) and self._move_to(self.tree.get(mid))),
@@ -401,6 +402,21 @@ class MainWindow(Adw.ApplicationWindow):
 
         prompt_sender_rule(self, self.tree, self.config, sender, done)
 
+    def categorise(self, category: str) -> None:
+        """"Categorise as…" (#23): the user's word on the selected conversations, kept over
+        the rules and used to train the learned layer."""
+        ids = self._selected_email_ids()
+        if not ids or category not in CATEGORY_NAMES:
+            return
+        self.db.set_category(ids, category)
+        self.model.refresh_threads(ids)
+        for t in self.selected:
+            if t.thread_id == self.conversation.thread_id:
+                self.conversation.refresh_thread(t)
+        self.engine.retrain_bayes()
+        self._schedule_view_refresh()
+        self._toast(f"Sorted into {CATEGORY_NAMES[category]}; the app learns from it")
+
     def _on_thread_context_menu(self, thread: ThreadObject, x: int, y: int) -> None:
         threads = self.selected or [thread]
         many = len(threads) > 1
@@ -444,6 +460,13 @@ class MainWindow(Adw.ApplicationWindow):
             item.set_action_and_target_value("win.move-to", GLib.Variant("s", mb.id))
             move.append_item(item)
         organise.append_submenu("Move to", move)
+        categories = Gio.Menu()
+        current = {t.category for t in threads}
+        for cat, name in CATEGORY_NAMES.items():
+            item = Gio.MenuItem.new(("● " if current == {cat} else "   ") + name, None)
+            item.set_action_and_target_value("win.categorise", GLib.Variant("s", cat))
+            categories.append_item(item)
+        organise.append_submenu("Categorise as", categories)
         menu.append_section(None, organise)
         state = Gio.Menu()
         unread = any(t.unread for t in threads)

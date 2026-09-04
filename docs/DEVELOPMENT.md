@@ -84,6 +84,17 @@ rules cannot tell apart (notifications from friendly mailboxes with list
 headers, wording in other languages, a person's mail that mentions an invoice)
 is listed in #40, the brief for the learning layers.
 
+`den_mail/classify/bayes.py` (#23) is that layer: a naive Bayes model over
+tokens (sender address, local part and domain, subject and preview words, the
+list headers present, and the user's behaviour towards the sender), trained
+from the user's corrections (weight 4) and the rules' verdicts at or above
+0.8 (the newest 5000). It is stored in the cache (`bayes_docs`,
+`bayes_tokens`), rebuilt by the engine after a correction, and consulted in
+`Database._classify` only where the rules' confidence is below 0.8; it
+speaks once it has 20 documents and 3 corrections and is at least 85 % sure.
+The `classification` row keeps `source` (rules, bayes, user) and `reason`,
+which the message details show.
+
 ## Process: branches, pull requests, releases
 
 The rules every session follows are in `CLAUDE.md` at the top of the repo;
