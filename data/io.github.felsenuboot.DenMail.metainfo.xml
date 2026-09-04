@@ -42,6 +42,11 @@
     <color type="primary" scheme_preference="dark">#1c3a5c</color>
   </branding>
   <releases>
+    <release version="0.6.0" date="2026-09-04">
+      <description>
+        <p>Drafts saved offline are kept and created with the next sync; a third way to unlock, through a Den Mail keyring; sender logos with a choice of where they come from; label suggestions learned from labelled mail; the app can keep running in the background for notifications; the hints above the list can be closed; the rules say plainly that they run in the app.</p>
+      </description>
+    </release>
     <release version="0.5.0" date="2026-09-04">
       <description>
         <p>An assistant, off by default: Ollama on this machine, any OpenAI-compatible API or Anthropic, with the key in the keyring and a daily request limit. With it on, a conversation can be summarised in a few lines, and Clean up describes a sender's newest message in one line.</p>

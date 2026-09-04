@@ -1,1 +1,0 @@
-Lock: a third way to unlock, through the keyring. Choosing it creates a keyring collection of the app's own ("Den Mail"), which the keyring daemon locks with the app and unlocks with its own prompt; the login keyring and other apps are never touched, and it works inside a Flatpak. "Unlock with" in Preferences now lists every method available on the machine

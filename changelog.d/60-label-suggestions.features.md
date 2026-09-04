@@ -1,1 +1,0 @@
-Label suggestions: the app learns from the mail you have labelled and, when it is sure, offers "Work?" as a chip on a conversation that lacks the label; one click applies it. Off in Preferences → Inbox if unwanted; folders are never suggested

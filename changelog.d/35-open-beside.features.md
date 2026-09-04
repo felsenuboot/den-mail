@@ -1,1 +1,0 @@
-Open beside: on a wide window (an ultrawide monitor), "Open beside" in a conversation's context menu (or B) pins it in a second column next to the reading pane, with its own Reply, Archive, labels and summary, while the list keeps driving the first; on a narrower window it opens a thread window as before

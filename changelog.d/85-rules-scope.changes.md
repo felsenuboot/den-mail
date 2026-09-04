@@ -1,1 +1,0 @@
-Rules: the Rules dialog, the "Always for this sender" prompt and the Inbox preferences say plainly that these rules are Den Mail's own, run on this computer while the app is open, and are not the rules in Fastmail's settings, with a link to those for rules that should run on the server
