@@ -1,20 +1,46 @@
 # Den Mail tour
 
-<img src="../den_mail/den-calligraphy.png" width="140" alt="伝" align="left" hspace="24">
+<table>
+<tr>
+<td width="160" valign="top"><img src="../den_mail/den-calligraphy.png" width="140" alt="伝"></td>
+<td valign="top">
 
-> **伝** 〔でん · *den*〕 noun
-> 1. legend; tradition
-> 2. biography; life
-> 3. method; way
-> 4. horseback transportation and communication relay system used in ancient Japan
->
-> **伝** 〔つて · *tsute*〕 noun
-> 1. means of making contact; intermediary; go-between
-> 2. connections; influence; pull; good offices
->
-> <sub>usually written using kana alone; also 伝手, ツテ · [jisho.org](https://jisho.org/search/%E4%BC%9D)</sub>
+**伝** 〔でん · *den*〕 noun
+1. legend; tradition
+2. biography; life
+3. method; way
+4. horseback transportation and communication relay system used in ancient Japan
 
-<br clear="all">
+**伝** 〔つて · *tsute*〕 noun
+1. means of making contact; intermediary; go-between
+2. connections; influence; pull; good offices
+
+<sub>usually written using kana alone; also 伝手, ツテ · [jisho.org](https://jisho.org/search/%E4%BC%9D)</sub>
+
+</td>
+</tr>
+</table>
+
+## The first ten minutes
+
+1. **Sign in** with a Fastmail API token (Mail read/write; add the Contacts
+   scope for your address book). The Inbox lists at once and keeps syncing
+   over push.
+2. **Read and act.** `j`/`k` move, `e` archives, `#` deletes, `r` replies;
+   labels and folders are one key away (`l`, `v`). Everything undoes from the
+   toast.
+3. **Let the categories work.** Every message is sorted locally into
+   Transactions, Security, Updates, Newsletters and so on; the *Views* in the
+   sidebar answer "what is a newsletter here" without a search.
+4. **Clean up.** *Clean up…* in the main menu ranks the senders you never
+   read; tick a few and archive, delete or unsubscribe in one go. *Always for
+   this sender…* in a conversation's context menu turns a decision into a
+   rule.
+5. **Make it yours** in Preferences: the screener for strangers, a lock, an
+   assistant for summaries, logos, keeping the app running in the background.
+
+The empty conversation pane shows a tip and quick links to these tools on
+every start.
 
 ## Reading mail
 
@@ -192,6 +218,9 @@ listed. Archiving, labelling, deleting and sending keep working: the change
 is applied locally, queued in the cache, and sent with the first sync after
 the connection returns; the sidebar says how many changes are waiting. A
 queued change the server then rejects is reported in a toast and dropped.
+A draft saved offline is kept in the cache and listed in Drafts; the next
+sync creates it on the server, and a compose window still open carries on
+against the server's copy.
 
 ## Send later
 
@@ -227,6 +256,54 @@ clicking one copies it.
 | --- | --- |
 | ![Identities dialog](../data/screenshots/identities.png) | ![Masked Email dialog](../data/screenshots/masked.png) |
 
+## Assistant and summaries
+
+*Assistant* in Preferences (off by default) points the app at a language
+model: Ollama on this machine, any server that speaks the OpenAI API (LM
+Studio, llama.cpp, vLLM, OpenAI, Mistral, Groq, OpenRouter …) or Anthropic.
+The server, the model, a key kept in the keyring, a requests-per-day limit
+and a *Test* button that reaches the server without spending a request; a
+row says whether the mail text stays on this machine or leaves it for the
+chosen server. Thinking models are asked to skip the thinking on local
+servers, so they answer instead of reasoning in silence.
+
+![The Assistant page of Preferences](../data/screenshots/assistant.png)
+
+With the assistant on, the sparkle in a conversation's header (or
+Ctrl+Shift+S) sums the thread up in a few lines above the messages, quoted
+history left out and older messages cut first so a long thread still fits a
+small model. The answer is cached per thread: a second look is free, a new
+reply asks again. In Clean up, an expanded sender row starts with a one-line
+description of their newest message, so you can decide without opening
+anything.
+
+![A conversation summarised above the messages](../data/screenshots/summary.png)
+
+## Label suggestions
+
+The app learns from the mail you have labelled. Once a label has enough
+examples and the model is sure about a conversation that lacks it, a dashed
+chip such as *Work?* appears next to the labels; one click applies it. The
+tooltip says how sure the model is and which words spoke for it. Folders are
+never suggested; *Suggest labels* under *Inbox* in Preferences turns the chips
+off.
+
+## Two conversations side by side
+
+On a wide window (an ultrawide monitor, 2200 pixels or more) *Open beside*
+in a conversation's context menu, or `b`, pins the conversation in a second
+column next to the reading pane, with its own Reply, Archive, labels, Move
+and Summarise, while the list keeps driving the first pane. On a narrower
+window the same command opens the conversation in a window of its own, as
+double-click and Return always did.
+
+## Running in the background
+
+*Keep running when the window is closed* under *Account* in Preferences
+(off by default) makes closing the window hide it instead: mail keeps
+syncing and notifications keep coming, a click on one opens that message,
+and *Quit* in the main menu (Ctrl+Q) ends the app.
+
 ## Tips
 
 While nothing is selected, the conversation pane shows the app's name as a
@@ -242,22 +319,26 @@ Newsletters, Rules, the search and the shortcuts, whatever tip is showing.
 and hides the compose and conversation windows with it; a notification that
 arrives meanwhile says "New mail" and nothing else. Turn the lock on under
 *Account → Lock* in Preferences, choose to lock after some idle time and
-when the desktop session locks. Unlocking uses the system's own
-authentication prompt (password, fingerprint, whatever PAM is set up for)
-where the polkit policy file is installed, which the AUR package does and
-`install.sh` shows the one command for; elsewhere, a Flatpak in particular,
-a passphrase or a PIN set in Preferences, which the lock needs before it
-can be switched on. This is a privacy screen, not a security
-boundary: the cache and the token are not encrypted by it.
+when the desktop session locks, and choose what *Unlock* asks: the system's
+own authentication prompt (password, fingerprint, whatever PAM is set up
+for) where the polkit policy file is installed, which the AUR package does;
+the keyring daemon's prompt for a *Den Mail* keyring of its own, which
+works inside a Flatpak and never touches the login keyring; or a passphrase
+or PIN set right there. This is a privacy screen, not a security boundary:
+the cache and the token are not encrypted by it.
+
+![The Lock section of the Account page](../data/screenshots/lock.png)
 
 ## Preferences
 
-Three pages. *General* holds the theme, sender logos, remote images and
-trusted senders, reading and composing options. *Inbox* is where the
+Four pages. *General* holds the theme, where sender logos come from (each
+sender's site, DuckDuckGo's icon service, BIMI only, or off), remote images
+and trusted senders, reading and composing options. *Inbox* is where the
 cleanup tools live: rows that open Clean up, Rules and Newsletters with a
-line on what each does, the Views switch and the screener. *Account* has
-notifications, the poll interval, the server's capabilities, the cache and
-sign-out. The same tools sit under *Inbox* in the main menu, behind the broom
+line on what each does, the Views switch, the screener and label
+suggestions. *Assistant* is the language model. *Account* has the lock,
+notifications, background running, the poll interval, the server's
+capabilities, the cache and sign-out. The same tools sit under *Inbox* in the main menu, behind the broom
 at the bottom of the sidebar, and the Newsletters, Updates and Never read
 views offer Clean up for their senders in a banner above the list.
 
@@ -277,6 +358,9 @@ views offer Clean up for their senders in a banner above the list.
 | `s` | flag / unflag |
 | `Shift+U` / `Shift+I` | mark unread / read |
 | `l` / `v` | labels / move to |
+| `b` | open beside (wide window) or in a new window |
+| `Ctrl+Shift+S` | summarise the conversation (assistant) |
+| `Ctrl+Shift+L` | lock |
 | `/`, `Ctrl+F` | search |
 | `g` then `i` / `d` | go to Inbox / Drafts |
 | `F5`, `Ctrl+R` | refresh |
