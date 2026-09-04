@@ -3,9 +3,11 @@
 [![CI](https://github.com/felsenuboot/den-mail/actions/workflows/ci.yml/badge.svg)](https://github.com/felsenuboot/den-mail/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/felsenuboot/den-mail/actions/workflows/codeql.yml/badge.svg)](https://github.com/felsenuboot/den-mail/actions/workflows/codeql.yml)
 
-A Fastmail client for the Linux desktop. GTK 4 and libadwaita, so it looks
-and behaves like a GNOME app; JMAP straight to Fastmail, with a local cache
-that makes it fast and lets you read offline.
+Read and write your Fastmail mail on the Linux desktop
+
+Den Mail is a Fastmail client built with GTK 4 and libadwaita. It talks JMAP
+to Fastmail directly and keeps a local cache, so it opens at once, works
+offline and follows changes as they happen.
 
 ![The inbox with a newsletter open, dark theme](data/screenshots/inbox-dark.png)
 
@@ -14,35 +16,56 @@ that makes it fast and lets you read offline.
 > human, not audited. It works on my machine (Arch, Hyprland, a Fastmail
 > Premium account). No warranty; not affiliated with Fastmail.
 
-## What it does
+## Features
 
-- Three panes, conversations, and labels the way Fastmail has them: a message
-  can carry several, labels nest, and dropping the Inbox chip archives.
-- Folder switches come from a SQLite cache, changes arrive over Fastmail's push
-  stream, and everything you have opened stays readable offline.
-- Every action is immediate and undoable from a toast, including sending, which
-  waits a few seconds first.
-- HTML mail is sanitised, remote content stays blocked until you allow it, and
-  dark mode adapts light-coloured messages.
-- Send from any alias or wildcard address; create and manage Masked Email.
-- Multi-select, group the list by sender, fold groups, act on a whole sender.
-- Unsubscribe from a message with one click, or from many senders at once in
-  the Newsletters dialog, clearing out their mail in the same step.
-- Search with `from:` `to:` `subject:` `is:` `has:` `label:` `in:` `before:`
-  `after:` `older_than:7d` and quoted phrases.
-- Notifications with the sender's logo, `mailto:` links, keyboard shortcuts.
+- Conversations in three panes, with labels as Fastmail has them: nested,
+  several per message, drag and drop
+- Instant folder switches and offline reading from a local cache, updates
+  over Fastmail's push stream
+- Undo for every action, including sending
+- Sanitised HTML mail with remote content blocked until allowed, and a dark
+  mode for light-coloured messages
+- Send from any alias or wildcard address, create Masked Email addresses
+- Select many conversations, group the list by sender, act on a sender at once
+- One-click unsubscribe, and a Newsletters dialog to leave many lists at once
+- Search operators for sender, recipient, subject, state, label, folder and date
+- Desktop notifications with the sender's logo, `mailto:` links, keyboard
+  shortcuts
 
-The [tour](docs/TOUR.md) shows all of this, with screenshots and the list of
-shortcuts.
+The [tour](docs/TOUR.md) shows each of these, with screenshots and the list
+of shortcuts.
 
 ## Speed
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/benchmark/2026-09-04-dark.svg">
-  <img alt="den-mail against Fastmail's desktop app and web client: start-up, folder switch, search, opening a message, memory and idle CPU" src="docs/benchmark/2026-09-04-light.svg">
-</picture>
+den-mail against Fastmail's desktop app and web client on the same account,
+machine and network; medians of eight runs, lower is better.
 
-Same account, machine and network, medians of eight runs. Method and numbers:
+| | den-mail | den-mail, cold | Fastmail app | Fastmail web |
+| --- | --- | --- | --- | --- |
+| launch to a usable inbox, ms | **300** | 2,528 | 1,418 | 868 |
+| switch to a folder of 2,900 conversations, ms | 118 | 458 | 204 | **114** |
+| search, ms | 186 | 239 | 226 | **180** |
+| open a message, first paint, ms | **67** | 179 | 135 | 148 |
+| memory with a message open, PSS, MiB | **340** | 380 | 642 | 511 |
+| CPU at rest with a message open, % of a core | **0.1** | 0.4 | 2.8 | 0.6 |
+
+```mermaid
+xychart-beta
+    title "Launch to a usable inbox, lower is better"
+    x-axis ["den-mail", "den-mail, cold", "Fastmail app", "Fastmail web"]
+    y-axis "ms" 0 --> 2780
+    bar [300, 2528, 1418, 868]
+```
+
+```mermaid
+xychart-beta
+    title "Memory with a message open (PSS), lower is better"
+    x-axis ["den-mail", "den-mail, cold", "Fastmail app", "Fastmail web"]
+    y-axis "MiB" 0 --> 710
+    bar [340, 380, 642, 511]
+```
+
+The method, the other four charts and the rows behind them are in
 [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
 ## Install

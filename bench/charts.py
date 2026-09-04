@@ -53,6 +53,40 @@ def medians(files: list[Path]) -> dict[str, dict[str, float]]:
     return out
 
 
+def cold_medians(files: list[Path]) -> dict[str, float]:
+    """den-mail without a cache, for the fourth bar of the Mermaid charts."""
+    rows = [json.loads(line) for f in files for line in f.read_text().splitlines() if line.strip()]
+    out: dict[str, float] = {}
+    for key, _title, _unit in METRICS:
+        vals = [r[key] for r in rows if r["client"] == "den-mail" and r.get("mode") == "cold" and key in r
+                and r.get("run", 1) > 0]
+        if vals:
+            out[key] = statistics.median(vals)
+    return out
+
+
+def mermaid(data: dict[str, dict[str, float]], cold: dict[str, float]) -> str:
+    """The same medians as Mermaid xychart blocks, which GitHub renders itself; one chart per metric,
+    since xychart has no legend to tell several series apart."""
+    bars = [("den-mail", data.get("den-mail", {})), ("den-mail, cold", cold)] + [
+        (label, data.get(client, {})) for client, label in CLIENTS if client != "den-mail"]
+    blocks = []
+    for key, title, unit in METRICS:
+        values = [(label, vals[key]) for label, vals in bars if key in vals]
+        if not values:
+            continue
+        top = max(v for _l, v in values)
+        top = 10 * ((int(top * 1.1) + 9) // 10) if unit != "% of a core" else round(top * 1.2 + 0.05, 1)
+        labels = ", ".join(f'"{label}"' for label, _v in values)
+        nums = ", ".join(f"{v:.1f}" if unit == "% of a core" else f"{v:.0f}" for _l, v in values)
+        blocks.append("```mermaid\nxychart-beta\n"
+                      f'    title "{title}, lower is better"\n'
+                      f"    x-axis [{labels}]\n"
+                      f'    y-axis "{unit}" 0 --> {top}\n'
+                      f"    bar [{nums}]\n```")
+    return "\n\n".join(blocks) + "\n"
+
+
 def fmt(value: float, unit: str) -> str:
     if unit == "% of a core":
         return f"{value:.1f} %"
@@ -127,6 +161,8 @@ def main() -> None:
     for theme in THEMES:
         (OUT / f"{stamp}-{theme}.svg").write_text(overview(data, theme))
         print("wrote", OUT / f"{stamp}-{theme}.svg")
+    (OUT / f"{stamp}.md").write_text(mermaid(data, cold_medians(files)))
+    print("wrote", OUT / f"{stamp}.md")
     for client, values in data.items():
         print(client, {k: round(v, 1) for k, v in values.items()})
 
