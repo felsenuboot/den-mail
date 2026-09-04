@@ -191,7 +191,8 @@ While nothing is selected, the conversation pane shows the app's name as a
 dictionary entry and, underneath, a tip: what Clean up does, how rules and
 the screener work, the search operators, the shortcuts, and so on, each
 with a button to the thing it describes. A new tip comes with every start,
-and *Next tip* moves on.
+and *Next tip* moves on. Under the tip, a row of quick links opens Clean up,
+Newsletters, Rules, the search and the shortcuts, whatever tip is showing.
 
 ## Preferences
 

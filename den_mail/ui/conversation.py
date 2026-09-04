@@ -500,6 +500,27 @@ class TipCard(Gtk.Box):
             self.button.set_action_name(tip.action)
 
 
+QUICK_LINKS = (
+    ("Clean up", "fm-broom-symbolic", "win.cleanup", "Senders ranked by how pointless their mail looks"),
+    ("Newsletters", "fm-newsletter-symbolic", "win.newsletters", "Unsubscribe from many senders at once"),
+    ("Rules", "fm-filter-symbolic", "win.rules", "What happens to mail from a sender, domain, list or category"),
+    ("Search", "system-search-symbolic", "win.search", "from: is:unread has:attachment older_than:7d …"),
+    ("Shortcuts", "input-keyboard-symbolic", "win.shortcuts", "Every key the app answers to"),
+)
+
+
+def quick_links() -> Gtk.Widget:
+    """One flat button per tool worth knowing about, whatever tip is showing (#43)."""
+    row = Gtk.Box(spacing=4, halign=Gtk.Align.CENTER)
+    row.add_css_class("quick-links")
+    for label, icon, action, tip in QUICK_LINKS:
+        b = Gtk.Button(child=Adw.ButtonContent(icon_name=icon, label=label), tooltip_text=tip)
+        b.add_css_class("flat")
+        b.set_action_name(action)
+        row.append(b)
+    return row
+
+
 def kanji_placeholder(config=None) -> Gtk.Widget:
     """What the conversation pane shows while nothing is selected: the name of the app as a
     dictionary entry, the way the tour introduces it, and a tip below."""
@@ -531,7 +552,10 @@ def kanji_placeholder(config=None) -> Gtk.Widget:
     box.append(column)
     outer.append(box)
     if config is not None:
-        outer.append(TipCard(config))
+        below = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        below.append(TipCard(config))
+        below.append(quick_links())
+        outer.append(below)
     return outer
 
 
