@@ -8,8 +8,6 @@ Unreleased changes gather at the top until they are tagged.
 
 ### Features
 - The Fastmail address book, with a token that has the Contacts scope: contacts complete recipients first, and a contact's photo replaces the sender domain's logo (#4, #14)
-
-### Features
 - CI runs the UI headlessly once per autopilot script and keeps the screenshots as an artifact (#11)
 
 ## [Unreleased]
