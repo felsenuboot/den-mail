@@ -80,6 +80,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.avatars = AvatarService(config)
         self.tree.color_overrides = {k: int(v) for k, v in (config.get("label_colors", {}) or {}).items()}
         self.sort = dict(config.get("sort", {"key": "newest", "flagged_first": False, "unread_first": False}))
+        # The tip under the placeholder moves on with every start.
+        config.set("tip_index", int(config.get("tip_index", 0)) + 1)
         # The Inbox tip about Clean up shows for the first few starts, then leaves the user alone.
         self._tip_starts = int(config.get("cleanup_tip_starts", 0)) + 1
         if not config.get("cleanup_opened") and self._tip_starts <= 4:
@@ -319,6 +321,7 @@ class MainWindow(Adw.ApplicationWindow):
             "cleanup": self.show_cleanup,
             "identities": lambda: IdentitiesDialog(self.engine, self.db, self.config).present(self),
             "preferences": self.show_preferences,
+            "preferences-inbox": lambda: self.show_preferences("inbox"),
             "shortcuts": self.show_shortcuts,
             "goto-inbox": lambda: self._goto_role(ROLE_INBOX),
             "goto-drafts": lambda: self._goto_role(ROLE_DRAFTS),

@@ -455,9 +455,56 @@ def _open_link(label: Gtk.Label, uri: str) -> bool:
     return True  # handled: GTK must not launch it a second time
 
 
-def kanji_placeholder() -> Gtk.Widget:
+class TipCard(Gtk.Box):
+    """A tip under the placeholder: one per start, the next one on request (#tips)."""
+
+    def __init__(self, config):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6, halign=Gtk.Align.CENTER)
+        from .. import tips
+
+        self.tips = tips
+        self.config = config
+        self.index = int(config.get("tip_index", 0))
+        self.add_css_class("tip-card")
+        self.set_size_request(420, -1)
+        head = Gtk.Label(label="Tip", xalign=0)
+        head.add_css_class("caption")
+        head.add_css_class("dim-label")
+        self.append(head)
+        self.title = Gtk.Label(xalign=0, wrap=True, max_width_chars=48)
+        self.title.add_css_class("heading")
+        self.append(self.title)
+        self.text = Gtk.Label(xalign=0, wrap=True, max_width_chars=48)
+        self.append(self.text)
+        row = Gtk.Box(spacing=6, margin_top=6)
+        self.button = Gtk.Button()
+        self.button.add_css_class("flat")
+        row.append(self.button)
+        spacer = Gtk.Box(hexpand=True)
+        row.append(spacer)
+        nxt = Gtk.Button(label="Next tip", tooltip_text="Another one; a new tip comes with every start")
+        nxt.add_css_class("flat")
+        nxt.connect("clicked", lambda *_: self.show(self.index + 1))
+        row.append(nxt)
+        self.append(row)
+        self.show(self.index)
+
+    def show(self, index: int) -> None:
+        self.index = index % len(self.tips.TIPS)
+        tip = self.tips.tip_for(self.index)
+        self.title.set_label(tip.title)
+        self.text.set_label(tip.text)
+        self.button.set_visible(tip.action is not None)
+        if tip.action:
+            self.button.set_label(tip.button)
+            self.button.set_action_name(tip.action)
+
+
+def kanji_placeholder(config=None) -> Gtk.Widget:
     """What the conversation pane shows while nothing is selected: the name of the app as a
-    dictionary entry, the way the tour introduces it."""
+    dictionary entry, the way the tour introduces it, and a tip below."""
+    outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=36, halign=Gtk.Align.CENTER,
+                    valign=Gtk.Align.CENTER)
     box = Gtk.Box(spacing=28, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
     box.add_css_class("kanji-placeholder")
     box.append(_calligraphy(150))
@@ -482,7 +529,10 @@ def kanji_placeholder() -> Gtk.Widget:
     link.set_margin_top(8)
     column.append(link)
     box.append(column)
-    return box
+    outer.append(box)
+    if config is not None:
+        outer.append(TipCard(config))
+    return outer
 
 
 class RemoteContentBar(Gtk.Revealer):
@@ -579,7 +629,7 @@ class ConversationView(Adw.NavigationPage):
         view.add_top_bar(self.header)
 
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
-        self.placeholder = kanji_placeholder()
+        self.placeholder = kanji_placeholder(config)
         self.stack.add_named(self.placeholder, "empty")
         self.multi = Adw.StatusPage(icon_name="edit-select-all-symbolic", title="Multiple conversations selected")
         self.stack.add_named(self.multi, "multi")

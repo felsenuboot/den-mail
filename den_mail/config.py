@@ -30,6 +30,7 @@ DEFAULTS: dict[str, Any] = {
     "screener": False,  # first-time senders wait in the Screener view until let through (#24)
     "cleanup_tip_starts": 0,  # how often the Inbox has shown the "Clean up" tip; it stops after a few starts
     "cleanup_opened": False,  # the tip also stops once Clean up has been opened
+    "tip_index": 0,  # which tip the empty conversation pane shows; advances with every start
     "window": {"width": 1400, "height": 900, "maximized": False},
     "signature_position": "below",
 }

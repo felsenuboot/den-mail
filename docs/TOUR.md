@@ -185,6 +185,14 @@ clicking one copies it.
 | --- | --- |
 | ![Identities dialog](../data/screenshots/identities.png) | ![Masked Email dialog](../data/screenshots/masked.png) |
 
+## Tips
+
+While nothing is selected, the conversation pane shows the app's name as a
+dictionary entry and, underneath, a tip: what Clean up does, how rules and
+the screener work, the search operators, the shortcuts, and so on, each
+with a button to the thing it describes. A new tip comes with every start,
+and *Next tip* moves on.
+
 ## Preferences
 
 Three pages. *General* holds the theme, sender logos, remote images and
