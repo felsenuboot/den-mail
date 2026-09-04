@@ -28,7 +28,8 @@ listview.thread-list > row {
   padding: 0;
 }
 listview.thread-list.grouped {
-  background: @window_bg_color;
+  /* a touch darker than the window, so the gaps between the cards show in dark mode too */
+  background: mix(@window_bg_color, black, 0.12);
 }
 listview.thread-list.grouped > row {
   padding: 0 12px;
@@ -44,11 +45,12 @@ listview.thread-list.grouped > row {
 .thread-row .preview {
   font-size: 0.9em;
 }
-/* the card */
+/* the card: in the dark palette the card colour is barely lighter than the window, so the
+   edge does the separating; the rows inside keep a fainter line */
 .sender-header,
 .thread-row.in-group {
   background: @card_bg_color;
-  border: 1px solid alpha(@card_shade_color, 0.6);
+  border: 1px solid alpha(@card_shade_color, 0.9);
 }
 .sender-header {
   padding: 8px 6px 8px 12px;
@@ -58,18 +60,18 @@ listview.thread-list.grouped > row {
 }
 .sender-header.card-only {
   border-radius: 12px;
-  border-bottom: 1px solid alpha(@card_shade_color, 0.6);
+  border-bottom: 1px solid alpha(@card_shade_color, 0.9);
 }
 .thread-row.in-group {
   /* the text lines up with the sender's name above (12px padding, 32px logo, 8px gap = 52px):
      34px padding, then the 8px unread dot and its 10px gap */
   padding: 8px 12px 8px 34px;
-  border-top: 1px solid alpha(@card_shade_color, 0.6);
+  border-top: 1px solid alpha(@card_shade_color, 0.5);
   border-bottom: none;
 }
 .thread-row.in-group.card-last {
   border-radius: 0 0 12px 12px;
-  border-bottom: 1px solid alpha(@card_shade_color, 0.6);
+  border-bottom: 1px solid alpha(@card_shade_color, 0.9);
 }
 listview.thread-list.grouped > row:last-child .thread-row,
 listview.thread-list.grouped > row:last-child .sender-header.card-only {

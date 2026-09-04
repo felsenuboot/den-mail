@@ -87,7 +87,7 @@ class IdentitiesDialog(Adw.Dialog):
         row = Adw.ExpanderRow(title=GLib.markup_escape_text(ident.get("name") or email),
                               subtitle=GLib.markup_escape_text(email))
         if email.startswith("*@"):
-            tag = Gtk.Label(label="wildcard")
+            tag = Gtk.Label(label="wildcard", valign=Gtk.Align.CENTER)  # centred, or it fills the row's height
             tag.add_css_class("chip")
             row.add_suffix(tag)
         if self.config is not None:
