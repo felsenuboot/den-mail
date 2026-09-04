@@ -12,13 +12,13 @@ from __future__ import annotations
 import logging
 import os
 import threading
-import urllib.parse
 from collections.abc import Callable
 from datetime import UTC, datetime
 
 from .. import secrets
 from . import anthropic, ollama, openai
 from .errors import BudgetExceeded, LLMError, NotConfigured
+from .http import is_local_url
 from .spec import Provider, Spec
 
 log = logging.getLogger(__name__)
@@ -57,8 +57,7 @@ def settings(config) -> tuple[Spec, str, str]:
 
 def is_local(url: str) -> bool:
     """True when the server is this machine, so mail text never leaves it."""
-    host = (urllib.parse.urlsplit(url).hostname or "").lower()
-    return host in ("localhost", "::1") or host.startswith("127.") or host.endswith(".localhost")
+    return is_local_url(url)
 
 
 # ---------------------------------------------------------------------- keys

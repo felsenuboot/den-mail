@@ -19,7 +19,8 @@ class Ollama:
             "model": self.model,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "stream": False,
-            "options": {"temperature": 0.2},
+            "think": False,   # thinking models (Qwen3, DeepSeek-R1 …) would answer with reasoning only (#98)
+            "options": {"temperature": 0.2, "num_predict": 1024},
         }
         if json_schema is not None:
             body["format"] = json_schema   # structured output, Ollama 0.5+

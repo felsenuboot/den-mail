@@ -99,7 +99,7 @@ def test_ollama_chat_and_check(server):
     p = ollama.Ollama(server.url + "/", "llama3.2")
     assert p.complete("be brief", "summarise", {"type": "object"}) == "Three lines."
     sent = server.requests[-1]
-    assert sent["path"] == "/api/chat" and sent["body"]["stream"] is False
+    assert sent["path"] == "/api/chat" and sent["body"]["stream"] is False and sent["body"]["think"] is False
     assert sent["body"]["format"] == {"type": "object"}
     assert [m["role"] for m in sent["body"]["messages"]] == ["system", "user"]
     assert "authorization" not in sent["headers"]
@@ -119,6 +119,8 @@ def test_openai_compatible_sends_the_key_and_the_schema(server):
     sent = server.requests[-1]
     assert sent["headers"]["authorization"] == "Bearer sk-test"
     assert sent["body"]["response_format"]["json_schema"]["schema"] == {"type": "object"}
+    assert sent["body"]["chat_template_kwargs"] == {"enable_thinking": False}   # a local server (#98)
+    assert sent["body"]["max_tokens"] == openai.MAX_TOKENS
     assert p.complete("s", "u") == "ok"
     assert "response_format" not in server.requests[-1]["body"]
     assert "gpt-4o-mini" in p.check()
@@ -126,6 +128,25 @@ def test_openai_compatible_sends_the_key_and_the_schema(server):
         openai.OpenAICompatible(server.url + "/v1", "gpt-5", "k").check()
     server.answers["/v1/models"] = (200, {"data": []})
     assert "not verified" in p.check()
+
+
+def test_thinking_only_answers_are_reported(server):
+    server.answers["/v1/chat/completions"] = (200, {"choices": [{"message": {
+        "content": "", "reasoning_content": "Thinking Process: the user wants..."}}]})
+    with pytest.raises(llm.LLMError, match="thinking"):
+        openai.OpenAICompatible(server.url + "/v1", "qwen", None).complete("s", "u")
+    # a remote API does not get the llama.cpp-only field
+    p = openai.OpenAICompatible("https://api.example.com/v1", "m", "k")
+    monkeypatch_body = {}
+    import den_mail.llm.openai as mod
+    orig = mod.request_json
+    mod.request_json = lambda url, body=None, headers=None, timeout=300: (monkeypatch_body.update(body),
+                                                                          {"choices": [{"message": {"content": "ok"}}]})[1]
+    try:
+        assert p.complete("s", "u") == "ok"
+    finally:
+        mod.request_json = orig
+    assert "chat_template_kwargs" not in monkeypatch_body
 
 
 def test_anthropic_messages(server):
