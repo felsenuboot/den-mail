@@ -178,6 +178,8 @@ listview.thread-list.grouped > row:hover:not(:selected) .sender-header {
 .chip-suggestion {
   border: 1px dashed alpha(currentColor, 0.5);
   background: transparent;
+.beside-column {
+  border-left: 1px solid alpha(@borders, 0.8);
 }
 .summary-bar {
   padding: 10px 12px;

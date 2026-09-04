@@ -27,6 +27,7 @@ DEFAULTS: dict[str, Any] = {
     "poll_interval_seconds": 300,
     "thread_page_size": 50,
     "sidebar_width": 260,
+    "beside_min_width": 2200,  # window width (sp) from which "Open beside" pins a second column (#35)
     "avatar_source": "",  # "direct" | "proxy" | "bimi" | "off": where sender logos come from (#63); "" = sender_avatars
     "sidebar_views": True,  # the Views section (#19): local lists such as Newsletters and Never read
     "screener": False,  # first-time senders wait in the Screener view until let through (#24)
