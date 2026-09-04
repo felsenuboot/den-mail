@@ -258,7 +258,7 @@ class PreferencesDialog(Adw.PreferencesDialog):
         page = Adw.PreferencesPage(title="Account", icon_name="avatar-default-symbolic", name="account")
         page.add(self._privacy_group(config, on_lock_changed))
 
-        sync = Adw.PreferencesGroup(title="Sync & notifications")
+        sync = Adw.PreferencesGroup(title="Sync and notifications")
         sync.add(_switch(config, "notify_new_mail", True, "Notify about new mail"))
         poll = Adw.SpinRow.new_with_range(30, 3600, 30)
         poll.set_title("Fallback poll interval (seconds)")
