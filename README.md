@@ -46,7 +46,8 @@ offline and follows changes as they happen.
 - 📐 **Rules.** Always label, archive, read or delete mail from a sender,
   a domain, a list or a category, applied as it arrives.
 - 🔒 **Lock.** Hide the mail behind a lock page, on demand, when idle or with
-  the session; unlock with the system prompt or a passphrase.
+  the session; unlock with the system prompt, the keyring daemon's prompt for a
+  Den Mail keyring of its own, or a passphrase or PIN.
 - 🔔 **Desktop.** Notifications with the sender's logo, `mailto:` links, keyboard
   shortcuts.
 
