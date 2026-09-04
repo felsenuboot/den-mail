@@ -1,0 +1,37 @@
+# Flatpak manifest. Builds the checkout it sits in (the two ".." levels), so
+#   flatpak-builder --user --install --force-clean build packaging/flatpak/io.github.felsenuboot.DenMail.yml
+# from the repository root installs the app for the current user, and the
+# Flatpak workflow turns a release tag into a single-file bundle.
+# The GNOME runtime ships GTK 4, libadwaita, WebKitGTK 6.0, libsecret and
+# PyGObject, so the app itself is the only module. Flathub is not a target
+# (see issue #16); the bundle is attached to GitHub releases instead.
+app-id: io.github.felsenuboot.DenMail
+runtime: org.gnome.Platform
+runtime-version: "50"
+sdk: org.gnome.Sdk
+command: den-mail
+finish-args:
+  - --share=network            # JMAP, push, sender logos
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri               # WebKitGTK rendering
+  - --talk-name=org.freedesktop.secrets   # the API token in the keyring
+  - --filesystem=xdg-download  # saving attachments
+# The SDK's appstreamcli compose fails with a bare file-read-error on this
+# tree although the host's succeeds; the bundle is sideloaded, not listed in
+# a software centre, so the composed catalogue is not needed.
+appstream-compose: false
+modules:
+  - name: den-mail
+    buildsystem: simple
+    build-commands:
+      - pip3 install --prefix=/app --no-deps --no-build-isolation .
+      - install -Dm644 data/io.github.felsenuboot.DenMail.desktop -t /app/share/applications
+      - install -Dm644 data/io.github.felsenuboot.DenMail.metainfo.xml -t /app/share/metainfo
+      # Raster icons only: flatpak-builder's export validator does not recognise the
+      # SVG ("Format not recognized"), and the desktop and its docks take PNGs.
+      - for s in 64 128 256 512; do install -Dm644 data/icons/$s.png /app/share/icons/hicolor/${s}x${s}/apps/io.github.felsenuboot.DenMail.png; done
+    sources:
+      - type: dir
+        path: ../..
