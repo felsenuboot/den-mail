@@ -109,9 +109,13 @@ class ComposeWindow(Adw.Window):
         self.identity_list = Gtk.StringList.new(self._identity_strings())
         # use-subtitle shows the selected identity under "From" (instead of an ellipsised label on the
         # right); use-markup must be off because addresses contain "<…>".
-        self.from_row = Adw.ComboRow(title="From", model=self.identity_list, use_subtitle=True, use_markup=False,
-                                     enable_search=len(self.identities) > 6,
-                                     expression=Gtk.PropertyExpression.new(Gtk.StringObject, None, "string"))
+        # use-markup goes first: with the model and use-subtitle in the same constructor call the
+        # first subtitle was parsed as markup and "<felix@…>" drew a warning (#129).
+        self.from_row = Adw.ComboRow(title="From", use_markup=False)
+        self.from_row.set_expression(Gtk.PropertyExpression.new(Gtk.StringObject, None, "string"))
+        self.from_row.set_enable_search(len(self.identities) > 6)
+        self.from_row.set_use_subtitle(True)
+        self.from_row.set_model(self.identity_list)
         self.from_row.set_list_factory(self._identity_factory())
         self.from_row.connect("notify::selected", lambda *_: self._on_identity_changed())
         fields.append(self.from_row)
