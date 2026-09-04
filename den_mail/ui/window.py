@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Callable
 
 from gi.repository import Adw, Gio, GLib, Gtk
 
@@ -26,6 +27,7 @@ from .labels import MailboxPickerPopover
 from .login import LoginPage
 from .masked import MaskedEmailDialog
 from .message_body import set_cid_resolver
+from .outbox import PendingSend
 from .preferences import PreferencesDialog
 from .sidebar import Sidebar
 from .thread_window import ThreadWindow
@@ -51,6 +53,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.query_key: str | None = None
         self.selected: list[ThreadObject] = []
         self.compose_windows: list[ComposeWindow] = []
+        self.pending_sends: list[PendingSend] = []  # counting down behind an Undo toast (#7)
+        self._sends_in_flight = 0
+        self._after_sends: Callable[[], None] | None = None
         self.thread_windows: list[ThreadWindow] = []
         self.identities: list[dict] = []
         self._pending_select_position: int | None = None
@@ -851,6 +856,52 @@ class MainWindow(Adw.ApplicationWindow):
         self.compose_windows.append(win)
         win.present()
 
+    # ---------------------------------------------------------- undo send
+
+    def schedule_send(self, email: dict, identity_id: str, draft_id: str | None, in_reply_to_id: str | None,
+                      forwarded_id: str | None, seconds: int) -> None:
+        """Submit `email` (already saved as draft `draft_id`) after `seconds`, unless undone."""
+        pending = PendingSend(email, identity_id, draft_id, in_reply_to_id, forwarded_id, seconds)
+        self.pending_sends.append(pending)
+        pending.start(self.toast_overlay.add_toast, self._send_pending, self._undo_pending)
+
+    def _send_pending(self, pending: PendingSend) -> None:
+        self.pending_sends.remove(pending)
+        self._sends_in_flight += 1
+
+        def done(_new_id: str) -> None:
+            self._toast("Message sent")
+            self._send_finished()
+
+        def failed(message: str) -> None:
+            toast = Adw.Toast(title=f"Could not send: {message}", timeout=0, button_label="Open draft",
+                              priority=Adw.ToastPriority.HIGH)
+            toast.connect("button-clicked", lambda *_: self._compose_from("draft", pending.draft_id))
+            self.toast_overlay.add_toast(toast)
+            self._send_finished()
+
+        self.engine.send_email(pending.email, pending.identity_id, pending.draft_id, done, failed,
+                               in_reply_to_id=pending.in_reply_to_id, forwarded_id=pending.forwarded_id)
+
+    def _send_finished(self) -> None:
+        self._sends_in_flight -= 1
+        if not self._sends_in_flight and not self.pending_sends and self._after_sends is not None:
+            after, self._after_sends = self._after_sends, None
+            after()
+
+    def _undo_pending(self, pending: PendingSend) -> None:
+        self.pending_sends.remove(pending)
+        self._compose_from("draft", pending.draft_id)
+
+    def flush_sends(self, then: Callable[[], None]) -> bool:
+        """Send every waiting message now; True when `then` will run once they are out."""
+        if not self.pending_sends and not self._sends_in_flight:
+            return False
+        self._after_sends = then
+        for pending in list(self.pending_sends):
+            pending.send_now()
+        return True
+
     def _compose_from(self, mode: str, email_id: str | None) -> None:
         if not email_id:
             return
@@ -902,7 +953,10 @@ class MainWindow(Adw.ApplicationWindow):
             win.close()
         for win in list(self.compose_windows):
             win.close()
-        return bool(self.compose_windows)
+        if self.compose_windows:
+            return True
+        # Messages still counting down go out first; the window closes when they are sent.
+        return self.flush_sends(self.close)
 
     def shutdown(self) -> None:
         for w in list(self.compose_windows):

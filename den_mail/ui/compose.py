@@ -570,6 +570,17 @@ class ComposeWindow(Adw.Window):
             dlg.add_response("ok", "OK")
             dlg.present(self)
 
+        seconds = int(self.config.get("undo_send_seconds", 10)) if self.config else 0
+        schedule = getattr(self.parent_window, "schedule_send", None)
+        if seconds > 0 and schedule is not None:
+            # Undo send (#7): park the message as a draft and let the main window count down.
+            def saved(draft_id: str) -> None:
+                self.dirty = False
+                schedule(email, ident.id, draft_id, reply_id, fwd_id, seconds)
+                self.destroy()
+
+            self.engine.save_draft(email, self.draft_id, saved, failed)
+            return
         self.engine.send_email(email, ident.id, self.draft_id, done, failed, in_reply_to_id=reply_id,
                                forwarded_id=fwd_id)
 

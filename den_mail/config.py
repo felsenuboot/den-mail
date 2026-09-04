@@ -20,6 +20,7 @@ DEFAULTS: dict[str, Any] = {
     "load_remote_images": "ask",  # "ask" | "always" | "never"
     "open_links_new_window": False,  # start the browser with its new-window switch (see launch.py)
     "mark_read_on_open": True,
+    "undo_send_seconds": 10,  # how long a sent message waits with an Undo toast; 0 sends at once
     "group_by_sender": "off",  # "off" | "sender" | "domain": a row per sender/organisation above its conversations
     "notify_new_mail": True,
     "poll_interval_seconds": 300,

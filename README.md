@@ -25,7 +25,8 @@ you own in the From field.
 - **Fast and offline.** A local SQLite cache makes folder switches instant and
   lets you read without a connection. Changes arrive over Fastmail's push stream.
 - **Undo for everything.** Archive, delete, spam, flag, read, label and move
-  happen immediately and can be undone from the toast.
+  happen immediately and can be undone from the toast. A sent message waits a
+  few seconds (your choice, in Preferences) before it really goes out.
 - **Safe HTML.** Scripts stripped, remote content blocked until you allow it,
   dark mode that adapts light-coloured mail (with a per-message switch back).
 - **All your identities.** Send from any alias or wildcard address, star the

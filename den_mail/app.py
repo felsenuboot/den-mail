@@ -35,7 +35,7 @@ class FastmailApp(Adw.Application):
         if win is not None:
             for w in list(win.compose_windows):
                 w.close()  # may show the "Save draft?" dialog and stay open
-            if win.compose_windows:
+            if win.compose_windows or win.flush_sends(self.quit):
                 return
         self.quit()
 

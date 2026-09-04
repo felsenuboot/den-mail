@@ -7,6 +7,7 @@ from collections.abc import Callable
 from gi.repository import Adw, Gtk
 
 REMOTE_OPTIONS = ["ask", "always", "never"]
+UNDO_SEND_OPTIONS = [0, 5, 10, 20, 30]
 SCHEME_OPTIONS = ["system", "light", "dark"]
 
 
@@ -56,6 +57,12 @@ class PreferencesDialog(Adw.PreferencesDialog):
         if on_manage_identities is not None:
             identities.connect("activated", lambda *_: on_manage_identities())
         composing.add(identities)
+        undo = Adw.ComboRow(title="Undo send", subtitle="How long a message waits before it really goes out",
+                            model=Gtk.StringList.new(["Off", "5 seconds", "10 seconds", "20 seconds", "30 seconds"]))
+        current = int(config.get("undo_send_seconds", 10))
+        undo.set_selected(UNDO_SEND_OPTIONS.index(current) if current in UNDO_SEND_OPTIONS else 2)
+        undo.connect("notify::selected", lambda r, _p: config.set("undo_send_seconds", UNDO_SEND_OPTIONS[r.get_selected()]))
+        composing.add(undo)
         page.add(composing)
 
         appearance = Adw.PreferencesGroup(title="Appearance")

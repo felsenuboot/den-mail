@@ -9,6 +9,10 @@ Commands:
   search <text>        type into the search box
   action <name>        activate a window action, e.g. win.archive
   compose              open a blank compose window
+  compose-fill <to> <subject>   address and title the newest compose window
+  compose-send         press Send in the newest compose window
+  undo-send            press Undo on the newest pending send
+  config <key> <json>  set a preference for this run
   masked | identities | preferences   open that dialog
   resize <w> <h>       resize the main window
   unread-filter on|off   toggle the unread filter button
@@ -88,6 +92,20 @@ def _run(app, steps: list[str]) -> bool:
             win.threadlist.scope.set_selected(1 if arg.strip() == "all" else 0)
         elif cmd == "compose" and win:
             win.compose("new")
+        elif cmd == "compose-fill" and win and win.compose_windows:
+            to, _, subject = arg.partition(" ")
+            cw = win.compose_windows[-1]
+            cw.to.set_text(to)
+            cw.subject.set_text(subject)
+        elif cmd == "compose-send" and win and win.compose_windows:
+            win.compose_windows[-1].send()
+        elif cmd == "undo-send" and win and win.pending_sends:
+            win.pending_sends[-1].undo()
+        elif cmd == "config" and win:
+            import json
+
+            key, _, value = arg.partition(" ")
+            app.config.set(key, json.loads(value))
         elif cmd == "dump-compose" and win and win.compose_windows:
             cw = win.compose_windows[-1]
             log.info("compose From entries: %s (selected: %s)", cw._identity_strings(), cw._identity().display)
@@ -238,12 +256,13 @@ def _log_state(win) -> None:
     focus = " < ".join(chain) if chain else None
     sidebar = win.sidebar.selected
     log.info("state: mailbox=%s sidebar=%s main.show_content=%s inner.show_content=%s search=%r search_mode=%s "
-             "unread_only=%s items=%d focus=%s selected=%s compose=%d threads=%d",
+             "unread_only=%s items=%d focus=%s selected=%s compose=%d threads=%d pending=%s",
              win.current_mailbox.name if win.current_mailbox else None, sidebar.name if sidebar else None,
              win.main.get_show_content(), win.inner.get_show_content(), win.threadlist.search_entry.get_text(),
              win.threadlist.search_bar.get_search_mode(), win.threadlist.unread_only, win.model.get_n_items(), focus,
              [(t.subject, "flagged" if t.flagged else "-", "unread" if t.unread else "-") for t in win.selected],
-             len(win.compose_windows), len(win.thread_windows))
+             len(win.compose_windows), len(win.thread_windows),
+             [(p.remaining, p.toast.get_title() if p.toast else None) for p in win.pending_sends])
 
 
 def _log_row_position(win, name: str) -> None:
