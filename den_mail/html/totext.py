@@ -14,13 +14,15 @@ BLOCK = {"p", "div", "section", "article", "header", "footer", "aside", "main", 
          "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre", "hr", "br", "dd", "dt", "dl", "address",
          "figure", "figcaption", "center", "form", "fieldset"}
 SKIP = {"script", "style", "head", "title", "noscript", "template", "iframe", "object", "svg"}
-WS_RE = re.compile(r"[ \t\r\n\f\v]+")
+WS_RE = re.compile(r"[ \t\r\n\f\v\xa0]+")  # &nbsp; is a spacer in HTML mail, not a character to keep
 
 
 class _Converter(HTMLParser):
-    def __init__(self, markup: bool):
+    def __init__(self, markup: bool, link_targets: bool = True):
         super().__init__(convert_charrefs=True)
         self.markup = markup
+        self.link_targets = link_targets
+        self.link_start = 0  # len(parts) when the current <a> opened
         self.parts: list[str] = []
         self.skip = 0
         self.pre = 0
@@ -108,6 +110,7 @@ class _Converter(HTMLParser):
                     self.inline.append("a")
         elif tag == "a":
             self.href = (a.get("href") or "").strip()
+            self.link_start = len(self.parts)
         elif tag == "img":
             alt = (a.get("alt") or "").strip()
             if alt:
@@ -152,10 +155,11 @@ class _Converter(HTMLParser):
         elif tag == "a":
             if self.markup:
                 self._close("a")
-            elif self.href:
-                # show the link target when the text differs from it
-                text_tail = "".join(self.parts[-2:]).strip()
-                if self.href not in text_tail and not self.href.lower().startswith("mailto:"):
+            elif self.href and self.link_targets:
+                # show the link target when the link has text of its own that differs from it
+                # (an image link without alt text would leave a bare tracking URL)
+                link_text = "".join(self.parts[self.link_start:]).strip()
+                if link_text and self.href not in link_text and not self.href.lower().startswith("mailto:"):
                     self._emit(f" <{self.href}>")
             self.href = None
         elif self.markup:
@@ -183,13 +187,14 @@ class _Converter(HTMLParser):
         while self.inline:
             self.parts.append(f"</{self.inline.pop()}>")
         text = "".join(self.parts)
-        text = re.sub(r"[ \t]+\n", "\n", text)
+        text = re.sub(r"[ \t\xa0]+\n", "\n", text)
         text = re.sub(r"\n{3,}", "\n\n", text)
         return text.strip()
 
 
-def html_to_text(html: str) -> str:
-    conv = _Converter(markup=False)
+def html_to_text(html: str, link_targets: bool = True) -> str:
+    """Plain text of an HTML body; `link_targets` appends " <url>" after links whose text is not the URL."""
+    conv = _Converter(markup=False, link_targets=link_targets)
     try:
         conv.feed(html)
         conv.close()

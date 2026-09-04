@@ -1,4 +1,5 @@
-from den_mail.html.compose import forward_subject, parse_address_list, quote_text, reply_subject, text_to_html
+from den_mail.html.compose import (email_body_text, forward_subject, parse_address_list, quote_text, reply_subject,
+                                   text_to_html)
 from den_mail.html.sanitize import BLOCKED_PIXEL, sanitize_html
 from den_mail.html.totext import html_to_markup, html_to_text, quote_layout, split_quoted_text
 
@@ -26,6 +27,31 @@ def test_html_to_text_handles_structure():
     assert "> quoted" in text and "> line" in text
     assert "  code\n  more" in text
     assert "p{}" not in text
+
+
+def test_html_to_text_link_targets_and_spacers():
+    html = ("<p>Read <a href='https://e.x/a'>this</a></p><p><a href='https://track.x/?q=1'><img src='x.png'></a></p>"
+            "<table><tr><td>&nbsp;</td></tr><tr><td>&nbsp;</td></tr></table><p>Done&nbsp;now</p>")
+    text = html_to_text(html)
+    assert "Read this <https://e.x/a>" in text
+    assert "track.x" not in text  # an image link without text is not worth a bare URL
+    assert "\xa0" not in text and "Done now" in text
+    assert html_to_text(html, link_targets=False) == "Read this\n\nDone now"
+
+
+def test_reply_quotes_the_html_when_the_text_part_is_a_wall_of_links():
+    poor = "\n\n \n\nhttps://click.x/?qs=1\nView in browser\n\n\n\nhttps://click.x/?qs=2\n \n\n\n\nOffers\n\n\n\n"
+    html = "<p><a href='https://click.x/?qs=1'>View in browser</a></p><table><tr><td>Booking</td><td>1212</td></tr>" \
+           "</table><p>Thanks for booking!</p><p><a href='https://click.x/?qs=2'><img src='l.png'></a></p>"
+    email = {"textBody": [{"partId": "t"}], "htmlBody": [{"partId": "h"}],
+             "bodyValues": {"t": {"value": poor}, "h": {"value": html}}}
+    assert email_body_text(email) == poor  # editing keeps the part as it is
+    quoted = email_body_text(email, quoting=True)
+    assert quoted == "View in browser\n\nBooking  1212\n\nThanks for booking!"
+    assert quote_text("a\n\n\n \nb\n\n") == "> a\n>\n> b"
+    good = {"textBody": [{"partId": "t"}], "htmlBody": [{"partId": "h"}],
+            "bodyValues": {"t": {"value": "Hi,\n\nsee https://e.x/doc\n\nBest"}, "h": {"value": html}}}
+    assert email_body_text(good, quoting=True) == "Hi,\n\nsee https://e.x/doc\n\nBest"
 
 
 def test_html_to_markup_is_balanced_and_escaped():
