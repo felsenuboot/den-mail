@@ -86,7 +86,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: pacman -Syu --noconfirm --needed cage grim dbus python python-gobject gtk4 libadwaita libsecret gdk-pixbuf2 mesa ttf-dejavu noto-fonts-cjk
+      - run: pacman -Syu --noconfirm --needed cage grim dbus python python-gobject python-cairo gtk4 libadwaita libsecret gdk-pixbuf2 mesa ttf-dejavu noto-fonts-cjk
       - run: dbus-run-session -- tools/ui_smoke.sh screenshots
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
