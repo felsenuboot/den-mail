@@ -97,7 +97,10 @@ def prompt_sender_rule(parent: Gtk.Widget, tree: MailboxTree, config, sender: st
         extra = Adw.PreferencesGroup()
         extra.add(apply_now)
         box.append(extra)
-    dlg = Adw.AlertDialog(heading="Always for this sender", body="Runs while Den Mail is open, on mail that lands in the Inbox.")
+    dlg = Adw.AlertDialog(heading="Always for this sender",
+                          body="A Den Mail rule: runs on this computer while the app is open, on mail that lands in the "
+                               "Inbox. For a rule that runs on the server for every device, use Fastmail's settings "
+                               "(Rules… in the main menu links there).")
     dlg.set_extra_child(box)
     dlg.add_response("cancel", "Cancel")
     dlg.add_response("ok", "Add rule")
@@ -150,7 +153,11 @@ class RulesDialog(Adw.Dialog):
         view = Adw.ToolbarView()
         view.add_top_bar(Adw.HeaderBar())
         page = Adw.PreferencesPage()
-        self.list_group = Adw.PreferencesGroup(title="Rules", description="Run while Den Mail is open, on mail that lands in the Inbox.")
+        self.list_group = Adw.PreferencesGroup(
+            title="Rules in Den Mail",
+            description=("These rules belong to Den Mail: they run on this computer while the app is open, on mail "
+                         "that lands in the Inbox. They are not the rules in your Fastmail settings, which run on "
+                         "the server for every device and do not appear here (see below)."))
         page.add(self.list_group)
         self.empty = Adw.ActionRow(title="No rules yet", subtitle="Right-click a conversation and choose “Always for this sender…”, or add one below.")
         self.empty.add_css_class("dim-label")
@@ -163,11 +170,13 @@ class RulesDialog(Adw.Dialog):
         self.form.group.add(add)
         page.add(self.form.group)
 
-        server = Adw.PreferencesGroup(title="On the server")
+        server = Adw.PreferencesGroup(
+            title="Rules in Fastmail",
+            description="Made in Fastmail's settings; they run on the server, whether Den Mail is open or not, and for every app.")
         session = getattr(engine.client, "session", None)
         sieve = bool(session and rules.CAP_SIEVE in (session.capabilities or {}))
-        link = Adw.ActionRow(title="Fastmail rules", activatable=True,
-                             subtitle="Run whether Den Mail is open or not; opens Fastmail's settings in the browser"
+        link = Adw.ActionRow(title="Open Fastmail's rules settings", activatable=True,
+                             subtitle="In the browser; for a rule that should work on the server, make it there"
                                       + (". This account advertises JMAP Sieve, so they could be managed here later" if sieve else ""))
         link.add_suffix(Gtk.Image(icon_name="external-link-symbolic"))
         link.connect("activated", lambda *_: open_uri(rules.FASTMAIL_RULES_URL, self.get_root()))
