@@ -346,6 +346,10 @@ class ThreadList(Adw.NavigationPage):
                                       GObject.BindingFlags.BIDIRECTIONAL | GObject.BindingFlags.SYNC_CREATE)
         self.search_bar.connect("notify::search-mode-enabled", self._on_search_mode)
         view.add_top_bar(self.search_bar)
+        # A hint for the list on screen: what a view is for, or a tool worth knowing about.
+        self.banner = Adw.Banner(revealed=False)
+        self._banner_handler: int | None = None
+        view.add_top_bar(self.banner)
 
         self.selection = Gtk.MultiSelection(model=model)
         self.selection.connect("selection-changed", self._on_selection_changed)
@@ -853,6 +857,21 @@ class ThreadList(Adw.NavigationPage):
         return bitset.get_minimum() if not bitset.is_empty() else -1
 
     # ------------------------------------------------------------ misc
+
+    def set_banner(self, title: str | None, button: str | None = None,
+                   on_click: Callable[[], None] | None = None) -> None:
+        """Show a hint above the list, with an optional button; None hides it."""
+        if self._banner_handler is not None:
+            self.banner.disconnect(self._banner_handler)
+            self._banner_handler = None
+        if not title:
+            self.banner.set_revealed(False)
+            return
+        self.banner.set_title(title)
+        self.banner.set_button_label(button or "")
+        if on_click is not None:
+            self._banner_handler = self.banner.connect("button-clicked", lambda *_: on_click())
+        self.banner.set_revealed(True)
 
     def set_scope_label(self, label: str) -> None:
         """What the narrow search scope is called: "This mailbox", or "This view" (#19)."""

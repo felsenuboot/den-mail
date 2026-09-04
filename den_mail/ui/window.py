@@ -80,6 +80,10 @@ class MainWindow(Adw.ApplicationWindow):
         self.avatars = AvatarService(config)
         self.tree.color_overrides = {k: int(v) for k, v in (config.get("label_colors", {}) or {}).items()}
         self.sort = dict(config.get("sort", {"key": "newest", "flagged_first": False, "unread_first": False}))
+        # The Inbox tip about Clean up shows for the first few starts, then leaves the user alone.
+        self._tip_starts = int(config.get("cleanup_tip_starts", 0)) + 1
+        if not config.get("cleanup_opened") and self._tip_starts <= 4:
+            config.set("cleanup_tip_starts", self._tip_starts)
 
         self.toast_overlay = Adw.ToastOverlay()
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
@@ -208,12 +212,14 @@ class MainWindow(Adw.ApplicationWindow):
     def _build_main(self) -> None:
         primary = Gio.Menu()
         section = Gio.Menu()
-        section.append("Newsletters…", "win.newsletters")
         section.append("Clean up…", "win.cleanup")
+        section.append("Newsletters…", "win.newsletters")
         section.append("Rules…", "win.rules")
+        primary.append_section("Inbox", section)
+        section = Gio.Menu()
         section.append("Masked Email…", "win.masked")
         section.append("Identities & Aliases…", "win.identities")
-        primary.append_section(None, section)
+        primary.append_section("Account", section)
         section = Gio.Menu()
         section.append("Preferences", "win.preferences")
         section.append("Keyboard Shortcuts", "win.shortcuts")
@@ -655,6 +661,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.threadlist.search_bar.set_search_mode(False)
         self.threadlist.set_scope_label("This view" if mb.is_view else "This mailbox")
         self._load_mailbox(mb)
+        self._update_banner()
         if self.main.get_collapsed():
             self.main.set_show_content(True)
 
@@ -767,7 +774,9 @@ class MainWindow(Adw.ApplicationWindow):
         if not text and scope == "mailbox":
             if self.current_mailbox:
                 self._load_mailbox(self.current_mailbox)
+                self._update_banner()
             return
+        self._update_banner()
         if scope == "mailbox" and self.current_mailbox is not None and self.current_mailbox.is_view:
             self._load_view(self.current_mailbox, text)   # the view is local, so is a search within it
             return
@@ -1200,20 +1209,53 @@ class MainWindow(Adw.ApplicationWindow):
 
     # ------------------------------------------------------------ dialogs
 
-    def show_preferences(self) -> None:
-        PreferencesDialog(self.config, self.client.session if self.client else None,
+    def show_preferences(self, page: str | None = None) -> None:
+        self.preferences_dialog = PreferencesDialog(self.config, self.client.session if self.client else None,
                           on_sign_out=lambda: confirm(self, "Sign out?", "The local cache will be removed.",
                                                       "Sign out", True, lambda: self.sign_out(clear=True)),
                           on_clear_cache=lambda: self.engine.enqueue(0, self.engine.reset_cache, "reset"),
                           on_manage_identities=lambda: IdentitiesDialog(self.engine, self.db, self.config).present(self),
                           on_sidebar_views=self.set_sidebar_views,
                           on_screener=self.set_screener,
-                          ).present(self)
+                          on_open=lambda name: self.lookup_action(name).activate(None),
+                          rules_count=len(rules.load_rules(self.config)),
+                          )
+        if page:
+            self.preferences_dialog.set_visible_page_name(page)
+        self.preferences_dialog.present(self)
 
-    def show_cleanup(self) -> None:
+    def show_cleanup(self, category: str | None = None) -> None:
+        if not self.config.get("cleanup_opened"):
+            self.config.set("cleanup_opened", True)
+            self._update_banner()
         self.cleanup_dialog = CleanupDialog(self.engine, self.db, self.config, self.tree, self._after_action,
-                                            self.open_thread_by_id)
+                                            self.open_thread_by_id, category=category)
         self.cleanup_dialog.present(self)
+
+    def _update_banner(self) -> None:
+        """The hint above the list: what a view is for, or, in the Inbox a few times, that Clean up exists."""
+        mb = self.current_mailbox
+        if mb is None or self.threadlist.search_active:
+            self.threadlist.set_banner(None)
+            return
+        if mb.is_view:
+            view = views.get_view(mb.id)
+            if mb.id == views.SCREENER:
+                self.threadlist.set_banner("Senders you have never heard from wait here. Open a conversation to let "
+                                           "them through or screen them out.")
+            elif view is not None and (view.category or mb.id == views.NEVER_READ):
+                self.threadlist.set_banner(f"Tired of some of these? Clean up ranks the senders behind {view.name} "
+                                           "and archives, deletes or unsubscribes in bulk.", "Clean up…",
+                                           lambda: self.show_cleanup(view.category))
+            else:
+                self.threadlist.set_banner(None)
+            return
+        if mb.role == ROLE_INBOX and not self.config.get("cleanup_opened") and self._tip_starts <= 3:
+            self.threadlist.set_banner("New: Clean up ranks the senders you never read; archive, delete or "
+                                       "unsubscribe in bulk. More under Inbox in the main menu.",
+                                       "Clean up…", lambda: self.show_cleanup())
+            return
+        self.threadlist.set_banner(None)
 
     def show_shortcuts(self) -> None:
         dlg = Adw.ShortcutsDialog()

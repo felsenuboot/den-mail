@@ -135,6 +135,11 @@ class Sidebar(Adw.NavigationPage):
         self.status.add_css_class("dim-label")
         self.status.add_css_class("caption")
         bottom.append(self.status)
+        cleanup = Gtk.Button(icon_name="fm-broom-symbolic", tooltip_text="Clean up: senders ranked by how pointless "
+                             "their mail looks, with bulk archive, delete and unsubscribe")
+        cleanup.add_css_class("flat")
+        cleanup.set_action_name("win.cleanup")
+        bottom.append(cleanup)
         new_label = Gtk.Button(icon_name="fm-tag-new-symbolic", tooltip_text="New label")
         new_label.add_css_class("flat")
         new_label.set_action_name("sidebar.new-label")

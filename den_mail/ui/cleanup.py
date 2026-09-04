@@ -60,7 +60,7 @@ class SenderRow(Adw.ExpanderRow):
 
 class CleanupDialog(Adw.Dialog):
     def __init__(self, engine, db, config, tree, on_action: Callable[[UndoRecord | None], None] | None = None,
-                 on_open_thread: Callable[[str], None] | None = None):
+                 on_open_thread: Callable[[str], None] | None = None, category: str | None = None):
         super().__init__(title="Clean up", content_width=720, content_height=720)
         self.engine = engine
         self.db = db
@@ -82,6 +82,8 @@ class CleanupDialog(Adw.Dialog):
         view.add_top_bar(header)
         filters = Gtk.Box(spacing=6, margin_start=12, margin_end=12, margin_bottom=6)
         self.category = Gtk.DropDown.new_from_strings(["All categories", *(CATEGORY_NAMES[c] for c in CATEGORIES)])
+        if category in CATEGORIES:
+            self.category.set_selected(CATEGORIES.index(category) + 1)
         self.category.connect("notify::selected", lambda *_: self.reload())
         filters.append(self.category)
         self.sort = Gtk.DropDown.new_from_strings(SORT_LABELS)

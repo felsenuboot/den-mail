@@ -38,7 +38,7 @@ shot rules "sleep 3; sender-rule digest@lists.example.com" 8
 shot cleanup "sleep 4; cleanup" 9
 # the screener needs a first-time sender to arrive while the app runs: deliver one from the fake
 # server (its deliver() method) about 9 seconds in, with {"screener": true} in the config
-shot preferences "sleep 3; preferences" 8
+shot preferences "sleep 3; preferences inbox" 8
 # the theme split: light above the diagonal, dark below it
 magick "$HERE/inbox-light.png" \( "$HERE/inbox-dark.png" \( -size 1280x720 xc:black -fill white -draw "polygon 1280,0 1280,720 0,720" \) -alpha off -compose copy_opacity -composite \) -compose over -composite "$HERE/theme-split.png" && echo "made theme-split"
 rm -f "$HERE/inbox-light.png"
