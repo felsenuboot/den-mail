@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 import os
 import threading
-import urllib.parse
 from collections.abc import Callable
 from datetime import UTC, datetime
 
