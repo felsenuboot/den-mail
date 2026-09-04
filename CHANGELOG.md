@@ -7,6 +7,7 @@ Unreleased changes gather at the top until they are tagged.
 ## [Unreleased]
 
 ### Features
+- CI runs the UI headlessly once per autopilot script and keeps the screenshots as an artifact (#11)
 - Packaging: a Flatpak manifest and a workflow that attaches a single-file bundle to every release, an AUR PKGBUILD, AppStream metadata, and a per-distribution dependency table in the README (#16)
 
 ## [0.2.0] - 2026-09-04
