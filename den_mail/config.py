@@ -30,6 +30,7 @@ DEFAULTS: dict[str, Any] = {
     "screener": False,  # first-time senders wait in the Screener view until let through (#24)
     "cleanup_tip_starts": 0,  # how often the Inbox has shown the "Clean up" tip; it stops after a few starts
     "cleanup_opened": False,  # the tip also stops once Clean up has been opened
+    "banners_dismissed": [],  # banners closed with their X, by name ("cleanup", "screener"); they stay away (#84)
     "tip_index": 0,  # which tip the empty conversation pane shows; advances with every start
     "lock_enabled": False,  # the lock screen (#28)
     "lock_idle_minutes": 0,  # lock after this long without activity; 0 = never
