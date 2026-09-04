@@ -110,8 +110,8 @@ each, medians with the best run in brackets. den-mail is a88f9f9 on Python
 | open a message: body painted | **66** (64) | 177 (169) | 136 (127) | 154 (142) |
 | memory, PSS with the message open, MiB | **341** (340) | 381 (376) | 642 (641) | 511 (509) |
 | memory, RSS summed over the tree, MiB | 1028 | 1110 | 994 | 1310 |
-| CPU seconds for the scenario | CPU_DEN_WARM | CPU_DEN_COLD | 4.6 | 3.0 |
-| CPU over 20 s at rest, % | IDLE_DEN_WARM | IDLE_DEN_COLD | 2.8 | 0.6 |
+| CPU seconds for the scenario | **2.3** | 4.0 | 4.6 | 3.0 |
+| CPU over 20 s at rest, % | **0.1** | 0.4 | 2.8 | 0.6 |
 
 An earlier round the same morning, while the machine was in use, put den-mail's
 folder switch at 606 ms and the first paint at 302 ms; both were den-mail's own
@@ -135,5 +135,9 @@ Reading the numbers:
   row shows why per-process sums mislead for multi-process apps. den-mail is
   Python plus WebKit's web and network processes; the app is Electron, the
   web client is Chromium with one tab.
+- CPU: the scenario costs den-mail 2.3 CPU seconds warm (the cold run's 4 s
+  is the first sync), the web client 3.1 and the Electron app 4.6. At rest
+  with a message open den-mail uses 0.1 % of a core, the web client 0.6 %,
+  the app 2.8 %.
 - The "listed" moments of the web client and the app are DOM states a few
   frames before the paint, so their numbers are, if anything, flattering.
