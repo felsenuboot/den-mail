@@ -693,11 +693,12 @@ class SyncEngine(GObject.Object):
         if not inbox or not self.config.get("screener", False):
             return set()
         out: set[str] = set()
+        batch = {e["id"] for e in created}
         for e in created:
             if not (e.get("mailboxIds") or {}).get(inbox):
                 continue
             addr = client_rules.sender_of(e)
-            if addr and addr not in out and not self.db.knows_sender(addr):
+            if addr and addr not in out and not self.db.knows_sender(addr, batch):
                 out.add(addr)
         return out
 
