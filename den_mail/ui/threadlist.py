@@ -22,13 +22,14 @@ class ThreadRow(Gtk.Box):
         self.avatar_key: str | None = None
         self.list_item: Gtk.ListItem | None = None
         self.add_css_class("thread-row")
-        self.set_margin_top(6)
-        self.set_margin_bottom(6)
-        self.set_margin_start(4)
-        self.set_margin_end(4)
         self.check = Gtk.CheckButton(visible=False, valign=Gtk.Align.CENTER, can_focus=False)
         self.check.add_css_class("selection-check")
         self.append(self.check)
+        # The unread dot has a column of its own, so the text lines share one left edge.
+        self.dot = Gtk.Image(icon_name="media-record-symbolic", pixel_size=8, valign=Gtk.Align.START,
+                             margin_top=6)
+        self.dot.add_css_class("unread-dot")
+        self.append(self.dot)
         self.avatar = avatar("?", 36)
         self.avatar.set_valign(Gtk.Align.START)
         self.append(self.avatar)
@@ -36,10 +37,6 @@ class ThreadRow(Gtk.Box):
         self.append(col)
 
         line1 = Gtk.Box(spacing=6)
-        self.dot = Gtk.Image(icon_name="media-record-symbolic", pixel_size=8)
-        self.dot.add_css_class("unread-dot")
-        self.dot.set_valign(Gtk.Align.CENTER)
-        line1.append(self.dot)
         self.participants = Gtk.Label(xalign=0, ellipsize=3, hexpand=True)
         self.participants.add_css_class("participants")
         line1.append(self.participants)
@@ -53,11 +50,7 @@ class ThreadRow(Gtk.Box):
         col.append(line1)
 
         line2 = Gtk.Box(spacing=6)
-        # in a sender group line 1 is dropped, so the dot, count and date move here
-        self.dot2 = Gtk.Image(icon_name="media-record-symbolic", pixel_size=8, visible=False)
-        self.dot2.add_css_class("unread-dot")
-        self.dot2.set_valign(Gtk.Align.CENTER)
-        line2.append(self.dot2)
+        # in a sender group line 1 is dropped, so the count and date move here
         self.subject = Gtk.Label(xalign=0, ellipsize=3, hexpand=True)
         self.subject.add_css_class("subject")
         line2.append(self.subject)
@@ -91,6 +84,13 @@ class ThreadRow(Gtk.Box):
         self.obj: ThreadObject | None = None
         self._handlers: list[int] = []
 
+    def set_last_in_card(self, last: bool) -> None:
+        """The bottom row of a sender card gets the rounded corners."""
+        if last:
+            self.add_css_class("card-last")
+        else:
+            self.remove_css_class("card-last")
+
     def set_compact(self, compact: bool) -> None:
         """Inside a sender group the sender is already in the header: drop the
         avatar and sender line, indent, keep only what is specific to the thread."""
@@ -98,7 +98,7 @@ class ThreadRow(Gtk.Box):
             return
         self.compact = compact
         self.avatar.set_visible(not compact)
-        for w in (self.dot2, self.count2, self.date2):
+        for w in (self.count2, self.date2):
             w.set_visible(compact)
         if compact:
             self.add_css_class("in-group")
@@ -141,16 +141,13 @@ class ThreadRow(Gtk.Box):
             self.date2.set_label(o.date_text)
             self.count2.set_label(str(o.count))
             self.count2.set_visible(o.count > 1)
-            self.dot2.set_opacity(1.0 if o.unread else 0.0)
             # the sender line only stays when the thread has other participants
             self.line1.set_visible(o.is_draft or o.participants != o.sender_name)
-            self.dot.set_visible(False)
             self.date.set_visible(False)
             self.count.set_visible(False)
         else:
             self.line1.set_visible(True)
-            for w in (self.dot, self.date):
-                w.set_visible(True)
+            self.date.set_visible(True)
         if o.labels_text != self._labels_text:
             self._labels_text = o.labels_text
             while child := self.labels.get_first_child():
@@ -191,12 +188,7 @@ class SenderHeader(Gtk.Box):
         self.check = Gtk.CheckButton(visible=False, valign=Gtk.Align.CENTER, can_focus=False)
         self.check.add_css_class("selection-check")
         self.append(self.check)
-        self.expander = Gtk.Button(icon_name="pan-down-symbolic", has_frame=False, tooltip_text="Fold this sender")
-        self.expander.add_css_class("expander")
-        self.expander.set_valign(Gtk.Align.CENTER)
-        self.expander.connect("clicked", lambda *_: self.group is not None and self.on_toggle(self.group))
-        self.append(self.expander)
-        self.avatar = avatar("?", 28)
+        self.avatar = avatar("?", 32)
         self.append(self.avatar)
         self.name = Gtk.Label(xalign=0, ellipsize=3, hexpand=True)
         self.name.add_css_class("heading")
@@ -208,6 +200,13 @@ class SenderHeader(Gtk.Box):
         self.count = Gtk.Label()
         self.count.add_css_class("count-chip")
         self.append(self.count)
+        # The fold arrow sits at the trailing edge, like the arrow of an expander row.
+        self.expander = Gtk.Button(icon_name="pan-down-symbolic", has_frame=False, tooltip_text="Fold this sender")
+        self.expander.add_css_class("expander")
+        self.expander.add_css_class("flat")
+        self.expander.set_valign(Gtk.Align.CENTER)
+        self.expander.connect("clicked", lambda *_: self.group is not None and self.on_toggle(self.group))
+        self.append(self.expander)
 
     def bind(self, group: SenderGroup) -> None:
         self.unbind()
@@ -240,6 +239,11 @@ class SenderHeader(Gtk.Box):
             self.name.remove_css_class("unread")
         self.expander.set_icon_name("pan-end-symbolic" if g.collapsed else "pan-down-symbolic")
         self.expander.set_tooltip_text("Unfold this sender" if g.collapsed else "Fold this sender")
+        # A folded group is a card of its own; an open one is the top of its card.
+        if g.collapsed:
+            self.add_css_class("card-only")
+        else:
+            self.remove_css_class("card-only")
         self.refresh_avatar()
 
     def refresh_avatar(self) -> None:
@@ -327,7 +331,7 @@ class ThreadList(Adw.NavigationPage):
         self._selected_groups: set[SenderGroup] = set()
         self._syncing_selection = False
         self.listview.add_css_class("thread-list")
-        self.listview.add_css_class("navigation-sidebar")
+        self.listview.add_css_class("separators")
         self.listview.connect("activate", self._on_activate)
         right = Gtk.GestureClick(button=3)
         right.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
@@ -589,6 +593,7 @@ class ThreadList(Adw.NavigationPage):
             row = stack.get_child_by_name("thread")
             row.set_compact(self.model.grouped)
             row.bind(item)
+            self._sync_card_end(row, list_item.get_position())
             stack.set_visible_child(row)
             self._rows.add(row)
             w = row
@@ -800,9 +805,26 @@ class ThreadList(Adw.NavigationPage):
         # its anchor row at the top edge, which hides that row's section header.
         self._want_top = True
 
+    def _sync_card_end(self, row: ThreadRow, position: int) -> None:
+        nxt = self.model.get_item(position + 1)
+        row.set_last_in_card(self.model.grouped and (nxt is None or isinstance(nxt, SenderGroup)))
+
+    def _sync_list_style(self) -> None:
+        """Grouped: one boxed-list card per sender. Flat: a content list with separators."""
+        grouped = self.model.grouped
+        for css, on in (("grouped", grouped), ("separators", not grouped)):
+            if on:
+                self.listview.add_css_class(css)
+            else:
+                self.listview.remove_css_class(css)
+        for row in self._rows:  # rows GTK did not rebind may have become the end of a card
+            if row.list_item is not None:
+                self._sync_card_end(row, row.list_item.get_position())
+
     def _on_items_changed(self, model, position: int, removed: int, added: int) -> None:
         self._update_empty()
         self._sync_fold_button()
+        self._sync_list_style()
         if self._want_top and added and model.get_n_items() == added:
             self._want_top = False
             GLib.idle_add(lambda: self.scrolled.get_vadjustment().set_value(0) or False)

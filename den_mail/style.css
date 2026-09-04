@@ -21,41 +21,76 @@
   border-radius: 6px;
 }
 
-/* Thread list */
-.thread-list row {
-  padding: 2px 6px;
+/* Thread list. Flat: a content list on one grid, rows separated by hairlines.
+   Grouped: one boxed-list card per sender (HIG "boxed lists"): a header row, the
+   conversations as rows with separators, 12px corners, 12px around the cards. */
+listview.thread-list > row {
+  padding: 0;
 }
-.sender-header {
-  padding: 6px 10px 6px 2px;
-  margin: 8px 0 0 0;
-  border-radius: 8px;
-  background: alpha(currentColor, 0.06);
+listview.thread-list.grouped {
+  background: @window_bg_color;
 }
-.thread-row.in-group {
-  margin-left: 30px;
-  margin-top: 3px;
-  margin-bottom: 3px;
+listview.thread-list.grouped > row {
+  padding: 0 12px;
+  background: none;
 }
-.sender-header .heading.unread {
-  font-weight: 700;
-}
-.sender-header .expander {
-  min-width: 20px;
-  min-height: 20px;
-  padding: 2px;
-}
-.thread-row .participants {
-  font-weight: 500;
+.thread-row {
+  padding: 8px 12px;
 }
 .thread-row .participants.unread,
 .thread-row .subject.unread {
   font-weight: 700;
 }
-.thread-row .subject {
-  font-size: 0.95em;
-}
 .thread-row .preview {
   font-size: 0.9em;
+}
+/* the card */
+.sender-header,
+.thread-row.in-group {
+  background: @card_bg_color;
+  border: 1px solid alpha(@card_shade_color, 0.6);
+}
+.sender-header {
+  padding: 8px 6px 8px 12px;
+  margin-top: 12px;
+  border-radius: 12px 12px 0 0;
+  border-bottom: none;
+}
+.sender-header.card-only {
+  border-radius: 12px;
+  border-bottom: 1px solid alpha(@card_shade_color, 0.6);
+}
+.thread-row.in-group {
+  /* the text lines up with the sender's name above (12px padding, 32px logo, 8px gap = 52px):
+     34px padding, then the 8px unread dot and its 10px gap */
+  padding: 8px 12px 8px 34px;
+  border-top: 1px solid alpha(@card_shade_color, 0.6);
+  border-bottom: none;
+}
+.thread-row.in-group.card-last {
+  border-radius: 0 0 12px 12px;
+  border-bottom: 1px solid alpha(@card_shade_color, 0.6);
+}
+listview.thread-list.grouped > row:last-child .thread-row,
+listview.thread-list.grouped > row:last-child .sender-header.card-only {
+  margin-bottom: 12px;
+}
+/* selection and hover are drawn by the card, not by the list row */
+listview.thread-list.grouped > row:selected .thread-row,
+listview.thread-list.grouped > row:selected .sender-header {
+  background: mix(@card_bg_color, @accent_bg_color, 0.25);
+}
+listview.thread-list.grouped > row:hover:not(:selected) .thread-row,
+listview.thread-list.grouped > row:hover:not(:selected) .sender-header {
+  background: mix(@card_bg_color, @window_fg_color, 0.05);
+}
+.sender-header .heading.unread {
+  font-weight: 700;
+}
+.sender-header .expander {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
 }
 .thread-row .unread-dot {
   color: @accent_color;
@@ -63,7 +98,8 @@
 .thread-row .flag-icon {
   color: @warning_color;
 }
-.thread-row .count-chip {
+.thread-row .count-chip,
+.sender-header .count-chip {
   font-size: 0.75em;
   font-weight: 600;
   padding: 0 6px;
