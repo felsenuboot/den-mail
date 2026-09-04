@@ -17,6 +17,8 @@ compositor renders in software and would penalise nothing but den-mail.
 | `open-painted_ms` | … to the body being loaded | `open-painted` (WebKit load finished) | the message iframe is complete and has text |
 | `rss_peak_mib` | resident memory of the process tree, peak over the run | WebKit helpers included | Electron / Chromium helpers included |
 | `pss_end_mib` | proportional set size of the process tree with the opened message on screen: shared pages counted once, the honest RAM figure | same | same |
+| `cpu_total_s` | CPU seconds (user + system) of the process tree for the whole scenario | same | same |
+| `idle_cpu_pct` | CPU use over the 20 s rest with the message open: what the client burns doing nothing | same | same |
 
 The "listed" moments for the web client and the app are DOM states, which land a
 few frames before the paint. For a check that treats all three alike, record the
@@ -93,38 +95,45 @@ is their warm state, so compare them with den-mail's warm numbers.
 ## Results, 2026-09-04
 
 Account ich@felixschramm.eu (Inbox 39 conversations, Archive 2,901), Hyprland
-on a 3440x1440 monitor, all clients at 1600x1000, five runs each, medians with
-the best run in brackets. den-mail is commit b0ed1c6 on Python 3.14, GTK 4.22,
-WebKitGTK 2.52; the desktop app is Flathub 1.7.0 (Chrome 150); the web client
-ran in Playwright's Chromium 150.
+on a 3440x1440 monitor, all clients at 1600x1000, an otherwise idle machine
+(load 0.08 at the start, notifications off, idle daemon paused), five runs
+each, medians with the best run in brackets. den-mail is a88f9f9 on Python
+3.14, GTK 4.22 and WebKitGTK 2.52; the desktop app is Flathub 1.7.0 (Chrome
+150); the web client ran in Playwright's Chromium 150 with a logged-in profile.
 
-| metric | app | den-mail cold | den-mail warm | web |
+| ms unless noted | den-mail warm | den-mail cold | Fastmail app | Fastmail web |
 | --- | --- | --- | --- | --- |
-| window_ms | 1252 (best 1248, n=5) | 719 (best 693, n=5) | 743 (best 720, n=5) | 320 (best 312, n=5) |
-| inbox-listed_at_ms | 1434 (best 1424, n=5) | 2461 (best 2379, n=5) | 578 (best 566, n=5) | 877 (best 860, n=5) |
-| switch-listed_ms | 207 (best 202, n=5) | 448 (best 442, n=5) | 606 (best 597, n=5) | 128 (best 118, n=5) |
-| search-listed_ms | 226 (best 189, n=5) | 216 (best 201, n=5) | 198 (best 175, n=5) | 189 (best 169, n=5) |
-| open-rendered_ms | 167 (best 118, n=5) | 212 (best 197, n=5) | 86 (best 84, n=5) | 84 (best 79, n=5) |
-| open-painted_ms | 208 (best 155, n=5) | 420 (best 404, n=5) | 302 (best 296, n=5) | 159 (best 146, n=5) |
-| rss_peak_mib | 1036 (best 995, n=5) | 1122 (best 1120, n=5) | 1044 (best 1043, n=5) | 1377 (best 1329, n=5) |
+| launch to a usable inbox | **300** (296) | 2542 (2391) | 1412 (1402) | 868 (853) |
+| switch to Archive, 2,901 conversations | 118 (116) | 460 (456) | 209 (197) | **112** (109) |
+| search "rechnung" | **177** (168) | 217 (183) | 224 (207) | 199 (169) |
+| open a message: subject shown | **17** (17) | 128 (98) | 110 (106) | 75 (50) |
+| open a message: body painted | **66** (64) | 177 (169) | 136 (127) | 154 (142) |
+| memory, PSS with the message open, MiB | **341** (340) | 381 (376) | 642 (641) | 511 (509) |
+| memory, RSS summed over the tree, MiB | 1028 | 1110 | 994 | 1310 |
+| CPU seconds for the scenario | CPU_DEN_WARM | CPU_DEN_COLD | 4.6 | 3.0 |
+| CPU over 20 s at rest, % | IDLE_DEN_WARM | IDLE_DEN_COLD | 2.8 | 0.6 |
+
+An earlier round the same morning, while the machine was in use, put den-mail's
+folder switch at 606 ms and the first paint at 302 ms; both were den-mail's own
+faults and are fixed (#36): the switch mark waited for the server's refresh
+behind a list that was already on screen, and every message spawned its own
+WebKit web process. Message views now share one process, warmed at start-up.
 
 Reading the numbers:
 
-- `window_ms` is not comparable across the three: the web value is Chromium
-  started by Playwright, the app value includes `flatpak run`, den-mail's is
-  the interpreter plus GTK. `inbox-listed_at_ms` is the fair start-up figure.
-- den-mail warm shows a usable inbox in 0.58 s, before either Fastmail client.
-  Cold (no local cache) it needs 2.5 s, most of it the first sync.
-- The folder switch is den-mail's weak spot: 0.6 s warm for the 2,901-item
-  Archive against 0.13 s (web) and 0.21 s (app). The list is served from the
-  local cache, so this is the thread model being rebuilt on the main thread
-  (`set_email_ids`, one summary query per conversation), not the network.
-- Search is a wash: every client waits for the server.
-- Opening a message: den-mail hands the body to WebKit as fast as the web
-  client shows the subject (86 ms), but WebKit's own load to the first paint
-  takes 0.3 s against 0.16 s for the web client, where the body arrives in
-  the already running renderer.
-- Memory is the sum of resident sizes over the process tree, which counts
-  shared pages once per process; it flatters nobody in particular but is
-  not a precise figure. All three sit around 1 GiB; den-mail's is Python
-  plus WebKit's web and network processes.
+- `window_ms` (launch to the first window, in `results.jsonl`) is not
+  comparable across the three: the web value is Chromium started by Playwright,
+  the app value includes `flatpak run`, den-mail's is the interpreter plus GTK.
+  The inbox row is the fair start-up figure.
+- den-mail warm shows a usable inbox in 0.3 s, before either Fastmail client.
+  Cold, with no local data, it needs 2.5 s, almost all of it the first sync;
+  cold folder switches are server fetches for every client.
+- Search is the server for everyone.
+- Opening a message: the subject is up in 17 ms and the body painted in 66 ms,
+  a third of the web client's time, now that the web process already exists.
+- Memory: PSS counts shared pages once and is the figure to compare; the RSS
+  row shows why per-process sums mislead for multi-process apps. den-mail is
+  Python plus WebKit's web and network processes; the app is Electron, the
+  web client is Chromium with one tab.
+- The "listed" moments of the web client and the app are DOM states a few
+  frames before the paint, so their numbers are, if anything, flattering.

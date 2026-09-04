@@ -115,11 +115,24 @@ def scenario(page, t0: float, row: dict) -> None:
     row["open-painted_ms"] = now_ms(t)
 
 
-def tree_memory(pid: int) -> dict:
-    """RSS and PSS of the process tree in MiB, with the opened message on screen."""
+IDLE_S = int(os.environ.get("BENCH_IDLE", "20"))
+
+
+def tree_sample(pid: int) -> tuple[int, int, int]:
     out = subprocess.run([str(HERE / "tree-rss.sh"), str(pid)], capture_output=True, text=True).stdout.split()
-    rss, pss = (int(out[0]), int(out[1])) if len(out) == 2 else (0, 0)
-    return {"rss_peak_mib": rss, "pss_end_mib": pss}
+    return (int(out[0]), int(out[1]), int(out[2])) if len(out) == 3 else (0, 0, 0)
+
+
+def rest_and_measure(pid: int) -> dict:
+    """Memory and CPU with the opened message on screen, then over IDLE_S seconds of rest."""
+    tick = os.sysconf("SC_CLK_TCK")
+    rss0, _pss0, ticks0 = tree_sample(pid)
+    t0 = time.perf_counter()
+    time.sleep(IDLE_S)
+    rss1, pss1, ticks1 = tree_sample(pid)
+    elapsed = time.perf_counter() - t0
+    return {"rss_peak_mib": max(rss0, rss1), "pss_end_mib": pss1, "cpu_total_s": round(ticks1 / tick, 2),
+            "idle_cpu_pct": round((ticks1 - ticks0) / tick / elapsed * 100, 1)}
 
 
 def chromium_root_pid() -> int:
@@ -127,7 +140,7 @@ def chromium_root_pid() -> int:
     out = subprocess.run(["pgrep", "-f", str(PROFILE)], capture_output=True, text=True).stdout.split()
     pids = {int(x) for x in out}
     for pid in sorted(pids):
-        ppid = int(open(f"/proc/{pid}/stat").read().rsplit(") ", 1)[1].split()[1])
+        ppid = int(Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1].split()[1])
         if ppid not in pids:
             return pid
     return min(pids) if pids else 0
@@ -151,7 +164,7 @@ def run_web(runs: int) -> None:
             page.goto("https://app.fastmail.com/mail/Inbox/", wait_until="commit")
             row = {"client": "web", "run": i, "window_ms": now_ms(t0)}
             scenario(page, t0, row)
-            row.update(tree_memory(chromium_root_pid()))
+            row.update(rest_and_measure(chromium_root_pid()))
             ctx.close()
             record(row)
             time.sleep(2)
@@ -178,7 +191,7 @@ def run_app(runs: int) -> None:
             page = next(pg for ctx in browser.contexts for pg in ctx.pages if "fastmail" in pg.url)
             row = {"client": "app", "run": i, "window_ms": info["window_ms"]}
             scenario(page, t0, row)
-            row.update(tree_memory(info["pid"]))
+            row.update(rest_and_measure(info["pid"]))
             browser.close()
             subprocess.run(["flatpak", "kill", "com.fastmail.Fastmail"], check=False)
             time.sleep(4)

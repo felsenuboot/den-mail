@@ -38,6 +38,24 @@ you own in the From field.
   (`from:` `to:` `subject:` `is:unread` `has:attachment` `before:` `after:`),
   notifications with the sender's logo, `mailto:` handling, keyboard shortcuts.
 
+## How fast is it
+
+Measured against Fastmail's own clients on the same account, machine and
+network, five runs each on an idle desktop (medians, milliseconds;
+[method and full results](docs/BENCHMARK.md)):
+
+| | den-mail | Fastmail desktop app | Fastmail web |
+| --- | --- | --- | --- |
+| launch to a usable inbox | **300** | 1412 | 868 |
+| switch to a folder of 2,900 conversations | 118 | 209 | **112** |
+| search | **177** | 224 | 199 |
+| open a message, body painted | **66** | 136 | 154 |
+| memory with a message open (PSS, MiB) | **341** | 642 | 511 |
+
+The local cache is what makes the difference: folders and the inbox come from
+SQLite and the server's answer only refreshes them. Without a cache (first
+start) den-mail needs 2.5 s to the inbox, like any client syncing from scratch.
+
 | Light and dark theme | Group by sender |
 | --- | --- |
 | ![Half light, half dark](data/screenshots/theme-split.png) | ![The list grouped by sender](data/screenshots/group-sender.png) |

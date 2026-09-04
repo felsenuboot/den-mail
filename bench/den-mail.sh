@@ -15,26 +15,35 @@ mkdir -p "$XDG_CONFIG_HOME/den-mail"
 cat > "$XDG_CONFIG_HOME/den-mail/config.json" <<JSON
 {"window": {"width": ${BENCH_WIDTH:-1600}, "height": ${BENCH_HEIGHT:-1000}}, "mark_read_on_open": false}
 JSON
-SCENARIO="sleep ${BENCH_SETTLE:-8}; mailbox ${BENCH_FOLDER:-Archive}; sleep 6; search ${BENCH_SEARCH:-invoice}; sleep 6; mailbox Inbox; sleep 4; select ${BENCH_OPEN_INDEX:-0}; sleep 6; quit"
+# the 20 s rest with the message open is the idle window for CPU and memory
+SCENARIO="sleep ${BENCH_SETTLE:-8}; mailbox ${BENCH_FOLDER:-Archive}; sleep 6; search ${BENCH_SEARCH:-invoice}; sleep 6; mailbox Inbox; sleep 4; select ${BENCH_OPEN_INDEX:-0}; sleep 4; sleep ${BENCH_IDLE:-20}; quit"
 run() {
   local log="$HERE/logs/den-mail-$MODE-$1.log"; mkdir -p "$HERE/logs"
   [ "$MODE" = cold ] && rm -rf "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
   local win; win=$(DEN_MAIL_TIMING=1 DEN_MAIL_AUTOPILOT="$SCENARIO" \
     python3 "$HERE/window-time.py" denmail -- sh -c "cd '$ROOT' && exec python3 -m den_mail >'$log' 2>&1")
   local pid; pid=$(echo "$win" | python3 -c 'import json,sys; print(json.load(sys.stdin)["pid"])')
-  # memory: sample the tree until the app exits; keep the RSS peak and the last PSS (the
-  # opened message on screen, the sync done)
-  local peak=0 pss=0 sample
+  # memory and CPU: sample the tree every half second until the app exits (time, rss, pss, ticks)
+  local samples="$HERE/logs/den-mail-$MODE-$1.samples"; : > "$samples"
   while kill -0 "$pid" 2>/dev/null; do
-    sample=$("$HERE/tree-rss.sh" "$pid" 2>/dev/null || echo "0 0")
-    ((${sample% *} > peak)) && peak=${sample% *}
-    ((${sample#* } > 0)) && pss=${sample#* }
+    echo "$(date +%s.%N) $("$HERE/tree-rss.sh" "$pid" 2>/dev/null || echo "0 0 0")" >> "$samples"
     sleep 0.5
   done
-  python3 - "$log" "$win" "$peak" "$pss" "$MODE" "$1" <<'PY' >> "$HERE/results.jsonl"
-import json, re, sys
-log, win, peak, pss, mode, run = sys.argv[1:]
-row = {"client": "den-mail", "mode": mode, "run": int(run), "rss_peak_mib": int(peak), "pss_end_mib": int(pss), **json.loads(win)}
+  python3 - "$log" "$win" "$samples" "$MODE" "$1" "${BENCH_IDLE:-20}" <<'PY' >> "$HERE/results.jsonl"
+import json, os, re, sys
+log, win, samples, mode, run, idle = sys.argv[1:]
+rows = [tuple(float(x) for x in l.split()) for l in open(samples) if len(l.split()) == 4]
+rows = [r for r in rows if r[1] > 0]  # samples taken while the process tree was alive
+tick = os.sysconf("SC_CLK_TCK")
+row = {"client": "den-mail", "mode": mode, "run": int(run), **json.loads(win)}
+if rows:
+    row["rss_peak_mib"] = int(max(r[1] for r in rows))
+    row["pss_end_mib"] = int(rows[-1][2])
+    row["cpu_total_s"] = round(rows[-1][3] / tick, 2)
+    # the idle window: the last `idle` seconds before the final sample
+    end = rows[-1]; start = next((r for r in rows if r[0] >= end[0] - float(idle)), rows[0])
+    if end[0] > start[0]:
+        row["idle_cpu_pct"] = round((end[3] - start[3]) / tick / (end[0] - start[0]) * 100, 1)
 row.pop("pid", None); row.pop("address", None)
 for m in re.finditer(r"timing: (\S+) at=(\d+)(?: took=(\d+))?", open(log, errors="replace").read()):
     event, at, took = m.groups()
