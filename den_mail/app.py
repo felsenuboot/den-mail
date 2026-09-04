@@ -12,7 +12,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
-from . import APP_ID, APP_NAME, VERSION
+from . import APP_ID, APP_NAME, version_string
 from .config import Config
 from .shortcuts import application_accels
 from .ui.window import MainWindow
@@ -161,7 +161,7 @@ class FastmailApp(Adw.Application):
         dlg = Adw.AboutDialog(
             application_name=APP_NAME,
             application_icon=APP_ID,
-            version=VERSION,
+            version=version_string(),
             developer_name="felsenuboot",
             license_type=Gtk.License.MIT_X11,
             website="https://github.com/felsenuboot/den-mail",

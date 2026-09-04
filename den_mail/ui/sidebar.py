@@ -7,7 +7,7 @@ from collections.abc import Callable
 
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk
 
-from .. import APP_NAME
+from .. import APP_NAME, version_string
 from ..jmap.types import ROLE_JUNK, ROLE_TRASH
 from ..models.mailbox import MailboxObject, MailboxTree
 
@@ -91,6 +91,7 @@ class Sidebar(Adw.NavigationPage):
         view = Adw.ToolbarView()
         header = Adw.HeaderBar()
         title = Adw.WindowTitle(title=APP_NAME, subtitle=account_name)
+        title.set_tooltip_text(f"{APP_NAME} {version_string()}")   # the version at a glance (#112)
         header.set_title_widget(title)
         menu_button = Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=primary_menu, primary=True)
         header.pack_end(menu_button)
