@@ -19,23 +19,20 @@ offline and follows changes as they happen.
 
 ## Features
 
-<table>
-  <tr>
-    <td align="center" valign="top" width="33%"><img src="data/features/labels.svg" width="48" alt=""><br><b>Labels</b><br><sub>Nested, several per message, drag and drop, as in Fastmail.</sub></td>
-    <td align="center" valign="top" width="33%"><img src="data/features/offline.svg" width="48" alt=""><br><b>Offline</b><br><sub>A local cache: instant folder switches, mail readable without a connection, changes by push.</sub></td>
-    <td align="center" valign="top" width="33%"><img src="data/features/undo.svg" width="48" alt=""><br><b>Undo</b><br><sub>Every action can be taken back from a toast, sending included.</sub></td>
-  </tr>
-  <tr>
-    <td align="center" valign="top" width="33%"><img src="data/features/safe-html.svg" width="48" alt=""><br><b>Safe HTML</b><br><sub>Sanitised mail, remote content blocked until you allow it, dark mode for light messages.</sub></td>
-    <td align="center" valign="top" width="33%"><img src="data/features/identities.svg" width="48" alt=""><br><b>Identities</b><br><sub>Send from any alias or wildcard address; manage Masked Email.</sub></td>
-    <td align="center" valign="top" width="33%"><img src="data/features/bulk.svg" width="48" alt=""><br><b>Bulk actions</b><br><sub>Select many conversations, group by sender, act on a whole sender at once.</sub></td>
-  </tr>
-  <tr>
-    <td align="center" valign="top" width="33%"><img src="data/features/unsubscribe.svg" width="48" alt=""><br><b>Unsubscribe</b><br><sub>One click per message, or many senders at once in the Newsletters dialog.</sub></td>
-    <td align="center" valign="top" width="33%"><img src="data/features/search.svg" width="48" alt=""><br><b>Search</b><br><sub>Operators for sender, subject, state, label, folder and date.</sub></td>
-    <td align="center" valign="top" width="33%"><img src="data/features/desktop.svg" width="48" alt=""><br><b>Desktop</b><br><sub>Notifications with the sender's logo, mailto: links, keyboard shortcuts.</sub></td>
-  </tr>
-</table>
+- 🏷️ **Labels.** Nested, several per message, drag and drop, as in Fastmail.
+- 💾 **Offline.** A local cache makes folder switches instant and keeps mail
+  readable without a connection; changes arrive by push.
+- ↩️ **Undo.** Every action can be taken back from a toast, sending included.
+- 🛡️ **Safe HTML.** Sanitised mail, remote content blocked until you allow it,
+  dark mode for light-coloured messages.
+- 👤 **Identities.** Send from any alias or wildcard address; manage Masked Email.
+- ☑️ **Bulk actions.** Select many conversations, group by sender, act on a
+  whole sender at once.
+- 🚫 **Unsubscribe.** One click per message, or many senders at once in the
+  Newsletters dialog.
+- 🔍 **Search.** Operators for sender, subject, state, label, folder and date.
+- 🔔 **Desktop.** Notifications with the sender's logo, `mailto:` links, keyboard
+  shortcuts.
 
 The [tour](docs/TOUR.md) shows each of these with screenshots, and
 [docs/BENCHMARK.md](docs/BENCHMARK.md) compares speed and memory with
