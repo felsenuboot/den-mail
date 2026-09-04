@@ -1,3 +1,6 @@
+/* The edge around cards; the dark scheme redefines it (ui/theming.py, #122). */
+@define-color den_card_border rgba(0, 0, 6, 0.12);
+
 /* Sidebar */
 .unread-badge {
   font-size: 0.8em;
@@ -136,7 +139,7 @@ listview.thread-list.grouped > row:hover:not(:selected) .sender-header {
 .message-card {
   border-radius: 12px;
   background: @card_bg_color;
-  box-shadow: 0 0 0 1px alpha(@card_shade_color, 0.4);
+  box-shadow: 0 0 0 1px @den_card_border;
   margin-bottom: 12px;
 }
 .message-card.collapsed {
@@ -319,6 +322,9 @@ image.label-color-11 { color: #a51d2d; } .chip.label-color-11 { background: alph
 /* the conversation pane while nothing is selected */
 .tip-card {
   padding: 14px 18px;
+}
+.tip-card, .summary-card {
+  box-shadow: 0 0 0 1px @den_card_border;
 }
 .kanji-placeholder {
   margin: 24px;

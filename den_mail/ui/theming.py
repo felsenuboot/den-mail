@@ -47,9 +47,20 @@ LIGHT_NAMED_COLOURS = """
 @define-color scrollbar_outline_color #ffffff;
 """
 
+# In the dark scheme libadwaita's card is a faint tint with no visible edge (#122): a
+# slightly lighter card and a border colour the stylesheet draws around every card.
+DARK_NAMED_COLOURS = """
+@define-color card_bg_color rgba(255, 255, 255, 0.10);
+@define-color card_shade_color rgba(0, 0, 0, 0.36);
+@define-color den_card_border rgba(255, 255, 255, 0.16);
+"""
+
+
 class _State:
     provider: Gtk.CssProvider | None = None
-    installed = False   # provider currently added to the display
+    dark_provider: Gtk.CssProvider | None = None
+    installed = False   # light provider currently added to the display
+    dark_installed = False
     hooked = False      # notify::dark handler connected
 
 
@@ -63,6 +74,9 @@ def _sync(*_args) -> None:
     if _state.provider is None:
         _state.provider = Gtk.CssProvider()
         _state.provider.load_from_string(LIGHT_NAMED_COLOURS)
+    if _state.dark_provider is None:
+        _state.dark_provider = Gtk.CssProvider()
+        _state.dark_provider.load_from_string(DARK_NAMED_COLOURS)
     want = not Adw.StyleManager.get_default().get_dark()
     if want and not _state.installed:
         Gtk.StyleContext.add_provider_for_display(display, _state.provider, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
@@ -70,6 +84,12 @@ def _sync(*_args) -> None:
     elif not want and _state.installed:
         Gtk.StyleContext.remove_provider_for_display(display, _state.provider)
         _state.installed = False
+    if not want and not _state.dark_installed:
+        Gtk.StyleContext.add_provider_for_display(display, _state.dark_provider, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
+        _state.dark_installed = True
+    elif want and _state.dark_installed:
+        Gtk.StyleContext.remove_provider_for_display(display, _state.dark_provider)
+        _state.dark_installed = False
     for win in Gtk.Window.list_toplevels():
         win.queue_draw()
 
