@@ -118,8 +118,9 @@ class Sidebar(Adw.NavigationPage):
         factory.connect("setup", self._setup_row)
         factory.connect("bind", self._bind_row)
         factory.connect("unbind", self._unbind_row)
-        self.listview = Gtk.ListView(model=self.selection, factory=factory, single_click_activate=True)
-        self.listview.connect("activate", self._on_list_activated)
+        # Not single-click-activate: that also selects rows on hover (#32).
+        self.listview = Gtk.ListView(model=self.selection, factory=factory)
+        self.listview.connect("activate", self._on_list_activated)  # Enter on the selected row
         self.listview.add_css_class("navigation-sidebar")
         scrolled = Gtk.ScrolledWindow(child=self.listview, vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
         view.set_content(scrolled)
@@ -154,6 +155,16 @@ class Sidebar(Adw.NavigationPage):
         press.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         press.connect("pressed", lambda g, x, y: self._on_list_right_click(g, 1, x, y))
         self.listview.add_controller(press)
+        # Clicking the mailbox that is already selected changes no selection, so a
+        # narrow window could not return to it after going back (#31). This gesture
+        # only watches, and acts on the release: a touch that turns into a scroll or
+        # a long press is claimed by those gestures and never releases here.
+        click = Gtk.GestureClick(button=1)
+        click.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        click.connect("pressed", self._on_list_pressed)
+        click.connect("released", self._on_list_released)
+        self.listview.add_controller(click)
+        self._pressed_mailbox: MailboxObject | None = None
 
     # ------------------------------------------------------------ actions
 
@@ -290,6 +301,16 @@ class Sidebar(Adw.NavigationPage):
         if self.selection.get_selected() == position:
             self._on_selection_changed()
 
+    def _on_list_pressed(self, _gesture, n_press: int, x: float, y: float) -> None:
+        # Remembered before the list changes the selection on this same press.
+        obj = self._mailbox_at(x, y)
+        self._pressed_mailbox = obj if n_press == 1 and obj is not None and obj is self.selected else None
+
+    def _on_list_released(self, _gesture, _n_press: int, x: float, y: float) -> None:
+        obj, self._pressed_mailbox = self._pressed_mailbox, None
+        if obj is not None and obj is self.selected and self._mailbox_at(x, y) is obj:
+            self.on_select(obj)
+
     def _on_selection_changed(self, *_) -> None:
         if self._suppress_select:
             return
@@ -324,12 +345,22 @@ class Sidebar(Adw.NavigationPage):
 
     # ------------------------------------------------------ context menu
 
-    def _on_list_right_click(self, gesture, _n, x, y) -> None:
+    def _mailbox_at(self, x: float, y: float) -> MailboxObject | None:
+        """The mailbox of the row under list coordinates (x, y).
+
+        The whole highlighted row counts, padding and indent included; None on
+        sections and on the expander arrow, which toggles the children instead."""
         widget = self.listview.pick(x, y, Gtk.PickFlags.DEFAULT)
-        while widget is not None and not isinstance(widget, MailboxRow):
+        if widget is None or widget.get_css_name() == "expander":
+            return None
+        while widget is not None and not isinstance(widget, Gtk.TreeExpander):
             widget = widget.get_parent()
-        obj = widget.obj if widget is not None else None
-        if obj is None or obj.is_section:
+        obj = widget.get_item() if widget is not None else None
+        return None if obj is None or obj.is_section else obj
+
+    def _on_list_right_click(self, gesture, _n, x, y) -> None:
+        obj = self._mailbox_at(x, y)
+        if obj is None:
             return
         gesture.set_state(Gtk.EventSequenceState.CLAIMED)
         self.show_context_menu(obj, int(x), int(y))

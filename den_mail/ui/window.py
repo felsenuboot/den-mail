@@ -437,6 +437,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_select_mailbox(self, mb: MailboxObject) -> None:
         self.current_mailbox = mb
+        log.debug("select mailbox %s", mb.name)
         self.threadlist.search_entry.set_text("")
         self.threadlist.search_bar.set_search_mode(False)
         self._load_mailbox(mb)
