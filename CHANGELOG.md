@@ -6,6 +6,10 @@ Unreleased changes gather at the top until they are tagged.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-04
+
+Milestones *Release engineering*, *Learning layer* and *JMAP Contacts*.
+
 ### Features
 - The Fastmail address book, with a token that has the Contacts scope: contacts complete recipients first, and a contact's photo replaces the sender domain's logo (#4, #14)
 - CI runs the UI headlessly once per autopilot script and keeps the screenshots as an artifact (#11)
@@ -38,6 +42,7 @@ compose with identities and undo send, Masked Email, the newsletter
 unsubscribe dialog, the deterministic categoriser, notifications with sender
 logos, keyboard shortcuts, and a fake JMAP server the test suite runs against.
 
-[Unreleased]: https://github.com/felsenuboot/den-mail/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/felsenuboot/den-mail/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/felsenuboot/den-mail/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/felsenuboot/den-mail/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/felsenuboot/den-mail/releases/tag/v0.1.0

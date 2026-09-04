@@ -1,6 +1,6 @@
 pkgbase = den-mail
 	pkgdesc = Fastmail client for GNOME, built on JMAP, GTK 4 and libadwaita
-	pkgver = 0.2.0
+	pkgver = 0.3.0
 	pkgrel = 1
 	url = https://github.com/felsenuboot/den-mail
 	arch = any
@@ -16,7 +16,7 @@ pkgbase = den-mail
 	depends = libsecret
 	depends = webkitgtk-6.0
 	optdepends = python-setproctitle: list the process as den-mail instead of python3
-	source = den-mail-0.2.0.tar.gz::https://github.com/felsenuboot/den-mail/archive/refs/tags/v0.2.0.tar.gz
+	source = den-mail-0.3.0.tar.gz::https://github.com/felsenuboot/den-mail/archive/refs/tags/v0.3.0.tar.gz
 	sha256sums = SKIP
 
 pkgname = den-mail
