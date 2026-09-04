@@ -59,7 +59,7 @@ def test_summaries_per_type():
     invoice = {"@type": "Invoice", "paymentStatus": "PaymentDue", "provider": {"name": "MVG"}, "accountId": "403806215993",
                "totalPaymentDue": {"@type": "PriceSpecification", "price": "49.00", "priceCurrency": "EUR"}, "paymentDueDate": "2026-09-30"}
     assert schema.summarise_one(invoice).text == "Invoice payment due · MVG · 49.00 EUR · due 30 Sep"
-    event = {"@type": "EventReservation", "reservationFor": {"name": "GTK meetup", "startDate": "2026-09-11T18:00:00+02:00",
+    event = {"@type": "EventReservation", "reservationFor": {"name": "GTK meetup", "startDate": "2026-09-11T18:00:00",
              "location": {"name": "Room 2.04"}}, "reservationNumber": "E-9"}
     assert schema.summarise_one(event).text.startswith("GTK meetup · 11 Sep 18:00 · Room 2.04")
     table = {"@type": "FoodEstablishmentReservation", "reservationFor": {"name": "Trattoria"}, "startTime": "2026-09-05T20:00:00+02:00", "partySize": 4}
