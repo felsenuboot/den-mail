@@ -10,6 +10,7 @@ from gi.repository import Adw, Gio, GLib, Gtk
 
 from .. import APP_NAME, secrets, shortcuts, timing
 from ..avatars import AvatarService
+from ..classify.rules import CATEGORY_NAMES
 from ..config import Config, database_path
 from ..html.body import find_inline_part
 from ..jmap.client import AuthError, JMAPClient, JMAPError
@@ -226,6 +227,10 @@ class MainWindow(Adw.ApplicationWindow):
                                  self._group_mode())
         self.threadlist.unread_button.set_active(bool(self.config.get("unread_only", False)))
         self.threadlist.on_unread_filter = self._on_unread_filter
+        category = self.config.get("category_filter") or None
+        self.model.set_category_filter(category)
+        self.threadlist.set_category_filter(category)
+        self.threadlist.on_category_filter = self._on_category_filter
         self.threadlist.set_grouped(self._group_mode())
         self.threadlist.on_sort_changed = self._on_sort_changed
         self.threadlist.on_context_menu = self._on_thread_context_menu
@@ -495,10 +500,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.model.loading = True
         self.model.clear()
         self.conversation.clear()
-        if self.threadlist.unread_only:
-            self.threadlist.set_empty_text("No unread conversations", f"Everything in {mb.name} is read.")
-        else:
-            self.threadlist.set_empty_text("No conversations", f"{mb.name} is empty.")
+        self._set_empty_text()
         s = self._sort_for_mailbox(mb)
         self.threadlist.set_sort(s["key"], bool(s["flagged_first"]), bool(s["unread_first"]))
         self.query_key = self.engine.load_query(self._mailbox_query(mb))
@@ -525,7 +527,43 @@ class MainWindow(Adw.ApplicationWindow):
         else:
             self._reload_current()
 
+    def _on_category_filter(self, category: str | None) -> None:
+        """Categories are local (#18), so the loaded list is filtered in place."""
+        self.config.set("category_filter", category)
+        self.model.set_category_filter(category)
+        self._set_empty_text()
+        self._update_list_title()
+        self.threadlist._fill_filtered_list()
+        if self.selected and not any(t.thread_id in self.model.by_thread and t in self.model.threads
+                                     for t in self.selected):
+            self.conversation.clear()
+
+    def _set_empty_text(self) -> None:
+        mb = self.current_mailbox
+        where = mb.name if mb else "this list"
+        category = self.model.category_filter
+        if category:
+            name = CATEGORY_NAMES.get(category, category)
+            self.threadlist.set_empty_text(f"No {name} conversations",
+                                           f"Nothing in {where} was sorted into {name}.")
+        elif self.threadlist.unread_only:
+            self.threadlist.set_empty_text("No unread conversations", f"Everything in {where} is read.")
+        else:
+            self.threadlist.set_empty_text("No conversations", f"{where} is empty.")
+
     def _update_list_title(self) -> None:
+        category = self.model.category_filter
+        if category:
+            # the category is local, so the subtitle counts what is on screen
+            shown = len(self.model.threads)
+            sub = f"{CATEGORY_NAMES.get(category, category)} · {shown} shown"
+            if not self.model.complete:
+                sub += " so far"
+            title = "Search" if self.threadlist.search_entry.get_text().strip() else (
+                "All mail" if self.threadlist.search_active else
+                ((self.tree.get(self.current_mailbox.id) or self.current_mailbox).name if self.current_mailbox else ""))
+            self.threadlist.set_title(title, sub)
+            return
         if self.threadlist.search_active:
             total = self.model.total
             if self.threadlist.search_entry.get_text().strip():

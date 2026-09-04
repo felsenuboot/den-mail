@@ -225,6 +225,16 @@ image.label-color-8 { color: #986a44; }  .chip.label-color-8 { background: alpha
 image.label-color-9 { color: #1c71d8; }  .chip.label-color-9 { background: alpha(#1c71d8, 0.18); color: #3584e4; }
 image.label-color-10 { color: #613583; } .chip.label-color-10 { background: alpha(#613583, 0.18); color: #9141ac; }
 image.label-color-11 { color: #a51d2d; } .chip.label-color-11 { background: alpha(#a51d2d, 0.18); color: #c01c28; }
+/* Category chips (#18): one tint per category; Primary shows no chip. */
+.chip.chip-category { font-weight: 600; }
+.chip.category-transactions { background: alpha(#2ec27e, 0.18); color: #26a269; }
+.chip.category-security { background: alpha(#e01b24, 0.18); color: #c01c28; }
+.chip.category-updates { background: alpha(#3584e4, 0.18); color: #1c71d8; }
+.chip.category-newsletters { background: alpha(#9141ac, 0.18); color: #813d9c; }
+.chip.category-lists { background: alpha(#986a44, 0.18); color: #865e3c; }
+.chip.category-promotions { background: alpha(#ff7800, 0.18); color: #e66100; }
+.chip.category-primary { background: alpha(currentColor, 0.12); color: @window_fg_color; }
+.filter-active image { color: @accent_color; }
 /* Compact chip shape inside list rows only; conversation chips keep the pill shape. */
 .thread-row .chip, .thread-row .chip-neutral {
   font-size: 0.78em;

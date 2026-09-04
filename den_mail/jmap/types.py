@@ -66,6 +66,14 @@ EMAIL_LIST_PROPERTIES = [
     "messageId",
     "inReplyTo",
     "references",
+    # Presence of these decides the category of a message (#18); asRaw because
+    # Fastmail rejects :asText for List-Unsubscribe.
+    "header:List-Post:asRaw",
+    "header:List-Id:asRaw",
+    "header:List-Unsubscribe:asRaw",
+    "header:Precedence:asRaw",
+    "header:Auto-Submitted:asRaw",
+    "header:Feedback-ID:asRaw",
 ]
 
 # Everything needed to display and reply to a message.
@@ -79,8 +87,7 @@ EMAIL_BODY_PROPERTIES = [
     "bodyValues",
     "header:X-Delivered-To:asText",  # Fastmail's delivery address; Delivered-To only on forwarded mail
     "header:Delivered-To:asText",
-    "header:List-Unsubscribe:asRaw",  # Fastmail rejects :asText for this header
-    "header:List-Unsubscribe-Post:asRaw",
+    "header:List-Unsubscribe-Post:asRaw",  # List-Unsubscribe itself is a list property
 ]
 
 MAX_BODY_VALUE_BYTES = 2_000_000

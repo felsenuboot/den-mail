@@ -10,6 +10,7 @@ gi.require_version("Graphene", "1.0")
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk
 
 from ..avatars import sender_key
+from ..classify.rules import CATEGORIES, CATEGORY_NAMES, PRIMARY
 from ..models.thread import SenderGroup, ThreadListModel, ThreadObject
 from .sidebar import DRAG_PREFIX
 from .widgets import avatar, chip
@@ -76,10 +77,16 @@ class ThreadRow(Gtk.Box):
         self.preview.add_css_class("preview")
         self.preview.add_css_class("dim-label")
         line3.append(self.preview)
+        # The category chip (#18) sits before the labels; Primary shows none.
+        self.category = chip("", "chip")
+        self.category.add_css_class("chip-category")
+        self.category.set_visible(False)
+        line3.append(self.category)
         self.labels = Gtk.Box(spacing=4, halign=Gtk.Align.END)
         line3.append(self.labels)
         col.append(line3)
         self._labels_text = None
+        self._category = None
 
         self.obj: ThreadObject | None = None
         self._handlers: list[int] = []
@@ -110,7 +117,7 @@ class ThreadRow(Gtk.Box):
         self.obj = obj
         self._sync()
         for prop in ("participants", "subject", "preview", "date-text", "count", "unread", "flagged",
-                     "has-attachment", "labels-text", "is-draft"):
+                     "has-attachment", "labels-text", "is-draft", "category"):
             self._handlers.append(obj.connect(f"notify::{prop}", lambda *_: self._sync()))
 
     def unbind(self) -> None:
@@ -148,6 +155,13 @@ class ThreadRow(Gtk.Box):
         else:
             self.line1.set_visible(True)
             self.date.set_visible(True)
+        if o.category != self._category:
+            if self._category:
+                self.category.remove_css_class(f"category-{self._category}")
+            self._category = o.category
+            self.category.set_label(CATEGORY_NAMES.get(o.category, o.category))
+            self.category.add_css_class(f"category-{o.category}")
+            self.category.set_visible(o.category != PRIMARY)
         if o.labels_text != self._labels_text:
             self._labels_text = o.labels_text
             while child := self.labels.get_first_child():
@@ -293,6 +307,12 @@ class ThreadList(Adw.NavigationPage):
         self.unread_button = Gtk.ToggleButton(icon_name="fm-mail-unread-symbolic", tooltip_text="Only unread")
         self.unread_button.connect("toggled", lambda b: self.on_unread_filter(b.get_active()))
         header.pack_end(self.unread_button)
+        # Category filter (#18): local to the loaded list; the list keeps loading pages
+        # until enough conversations of that category are on screen.
+        self.on_category_filter: Callable[[str | None], None] = lambda category: None
+        self.category_button = Gtk.MenuButton(icon_name="fm-filter-symbolic", tooltip_text="Filter by category",
+                                              menu_model=self._build_category_menu())
+        header.pack_end(self.category_button)
         self.select_button = Gtk.ToggleButton(icon_name="fm-select-symbolic", tooltip_text="Select conversations")
         self.select_button.connect("toggled", lambda b: self.set_selection_mode(b.get_active()))
         header.pack_start(self.select_button)
@@ -493,6 +513,64 @@ class ThreadList(Adw.NavigationPage):
         # menu entries only when they would change something
         self._fold_actions[True].set_enabled(any(not g.collapsed for g in groups))
         self._fold_actions[False].set_enabled(any(g.collapsed for g in groups))
+
+    # ------------------------------------------------------ category filter
+
+    def _build_category_menu(self) -> Gio.Menu:
+        group = Gio.SimpleActionGroup()
+        self._category_action = Gio.SimpleAction.new_stateful("filter", GLib.VariantType.new("s"),
+                                                               GLib.Variant("s", ""))
+        self._category_action.connect("change-state", self._on_category_state)
+        group.add_action(self._category_action)
+        self.insert_action_group("category", group)
+        menu = Gio.Menu()
+        item = Gio.MenuItem.new("All categories", None)
+        item.set_action_and_target_value("category.filter", GLib.Variant("s", ""))
+        menu.append_item(item)
+        section = Gio.Menu()
+        for category in CATEGORIES:
+            item = Gio.MenuItem.new(CATEGORY_NAMES[category], None)
+            item.set_action_and_target_value("category.filter", GLib.Variant("s", category))
+            section.append_item(item)
+        menu.append_section(None, section)
+        return menu
+
+    @property
+    def category_filter(self) -> str | None:
+        return self._category_action.get_state().get_string() or None
+
+    def set_category_filter(self, category: str | None) -> None:
+        """Reflect a filter chosen elsewhere (start-up) without firing the callback."""
+        self._setting_category = True
+        try:
+            self._category_action.set_state(GLib.Variant("s", category or ""))
+        finally:
+            self._setting_category = False
+        self._sync_category_button()
+
+    def _on_category_state(self, action: Gio.SimpleAction, value: GLib.Variant) -> None:
+        action.set_state(value)
+        self._sync_category_button()
+        if getattr(self, "_setting_category", False):
+            return
+        self.on_category_filter(value.get_string() or None)
+
+    def _sync_category_button(self) -> None:
+        category = self.category_filter
+        if category:
+            self.category_button.add_css_class("filter-active")
+            self.category_button.set_tooltip_text(f"Showing {CATEGORY_NAMES.get(category, category)} only")
+        else:
+            self.category_button.remove_css_class("filter-active")
+            self.category_button.set_tooltip_text("Filter by category")
+
+    def _fill_filtered_list(self) -> None:
+        """A category filter hides most of a page; keep fetching until the list has
+        enough rows to scroll, or the query is exhausted."""
+        if (self.model.category_filter and not self.model.complete and not self.model.loading
+                and not self._loading_more and self.model.get_n_items() < 30):
+            self._loading_more = True
+            self.on_load_more()
 
     # ------------------------------------------------------------ sort
 
@@ -789,13 +867,14 @@ class ThreadList(Adw.NavigationPage):
             self.refresh_button.set_icon_name("view-refresh-symbolic")
 
     def _update_empty(self) -> None:
+        self._loading_more = False
+        self._fill_filtered_list()
         if self.model.get_n_items() > 0:
             self.stack.set_visible_child_name("list")
-        elif self.model.loading:
+        elif self.model.loading or self._loading_more:
             self.stack.set_visible_child_name("loading")
         else:
             self.stack.set_visible_child_name("empty")
-        self._loading_more = False
 
     def set_empty_text(self, title: str, description: str) -> None:
         self.empty.set_title(title)

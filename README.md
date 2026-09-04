@@ -31,6 +31,9 @@ offline and follows changes as they happen.
 - 🚫 **Unsubscribe.** One click per message, or many senders at once in the
   Newsletters dialog.
 - 🔍 **Search.** Operators for sender, subject, state, label, folder and date.
+- 🗂️ **Categories.** Every message is sorted locally into Primary, Transactions,
+  Security, Updates, Newsletters, Lists or Promotions from its headers, sender
+  and wording; a chip on the row and a filter in the list header.
 - 🔔 **Desktop.** Notifications with the sender's logo, `mailto:` links, keyboard
   shortcuts.
 

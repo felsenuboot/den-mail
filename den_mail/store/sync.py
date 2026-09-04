@@ -23,6 +23,7 @@ from typing import Any, ClassVar
 
 from gi.repository import GLib, GObject
 
+from ..classify.rules import CLASSIFY_HEADERS
 from ..config import Config, attachments_dir
 from ..jmap.client import (
     AuthError,
@@ -59,6 +60,9 @@ PRIO_ACTION = 0
 PRIO_LOAD = 1
 PRIO_SYNC = 2
 PRIO_BACKGROUND = 3
+PRIO_BACKFILL = 4   # after everything the user is waiting for
+
+BACKFILL_BATCH = 500
 
 SORT_NEWEST = [{"property": "receivedAt", "isAscending": False}]
 
@@ -447,6 +451,20 @@ class SyncEngine(GObject.Object):
             self._incremental_sync()
         self._set_online(True)
         self._emit("sync-status", "idle", "")
+        self.enqueue(PRIO_BACKFILL, self._job_backfill_headers, "backfill-headers")
+
+    def _job_backfill_headers(self) -> None:
+        """Messages cached before the categoriser's headers were list properties (#18):
+        fetch the headers a batch at a time, newest first, and classify them again."""
+        ids = self.db.emails_missing_headers(BACKFILL_BATCH)
+        if not ids:
+            return
+        acc = self.client.session.account_id
+        got = self.client.call("Email/get", {"accountId": acc, "ids": ids, "properties": ["id", *CLASSIFY_HEADERS]})
+        self.db.merge_headers(ids, got["list"])
+        self._emit("emails-changed", ids)
+        if len(ids) == BACKFILL_BATCH:
+            self.enqueue(PRIO_BACKFILL, self._job_backfill_headers, "backfill-headers")
 
     def _full_sync(self) -> None:
         session = self.client.session

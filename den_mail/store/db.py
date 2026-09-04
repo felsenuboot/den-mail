@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..classify.rules import CLASSIFY_HEADERS, PRIMARY, SOURCE_RULES, SOURCE_USER, classify
 from ..jmap.types import KW_DRAFT, KW_FLAGGED, KW_SEEN, address_display
 
 SCHEMA_VERSION = 1
@@ -39,6 +40,10 @@ CREATE TABLE IF NOT EXISTS query_cache (
     key TEXT PRIMARY KEY, spec TEXT NOT NULL, ids TEXT NOT NULL, total INTEGER, query_state TEXT,
     can_calculate_changes INTEGER DEFAULT 0, fetched_at REAL, complete INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS addresses (email TEXT PRIMARY KEY, name TEXT, last_seen TEXT, count INTEGER DEFAULT 1);
+CREATE TABLE IF NOT EXISTS classification (
+    email_id TEXT PRIMARY KEY, category TEXT NOT NULL, source TEXT NOT NULL, confidence REAL, ts REAL, reason TEXT);
+CREATE INDEX IF NOT EXISTS classification_category ON classification(category);
+CREATE TABLE IF NOT EXISTS correspondents (email TEXT PRIMARY KEY, last_written TEXT);
 """
 
 
@@ -60,6 +65,7 @@ class ThreadSummary:
     mailbox_ids: set[str] = field(default_factory=set)
     email_ids: list[str] = field(default_factory=list)
     from_addresses: list[dict] = field(default_factory=list)
+    category: str = PRIMARY  # of the latest message (#18)
 
 
 class Database:
@@ -72,6 +78,12 @@ class Database:
             c.execute("PRAGMA synchronous=NORMAL")
             c.executescript(SCHEMA)
             c.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
+        # Who the user is and where sent mail lives: the "written to" signal of the categoriser.
+        self._identity_emails: set[str] = set()
+        self._identity_domains: set[str] = set()
+        self._sent_mailbox_id: str | None = None
+        self._load_identity_cache()
+        self._load_sent_mailbox()
 
     def conn(self) -> sqlite3.Connection:
         c = getattr(self._local, "conn", None)
@@ -93,7 +105,7 @@ class Database:
         with self._write_lock:
             c = self.conn()
             for table in ("mailboxes", "emails", "email_mailboxes", "threads", "identities", "masked_emails",
-                          "query_cache", "addresses"):
+                          "query_cache", "addresses", "classification", "correspondents"):
                 # table names come from the literal tuple above (Bandit B608)
                 c.execute(f"DELETE FROM {table}")  # nosec B608
             c.execute("DELETE FROM meta WHERE key LIKE 'state:%'")
@@ -141,6 +153,7 @@ class Database:
                     for m in mailboxes
                 ],
             )
+            self._load_sent_mailbox()
 
     def delete_mailboxes(self, ids: list[str]) -> None:
         with self._write_lock:
@@ -175,9 +188,15 @@ class Database:
     # ---------------------------------------------------------------- emails
 
     def upsert_emails(self, emails: list[dict]) -> None:
-        """Insert or merge list-property Email objects (body cache is preserved)."""
+        """Insert or merge list-property Email objects (body cache is preserved);
+        every stored message gets its category from the rules (#18)."""
         with self._write_lock:
             c = self.conn()
+            # Sent mail first, so a reply in the same batch counts for its sender's category.
+            new_correspondents: set[str] = set()
+            for e in emails:
+                if self._is_own(e):
+                    new_correspondents |= self._record_correspondents(c, e)
             for e in emails:
                 existing = c.execute("SELECT json, body_json, body_fetched_at FROM emails WHERE id=?",
                                      (e["id"],)).fetchone()
@@ -206,6 +225,145 @@ class Database:
                 c.executemany("INSERT OR IGNORE INTO email_mailboxes(email_id, mailbox_id) VALUES (?,?)",
                               [(merged["id"], mid) for mid, on in mailbox_ids.items() if on])
                 self._record_addresses(c, merged)
+                self._classify(c, merged)
+            if new_correspondents:
+                self._reclassify_from(c, new_correspondents)
+
+    # -------------------------------------------------------- categories
+
+    def _classify(self, c: sqlite3.Connection, e: dict) -> None:
+        """Store the rules' verdict; a category the user chose (source "user") stays."""
+        verdict = classify(e, self.is_correspondent)
+        c.execute(
+            "INSERT INTO classification(email_id, category, source, confidence, ts, reason) VALUES (?,?,?,?,?,?)"
+            " ON CONFLICT(email_id) DO UPDATE SET category=excluded.category, source=excluded.source,"
+            " confidence=excluded.confidence, ts=excluded.ts, reason=excluded.reason"
+            " WHERE classification.source != ?",
+            (e["id"], verdict.category, SOURCE_RULES, verdict.confidence, time.time(), verdict.reason, SOURCE_USER),
+        )
+
+    def get_categories(self, ids: list[str]) -> dict[str, str]:
+        out: dict[str, str] = {}
+        c = self.conn()
+        for i in range(0, len(ids), 500):
+            chunk = ids[i:i + 500]
+            # only "?" placeholders are interpolated (Bandit B608)
+            q = f"SELECT email_id, category FROM classification WHERE email_id IN ({','.join('?' * len(chunk))})"  # nosec B608
+            for row in c.execute(q, chunk):
+                out[row["email_id"]] = row["category"]
+        return out
+
+    def get_classification(self, email_id: str) -> dict | None:
+        row = self.conn().execute("SELECT * FROM classification WHERE email_id=?", (email_id,)).fetchone()
+        return dict(row) if row else None
+
+    def set_category(self, email_ids: list[str], category: str, source: str = SOURCE_USER) -> None:
+        """A correction by the user (or a later learned layer) that the rules will not overwrite."""
+        with self._write_lock:
+            self.conn().executemany(
+                "INSERT OR REPLACE INTO classification(email_id, category, source, confidence, ts, reason)"
+                " VALUES (?,?,?,?,?,?)",
+                [(eid, category, source, 1.0, time.time(), "") for eid in email_ids])
+
+    def reclassify(self, ids: list[str] | None = None) -> None:
+        """Run the rules again over the given (else all) cached messages."""
+        with self._write_lock:
+            c = self.conn()
+            emails = self.get_emails(ids).values() if ids is not None else (
+                json.loads(r["json"]) for r in c.execute("SELECT json FROM emails").fetchall())
+            for e in emails:
+                self._classify(c, e)
+
+    def _reclassify_from(self, c: sqlite3.Connection, senders: set[str]) -> None:
+        """Mail already cached from people the user has now written to."""
+        for addr in senders:
+            rows = c.execute("SELECT json FROM emails WHERE LOWER(json) LIKE ?",
+                             (f'%"email": "{addr.lower()}"%',)).fetchall()
+            for r in rows:
+                e = json.loads(r["json"])
+                if any((a.get("email") or "").strip().lower() == addr for a in e.get("from") or []):
+                    self._classify(c, e)
+
+    def emails_missing_headers(self, limit: int = 500) -> list[str]:
+        """Cached before the categoriser's headers were part of the list fetch (#18)."""
+        marker = f'"{CLASSIFY_HEADERS[0]}"'
+        rows = self.conn().execute("SELECT id FROM emails WHERE instr(json, ?) = 0 ORDER BY received_at DESC LIMIT ?",
+                                   (marker, limit)).fetchall()
+        return [r["id"] for r in rows]
+
+    def merge_headers(self, ids: list[str], fetched: list[dict]) -> None:
+        """Add the categoriser's headers to cached messages and classify them again;
+        ids the server no longer knows are marked as fetched (with no headers) so
+        the backfill moves on."""
+        by_id = {e["id"]: e for e in fetched}
+        with self._write_lock:
+            c = self.conn()
+            for eid in ids:
+                row = c.execute("SELECT json, body_json FROM emails WHERE id=?", (eid,)).fetchone()
+                if not row:
+                    continue
+                got = by_id.get(eid, {})
+                headers = {h: got.get(h) for h in CLASSIFY_HEADERS}
+                e = json.loads(row["json"])
+                e.update(headers)
+                body_json = row["body_json"]
+                if body_json:
+                    body = json.loads(body_json)
+                    body.update(headers)
+                    body_json = json.dumps(body)
+                c.execute("UPDATE emails SET json=?, body_json=? WHERE id=?", (json.dumps(e), body_json, eid))
+                self._classify(c, e)
+
+    # ----------------------------------------------------- correspondents
+
+    def _load_identity_cache(self) -> None:
+        emails, domains = set(), set()
+        for i in self.get_identities():
+            addr = (i.get("email") or "").strip().lower()
+            if addr.startswith("*@"):
+                domains.add(addr[2:])
+            elif addr:
+                emails.add(addr)
+        self._identity_emails, self._identity_domains = emails, domains
+
+    def _load_sent_mailbox(self) -> None:
+        row = self.conn().execute("SELECT id FROM mailboxes WHERE role='sent'").fetchone()
+        self._sent_mailbox_id = row["id"] if row else None
+
+    def is_own_address(self, addr: str) -> bool:
+        addr = (addr or "").strip().lower()
+        return addr in self._identity_emails or (
+            "@" in addr and addr.rsplit("@", 1)[1] in self._identity_domains)
+
+    def _is_own(self, e: dict) -> bool:
+        """Sent by the user: in the Sent mailbox, or from one of their identities."""
+        if self._sent_mailbox_id and (e.get("mailboxIds") or {}).get(self._sent_mailbox_id):
+            return True
+        return any(self.is_own_address(a.get("email") or "") for a in e.get("from") or [])
+
+    def _record_correspondents(self, c: sqlite3.Connection, e: dict) -> set[str]:
+        """Remember who the user wrote to; returns the addresses that were new."""
+        new: set[str] = set()
+        when = e.get("receivedAt") or ""
+        for key in ("to", "cc", "bcc"):
+            for a in e.get(key) or []:
+                addr = (a.get("email") or "").strip().lower()
+                if not addr or "@" not in addr or self.is_own_address(addr):
+                    continue
+                known = c.execute("SELECT 1 FROM correspondents WHERE email=?", (addr,)).fetchone()
+                c.execute("INSERT INTO correspondents(email, last_written) VALUES (?,?)"
+                          " ON CONFLICT(email) DO UPDATE SET last_written=MAX(last_written, excluded.last_written)",
+                          (addr, when))
+                if not known:
+                    new.add(addr)
+        return new
+
+    def is_correspondent(self, addr: str) -> bool:
+        """Has the user ever sent mail to this address?"""
+        addr = (addr or "").strip().lower()
+        if not addr:
+            return False
+        return self.conn().execute("SELECT 1 FROM correspondents WHERE email=?", (addr,)).fetchone() is not None
 
     def _record_addresses(self, c: sqlite3.Connection, e: dict) -> None:
         seen = e.get("receivedAt") or ""
@@ -227,6 +385,7 @@ class Database:
             c = self.conn()
             c.executemany("DELETE FROM emails WHERE id=?", [(i,) for i in ids])
             c.executemany("DELETE FROM email_mailboxes WHERE email_id=?", [(i,) for i in ids])
+            c.executemany("DELETE FROM classification WHERE email_id=?", [(i,) for i in ids])
 
     def get_email(self, email_id: str) -> dict | None:
         row = self.conn().execute("SELECT json FROM emails WHERE id=?", (email_id,)).fetchone()
@@ -321,6 +480,7 @@ class Database:
         for e in scoped:
             mailbox_ids |= {m for m, on in (e.get("mailboxIds") or {}).items() if on}
         kws = [e.get("keywords") or {} for e in scoped]
+        category = self.get_categories([latest["id"]]).get(latest["id"], PRIMARY)
         return ThreadSummary(
             thread_id=thread_id,
             email_id=latest["id"],
@@ -336,6 +496,7 @@ class Database:
             mailbox_ids=mailbox_ids,
             email_ids=[e["id"] for e in scoped],
             from_addresses=from_addresses,
+            category=category,
         )
 
     # --------------------------------------------------------------- threads
@@ -361,6 +522,7 @@ class Database:
             c.execute("DELETE FROM identities")
             c.executemany("INSERT INTO identities(id, email, name, json) VALUES (?,?,?,?)",
                           [(i["id"], i.get("email"), i.get("name"), json.dumps(i)) for i in identities])
+            self._load_identity_cache()
 
     def get_identities(self) -> list[dict]:
         rows = self.conn().execute("SELECT json FROM identities ORDER BY email").fetchall()

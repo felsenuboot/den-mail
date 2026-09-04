@@ -425,3 +425,34 @@ def test_unread_filter_queries(engine):
         assert not (engine.db.get_email(eid).get("keywords") or {}).get(KW_SEEN)
     conds = search_query_spec("ticket", inbox, [], unread_only=True)["filter"]["conditions"]
     assert {"notKeyword": KW_SEEN} in conds and {"inMailbox": inbox} in conds
+
+
+def test_categories_from_the_server_and_header_backfill(engine, server):
+    from den_mail.classify.rules import H_LIST_POST, LISTS, NEWSLETTERS, PRIMARY, PROMOTIONS, UPDATES
+
+    inbox = engine.roles[ROLE_INBOX]
+    key = engine.load_query(mailbox_query_spec(inbox))
+    pump(lambda: any(a[0] == key for a in engine.events.get("query-updated", [])))
+    by_subject = {e["subject"]: e["id"] for e in engine.db.get_emails(engine.db.get_query(key)["ids"]).values()}
+    cats = engine.db.get_categories(list(by_subject.values()))
+    assert cats[by_subject["[gtk-devel] Widget lifecycle question"]] == LISTS
+    assert cats[by_subject["Nightly backup finished"]] == UPDATES
+    assert cats[by_subject["Digest #40"]] == NEWSLETTERS
+    assert cats[by_subject["Sale ends soon"]] == PROMOTIONS
+    assert cats[by_subject["Re: GTK meetup on Thursday"]] == PRIMARY
+    # the sent reply in the meetup thread makes Anna a correspondent
+    assert engine.db.is_correspondent("anna@example.net")
+    # mail cached before the headers were list properties: the backfill fetches them
+    gtk = by_subject["[gtk-devel] Widget lifecycle question"]
+    import json
+
+    e = {k: v for k, v in engine.db.get_email(gtk).items() if not k.startswith("header:")}
+    engine.db.conn().execute("UPDATE emails SET json=? WHERE id=?", (json.dumps(e), gtk))  # an old cache row
+    engine.db.reclassify([gtk])
+    assert engine.db.get_categories([gtk])[gtk] != LISTS
+    assert engine.db.emails_missing_headers() == [gtk]
+    engine.events.pop("emails-changed", None)
+    engine._job_backfill_headers()
+    pump(lambda: any(gtk in a[0] for a in engine.events.get("emails-changed", [])))
+    assert engine.db.get_email(gtk)[H_LIST_POST] and engine.db.get_categories([gtk])[gtk] == LISTS
+    assert engine.db.emails_missing_headers() == []

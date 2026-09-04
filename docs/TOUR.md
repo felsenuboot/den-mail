@@ -80,6 +80,20 @@ empty list that says so; a date that does not parse is searched as text.
 
 ![Search for has:attachment](../data/screenshots/search.png)
 
+## Categories
+
+Every message is sorted locally, with no server round trip and nothing sent
+anywhere, into Primary, Transactions, Security, Updates, Newsletters, Lists or
+Promotions. The rules read the list headers (`List-Post`, `List-Unsubscribe`,
+`Precedence`, `Feedback-ID`), automated senders (`Auto-Submitted`, `noreply@`),
+English and German wording for codes, sign-ins, receipts, orders and shipping,
+and whether you have ever written to the sender. Rows show the category as a
+chip (Primary shows none), and the funnel in the list header narrows the list
+to one category; the list keeps loading pages until enough of that category is
+on screen.
+
+![Category filter menu](../data/screenshots/categories.png)
+
 ## Newsletters
 
 *Newsletters…* in the main menu scans the account for mail that carries a

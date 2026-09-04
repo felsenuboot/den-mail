@@ -14,7 +14,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["den_mail", "den_mail.jmap", "den_mail.store", "den_mail.models", "den_mail.ui", "den_mail.html"]
+packages = ["den_mail", "den_mail.jmap", "den_mail.store", "den_mail.models", "den_mail.ui", "den_mail.html", "den_mail.classify"]
 
 [tool.setuptools.package-data]
 den_mail = ["style.css", "den-calligraphy.png", "icons/**/*.svg"]

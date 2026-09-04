@@ -16,6 +16,8 @@ Commands:
   masked | identities | preferences   open that dialog
   resize <w> <h>       resize the main window
   unread-filter on|off   toggle the unread filter button
+  category-filter <category>|off   show only that category (newsletters, transactions, …)
+  category-menu        open the category filter menu
   syncing on|off       show or hide the header's sync spinner
   quotes on|off        reveal or fold the quoted history of every shown message
   expand-all           expand every message card of the shown conversation
@@ -168,6 +170,12 @@ def _run(app, steps: list[str]) -> bool:
             win.threadlist.set_syncing(arg.strip() in ("on", "1", "true"))
         elif cmd == "unread-filter" and win:
             win.threadlist.unread_button.set_active(arg.strip() in ("on", "1", "true"))
+        elif cmd == "category-menu" and win:
+            win.threadlist.category_button.popup()
+        elif cmd == "category-filter" and win:
+            category = arg.strip().lower()
+            win.threadlist._category_action.change_state(
+                GLib.Variant("s", "" if category in ("off", "all", "") else category))
         elif cmd == "focus" and win:
             _focus(win, arg.strip())
         elif cmd == "state" and win:

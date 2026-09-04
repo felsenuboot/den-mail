@@ -76,6 +76,7 @@ class ThreadObject(GObject.Object):
     labels_text = GObject.Property(type=str, default="")
     sender_name = GObject.Property(type=str, default="")
     sender_email = GObject.Property(type=str, default="")
+    category = GObject.Property(type=str, default="primary")
 
     def __init__(self, summary: ThreadSummary):
         super().__init__()
@@ -106,6 +107,7 @@ class ThreadObject(GObject.Object):
             ("has_attachment", summary.has_attachment),
             ("is_draft", summary.is_draft),
             ("labels_text", labels_text),
+            ("category", summary.category),
         ):
             if self.get_property(prop) != value:
                 self.set_property(prop, value)
@@ -154,11 +156,12 @@ class SenderGroup(GObject.Object):
 class ThreadListModel(GObject.Object, Gio.ListModel):
     """Ordered list for one query; ThreadObjects keep identity by thread id.
 
-    `threads` holds every thread of the query in order.  `items` is what the
-    list view shows: the same threads, or -- with `grouped` set -- one
-    SenderGroup row per sender followed by that sender's threads.  Groups
-    keep the order of the active sort (the group of a sender sits where its
-    first thread was), and the threads of collapsed groups are left out."""
+    `all_threads` holds every thread of the query in order and `threads` the
+    ones that pass the category filter (#18).  `items` is what the list view
+    shows: those threads, or -- with `grouped` set -- one SenderGroup row per
+    sender followed by that sender's threads.  Groups keep the order of the
+    active sort (the group of a sender sits where its first thread was), and
+    the threads of collapsed groups are left out."""
 
     __gtype_name__ = "FmThreadListModel"
 
@@ -169,8 +172,10 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
     def __init__(self, db: Database):
         super().__init__()
         self.db = db
+        self.all_threads: list[ThreadObject] = []
         self.threads: list[ThreadObject] = []
         self.items: list[GObject.Object] = []
+        self.category_filter: str | None = None
         self.by_thread: dict[str, ThreadObject] = {}
         self.groups: dict[str, SenderGroup] = {}
         self.collapsed: set[str] = set()
@@ -209,6 +214,26 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
 
     def key_of(self, thread: ThreadObject) -> str:
         return thread.domain_key if self.group_mode == "domain" else thread.sender_key
+
+    # ------------------------------------------------------ category filter
+
+    def set_category_filter(self, category: str | None) -> None:
+        """Show only the threads whose latest message is in this category; None for all."""
+        category = category or None
+        if category != self.category_filter:
+            self.category_filter = category
+            self._apply_filter()
+
+    def _passes(self, thread: ThreadObject) -> bool:
+        return self.category_filter is None or thread.category == self.category_filter
+
+    def _apply_filter(self) -> None:
+        self.threads = [t for t in self.all_threads if self._passes(t)]
+        self._rebuild_visible()
+
+    @property
+    def hidden_by_filter(self) -> int:
+        return len(self.all_threads) - len(self.threads)
 
     def toggle_collapsed(self, key: str) -> None:
         self.collapsed.symmetric_difference_update({key})
@@ -273,9 +298,9 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
                 obj = ThreadObject(summary)
             obj.update(summary, labels)
             threads.append(obj)
-        self.threads = threads
+        self.all_threads = threads
         self.by_thread = {o.thread_id: o for o in threads}
-        self._rebuild_visible()
+        self._apply_filter()
         self.total = total if total is not None else len(threads)
         self.complete = complete
 
@@ -307,14 +332,16 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
             summary = self._summary(tid)
             if summary is not None:
                 obj.update(summary, self.label_namer(summary.mailbox_ids))
-        if thread_ids and self.grouped:
+        if thread_ids and self.category_filter and [t for t in self.all_threads if self._passes(t)] != self.threads:
+            self._apply_filter()  # a reclassified message moved in or out of the filter
+        elif thread_ids and self.grouped:
             for group in self.groups.values():
                 group.update(group.threads, group.collapsed, self.group_mode)
 
     def remove_threads(self, thread_ids: set[str]) -> None:
-        self.threads = [o for o in self.threads if o.thread_id not in thread_ids]
-        self.by_thread = {o.thread_id: o for o in self.threads}
-        self._rebuild_visible()
+        self.all_threads = [o for o in self.all_threads if o.thread_id not in thread_ids]
+        self.by_thread = {o.thread_id: o for o in self.all_threads}
+        self._apply_filter()
 
     def index_of(self, thread_id: str) -> int:
         for i, o in enumerate(self.items):
@@ -323,6 +350,7 @@ class ThreadListModel(GObject.Object, Gio.ListModel):
         return -1
 
     def clear(self) -> None:
+        self.all_threads = []
         self.threads = []
         self.by_thread = {}
         self.groups = {}

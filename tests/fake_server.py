@@ -307,6 +307,17 @@ class FakeData:
         self.add_email(frm=weekly, to=[me], subject="Digest #39", text="Old issue.", mailboxes=[trash],
                        keywords={"$seen": True}, when=t - timedelta(days=30),
                        headers={"List-Unsubscribe": "<mailto:leave@lists.example.com?subject=unsubscribe>"})
+        # A discussion list (List-Post) and an automated notice (Auto-Submitted), for the categoriser (#18)
+        self.add_email(frm={"name": "Erin Walsh", "email": "erin@example.org"}, to=[{"email": "gtk-devel@lists.example"}],
+                       subject="[gtk-devel] Widget lifecycle question", text="Is unparent() enough?",
+                       mailboxes=[inbox], keywords={"$seen": True}, when=t - timedelta(days=1, hours=5),
+                       headers={"List-Id": "GTK development <gtk-devel.lists.example>",
+                                "List-Post": "<mailto:gtk-devel@lists.example>",
+                                "List-Unsubscribe": "<mailto:gtk-devel-leave@lists.example>", "Precedence": "list"})
+        self.add_email(frm={"name": "Backup Bot", "email": "backup@nas.example"}, to=[me],
+                       subject="Nightly backup finished", text="All 3 jobs completed without errors.",
+                       mailboxes=[inbox], keywords={"$seen": True}, when=t - timedelta(days=1, hours=7),
+                       headers={"Auto-Submitted": "auto-generated"})
         # Message with inline image and PDF attachment
         self.add_email(frm=people[5], to=[shop], subject="Your ticket: Berlin → München",
                        html='<p>Thanks for booking. Your ticket is attached.</p><p><img src="cid:logo@fake" alt="logo"></p>',
