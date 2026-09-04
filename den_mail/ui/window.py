@@ -58,6 +58,7 @@ class MainWindow(Adw.ApplicationWindow):
         if win.get("maximized"):
             self.maximize()
         self.client: JMAPClient | None = None
+        self.quitting = False   # set by app.quit: closing then really closes (#2)
         self.db: Database | None = None
         self.engine: SyncEngine | None = None
         self.tree = MailboxTree()
@@ -250,6 +251,7 @@ class MainWindow(Adw.ApplicationWindow):
         section.append("Preferences", "win.preferences")
         section.append("Keyboard Shortcuts", "win.shortcuts")
         section.append("About Den Mail", "app.about")
+        section.append("Quit", "app.quit")
         primary.append_section(None, section)
 
         self.sidebar = Sidebar(self.tree, self.client.session.account_name if self.client and self.client.session else "",
@@ -1480,6 +1482,12 @@ class MainWindow(Adw.ApplicationWindow):
             win.close()
         if self.compose_windows:
             return True
+        if self.config.get("run_in_background") and not self.quitting and self.engine:
+            # Keep syncing and notifying with the window hidden (#2); Quit ends it.
+            app = self.get_application()
+            if app is not None and hasattr(app, "hide_to_background"):
+                app.hide_to_background()
+                return True
         # Messages still counting down go out first; the window closes when they are sent.
         return self.flush_sends(self.close)
 

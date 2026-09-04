@@ -344,6 +344,9 @@ class PreferencesDialog(Adw.PreferencesDialog):
 
         sync = Adw.PreferencesGroup(title="Sync and notifications")
         sync.add(_switch(config, "notify_new_mail", True, "Notify about new mail"))
+        sync.add(_switch(config, "run_in_background", False, "Keep running when the window is closed",
+                         "Closing the window hides it; mail keeps syncing and notifications keep coming. "
+                         "Quit in the main menu (Ctrl+Q) ends it"))
         poll = Adw.SpinRow.new_with_range(30, 3600, 30)
         poll.set_title("Fallback poll interval (seconds)")
         poll.set_subtitle("Used when the push connection is unavailable")

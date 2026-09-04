@@ -1,0 +1,1 @@
+Run in the background: with "Keep running when the window is closed" on (Preferences → Account), closing the window keeps the sync going and new-mail notifications coming; a click on one, or starting the app again, brings the window back, and Quit in the main menu (Ctrl+Q) ends it
