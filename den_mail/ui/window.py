@@ -1306,6 +1306,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.locked = True
         self._before_lock = self.stack.get_visible_child_name() or "main"
         self.stack.set_visible_child_name("locked")
+        if lock.method(self.config) == lock.METHOD_KEYRING:
+            threading.Thread(target=lock.keyring_lock, name="keyring-lock", daemon=True).start()
         for w in (*self.compose_windows, *self.thread_windows):
             w.set_visible(False)
         self.set_title(f"{APP_NAME} (locked)")
@@ -1327,11 +1329,17 @@ class MainWindow(Adw.ApplicationWindow):
             self.lock()
 
     def unlock(self) -> None:
-        """The system prompt where the polkit policy is installed, else the passphrase."""
+        """The method chosen in Preferences: the system prompt, the keyring daemon's prompt,
+        or the passphrase or PIN dialog (see lock.method)."""
         if not self.locked:
             return
-        if lock.policy_installed():
+        method = lock.method(self.config)
+        if method == lock.METHOD_SYSTEM:
             lock.polkit_check(lambda ok, err: self._unlocked() if ok else self._toast(
+                f"Not unlocked{': ' + err if err else ''}", 5))
+            return
+        if method == lock.METHOD_KEYRING:
+            lock.keyring_unlock(lambda ok, err: self._unlocked() if ok else self._toast(
                 f"Not unlocked{': ' + err if err else ''}", 5))
             return
         stored = self.config.get("lock_passphrase") or ""
@@ -1342,7 +1350,7 @@ class MainWindow(Adw.ApplicationWindow):
             self._unlocked()
             self._toast("No passphrase or PIN is set, so the lock is off; set one under Account in Preferences", 6)
             return
-        pin = self.config.get("lock_kind") == "pin"
+        pin = method == lock.METHOD_PIN
         entry = Gtk.PasswordEntry(show_peek_icon=True, activates_default=True)
         if pin:
             entry.set_input_purpose(Gtk.InputPurpose.PIN)

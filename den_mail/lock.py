@@ -1,12 +1,14 @@
 """The lock screen (#28): hide the mail until the user proves it is them.
 
-Two ways to unlock.  Where the polkit policy file is installed (the AUR
+Three ways to unlock.  Where the polkit policy file is installed (the AUR
 package does that; `install.sh` says how), the system's own authentication
 agent asks, the way it does for privileged actions: password, fingerprint,
-whatever PAM is set up for.  Elsewhere, a Flatpak in particular, a local
-passphrase kept as a salted PBKDF2 hash in the config file.  This is a
-privacy screen, not a security boundary: the cache and the token are not
-encrypted by it.
+whatever PAM is set up for.  A keyring collection of the app's own ("Den
+Mail"), which the keyring daemon locks with the app and unlocks with its own
+prompt; nothing else in the keyring is touched, so no other app sees a
+prompt, and it works inside a Flatpak (#66).  Or a local passphrase or PIN
+kept as a salted PBKDF2 hash in the config file.  This is a privacy screen,
+not a security boundary: the cache and the token are not encrypted by it.
 """
 
 from __future__ import annotations
@@ -15,9 +17,13 @@ import hashlib
 import logging
 import os
 import secrets
+import threading
 from collections.abc import Callable
 
-from gi.repository import Gio, GLib
+import gi
+
+gi.require_version("Secret", "1")
+from gi.repository import Gio, GLib, Secret
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +31,35 @@ ACTION_ID = "io.github.felsenuboot.DenMail.unlock"
 POLICY_DIR = "/usr/share/polkit-1/actions"
 PBKDF2_ROUNDS = 200_000
 IDLE_CHOICES = [0, 1, 5, 15, 30, 60]   # minutes; 0 = never
+KEYRING_LABEL = "Den Mail"
+
+METHOD_SYSTEM, METHOD_PASSPHRASE, METHOD_PIN, METHOD_KEYRING = "system", "passphrase", "pin", "keyring"
+METHOD_TITLES = {
+    METHOD_SYSTEM: "The system prompt",
+    METHOD_PASSPHRASE: "A passphrase",
+    METHOD_PIN: "A PIN",
+    METHOD_KEYRING: "The keyring (a Den Mail collection)",
+}
+
+
+def method(config, policy_dir: str = POLICY_DIR) -> str:
+    """How this configuration unlocks. `lock_method` when set and possible here; else the
+    system prompt where the policy is installed, else what `lock_kind` said before #66."""
+    chosen = config.get("lock_method") or ""
+    if chosen in METHOD_TITLES and (chosen != METHOD_SYSTEM or policy_installed(policy_dir)):
+        return chosen
+    if policy_installed(policy_dir):
+        return METHOD_SYSTEM
+    return METHOD_PIN if config.get("lock_kind") == "pin" else METHOD_PASSPHRASE
+
+
+def method_ready(config, m: str) -> bool:
+    """Whether enabling the lock with this method has what it needs."""
+    if m in (METHOD_PASSPHRASE, METHOD_PIN):
+        return bool(config.get("lock_passphrase"))
+    if m == METHOD_KEYRING:
+        return keyring_exists()
+    return True
 
 
 # ------------------------------------------------------------ passphrase
@@ -75,9 +110,85 @@ def polkit_check(on_result: Callable[[bool, str | None], None], action_id: str =
             log.warning("polkit check failed: %s", e.message)
             GLib.idle_add(on_result, False, e.message)
 
-    import threading
-
     threading.Thread(target=call, name="polkit-unlock", daemon=True).start()
+
+
+# --------------------------------------------------------------- keyring
+
+
+def _service() -> Secret.Service:
+    """The Secret Service proxy with its collections loaded. Raises GLib.Error when no
+    daemon owns the name: the proxy alone comes up fine without one, and loading the
+    collections then trips a libsecret assertion, so the owner is checked first."""
+    service = Secret.Service.get_sync(Secret.ServiceFlags.NONE, None)
+    if not service.get_name_owner():
+        raise GLib.Error("no Secret Service is running")
+    service.load_collections_sync(None)
+    return service
+
+
+def keyring_collection(service=None):
+    """The app's own collection, found by its label; None while it does not exist."""
+    service = service or _service()
+    for c in service.get_collections() or []:
+        if c.get_label() == KEYRING_LABEL:
+            return c
+    return None
+
+
+def keyring_available() -> bool:
+    """A Secret Service is running (GNOME Keyring, KeePassXC, KWallet's bridge ...)."""
+    try:
+        _service()
+        return True
+    except Exception as e:  # noqa: BLE001 - GLib.Error, or libsecret's own complaints
+        log.debug("no secret service: %s", e)
+        return False
+
+
+def keyring_exists() -> bool:
+    try:
+        return keyring_collection() is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def keyring_create() -> None:
+    """Create the collection; the daemon asks for its new password. Raises GLib.Error."""
+    service = _service()
+    if keyring_collection(service) is None:
+        Secret.Collection.create_sync(service, KEYRING_LABEL, None, Secret.CollectionCreateFlags.NONE, None)
+
+
+def keyring_lock() -> None:
+    """Lock the collection; the daemon needs no prompt for that."""
+    try:
+        service = _service()
+        c = keyring_collection(service)
+        if c is not None:
+            service.lock_sync([c], None)
+    except GLib.Error as e:
+        log.warning("keyring lock failed: %s", e.message)
+
+
+def keyring_unlock(on_result: Callable[[bool, str | None], None]) -> None:
+    """Ask the daemon to unlock the collection; it shows its own prompt. `on_result(ok, error)`
+    on the main loop."""
+    def call() -> None:
+        try:
+            service = _service()
+            c = keyring_collection(service)
+            if c is None:
+                GLib.idle_add(on_result, False, "The Den Mail keyring does not exist any more")
+                return
+            _count, unlocked = service.unlock_sync([c], None)
+            ok = any(u.get_object_path() == c.get_object_path() for u in unlocked or []) or not c.get_locked()
+            GLib.idle_add(on_result, bool(ok), None if ok else "The keyring stayed locked")
+        except GLib.Error as e:
+            log.warning("keyring unlock failed: %s", e.message)
+            GLib.idle_add(on_result, False, e.message)
+
+    threading.Thread(target=call, name="keyring-unlock", daemon=True).start()
 
 
 # --------------------------------------------------------------- session
