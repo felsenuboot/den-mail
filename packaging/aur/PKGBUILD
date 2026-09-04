@@ -27,5 +27,8 @@ package() {
   install -Dm644 data/io.github.felsenuboot.DenMail.metainfo.xml -t "$pkgdir/usr/share/metainfo"
   install -Dm644 data/io.github.felsenuboot.DenMail.svg -t "$pkgdir/usr/share/icons/hicolor/scalable/apps"
   install -Dm644 data/io.github.felsenuboot.DenMail-symbolic.svg -t "$pkgdir/usr/share/icons/hicolor/symbolic/apps"
+  for s in 64 128 256; do
+    install -Dm644 "data/icons/$s.png" "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps/io.github.felsenuboot.DenMail.png"
+  done
   install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
 }

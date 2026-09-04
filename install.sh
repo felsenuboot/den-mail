@@ -19,7 +19,12 @@ chmod 644 "$APPS/$APP.desktop"
 install -m644 "$HERE/data/$APP.svg" "$ICONS/scalable/apps/$APP.svg"
 install -m644 "$HERE/data/$APP-symbolic.svg" "$ICONS/symbolic/apps/$APP-symbolic.svg"
 install -m644 "$HERE/data/$APP.metainfo.xml" "$META/$APP.metainfo.xml"
-# Fixed-size PNGs for docks/taskbars that do not rasterise SVG themselves.
+# Fixed-size PNGs for docks/taskbars that do not rasterise SVG themselves: the
+# shipped ones, and every other size when ImageMagick is around.
+for s in 64 128 256; do
+  mkdir -p "$ICONS/${s}x${s}/apps"
+  install -m644 "$HERE/data/icons/$s.png" "$ICONS/${s}x${s}/apps/$APP.png"
+done
 if command -v magick >/dev/null 2>&1; then
   for s in 16 22 24 32 48 64 96 128 256 512; do
     mkdir -p "$ICONS/${s}x${s}/apps"
