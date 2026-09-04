@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from gi.repository import Adw, Gio, Gtk
 
+from .. import shortcuts
 from ..models.thread import ThreadObject
 from ..store import actions
 from .conversation import ConversationView
@@ -68,14 +69,9 @@ class ThreadWindow(Adw.Window):
             action.connect("activate", lambda _a, _p, fn=fn: fn())
             group.add_action(action)
         # The conversation toolbar targets win.* — provide them for this window too.
+        # The shortcuts that name an action this window lacks simply do nothing.
         self.insert_action_group("win", group)
-        for accel, name in (("r", "reply"), ("a", "reply-all"), ("f", "forward"), ("e", "archive"),
-                            ("numbersign", "trash"), ("Delete", "trash"), ("s", "flag"), ("l", "labels"),
-                            ("v", "move"), ("<Shift>u", "mark-unread")):
-            ctrl = Gtk.ShortcutController(scope=Gtk.ShortcutScope.LOCAL)
-            ctrl.add_shortcut(Gtk.Shortcut.new(Gtk.ShortcutTrigger.parse_string(accel),
-                                               Gtk.NamedAction.new(f"win.{name}")))
-            self.add_controller(ctrl)
+        shortcuts.install(self)
 
     def _email_action(self, kind: str, ids: list[str]) -> None:
         closes = kind in ("archive", "trash", "junk", "destroy") and self.mailbox_id is not None

@@ -83,9 +83,12 @@ JMAP session URL.
 | `Shift+U` / `Shift+I` | mark unread / read |
 | `l` / `v` | labels / move to |
 | `/`, `Ctrl+F` | search |
+| `g` then `i` / `d` | go to Inbox / Drafts |
 | `F5`, `Ctrl+R` | refresh |
 | `Ctrl+Return` / `Ctrl+S` | send / save draft (compose) |
-| `Ctrl+?` | shortcuts dialog |
+| `Escape` | back (narrow layout) |
+| `Ctrl+A` | select all |
+| `Ctrl+,` / `Ctrl+?` / `Ctrl+Q` | preferences / shortcuts dialog / quit |
 
 </details>
 

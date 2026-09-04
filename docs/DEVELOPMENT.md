@@ -26,7 +26,7 @@ so it does not join a running desktop instance.
 `DEN_MAIL_AUTOPILOT="sleep 3; select 0; action win.reply"` drives the UI
 from a script (see `den_mail/autopilot.py` for the commands: `select`,
 `mailbox`, `search`, `action`, `compose`, `from-popup`, `theme`, `context-menu`,
-`thread-menu`, `group off|sender|domain`, `fold N`, `fold-all on|off`, `select-mode on|off`, `toggle N`, `scope all|mailbox`, `resize`, `quit`, …). The screenshots in `data/screenshots/` are
+`thread-menu`, `group off|sender|domain`, `fold N`, `fold-all on|off`, `select-mode on|off`, `toggle N`, `scope all|mailbox`, `resize`, `focus search|list|sidebar|body`, `state`, `row-pos <mailbox>`, `trace-keys`, `quit`, …). The screenshots in `data/screenshots/` are
 taken that way inside a headless `cage` compositor:
 
 ```
@@ -34,7 +34,14 @@ WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 \
   cage -- sh -c './bin/den-mail & sleep 6; grim shot.png; kill %1'
 ```
 
-`wtype` works inside the cage session for key presses.
+`wtype` works inside the cage session for key presses, except that the first
+key of a session is dropped, so send a bare `wtype -k Shift_L` first. Combined
+with the autopilot's `focus`, `state` and `trace-keys` steps that checks where
+keys go (the shortcut letters must reach a focused search box, and the
+shortcuts otherwise; `trace-keys` shows the widget that swallows one). For the
+pointer (hover, clicks) run the app on the rootful Xwayland described below
+and drive it through XTest, for example with a few lines of ctypes against
+`libXtst`; `row-pos <mailbox>` logs where a sidebar row is.
 
 Cage fullscreens every window to its 1280x720 headless output, so to test a
 particular window size (breakpoints, narrow layouts) run a rootful Xwayland

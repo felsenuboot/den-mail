@@ -7,7 +7,7 @@ import threading
 
 from gi.repository import Adw, Gio, GLib, Gtk
 
-from .. import secrets
+from .. import secrets, shortcuts
 from ..avatars import AvatarService
 from ..config import Config, database_path
 from ..html.body import find_inline_part
@@ -69,6 +69,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.stack.add_named(self.loading, "loading")
         self.main: Adw.NavigationSplitView | None = None
         self._install_actions()
+        shortcuts.install(self)
         self.connect("close-request", self._on_close_request)
 
     # ------------------------------------------------------------ account
@@ -848,19 +849,10 @@ class MainWindow(Adw.ApplicationWindow):
 
     def show_shortcuts(self) -> None:
         dlg = Adw.ShortcutsDialog()
-        for title, items in (
-            ("Navigation", [("Next conversation", "j Down"), ("Previous conversation", "k Up"),
-                            ("Open conversation", "Return"), ("Back", "Escape"), ("Search", "slash <Control>f"),
-                            ("Go to Inbox", "g+i"), ("Go to Drafts", "g+d"), ("Refresh", "F5")]),
-            ("Conversations", [("Archive", "e"), ("Delete", "numbersign Delete"), ("Mark as spam", "exclam"),
-                               ("Flag", "s"), ("Mark unread", "<Shift>u"), ("Mark read", "<Shift>i"),
-                               ("Labels", "l"), ("Move to…", "v"), ("Select all", "<Control>a")]),
-            ("Compose", [("New message", "c <Control>n"), ("Reply", "r"), ("Reply all", "a"), ("Forward", "f"),
-                         ("Send", "<Control>Return"), ("Save draft", "<Control>s")]),
-        ):
+        for title, items in shortcuts.DIALOG:
             section = Adw.ShortcutsSection(title=title)
-            for name, accel in items:
-                section.add(Adw.ShortcutsItem(title=name, accelerator=accel))
+            for name, ref, *extra in items:
+                section.add(Adw.ShortcutsItem(title=name, accelerator=shortcuts.dialog_accelerator(ref, *extra)))
             dlg.add(section)
         dlg.present(self)
 

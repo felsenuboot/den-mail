@@ -13,34 +13,11 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 from . import APP_ID, APP_NAME, VERSION
 from .config import Config
+from .shortcuts import application_accels
 from .ui.window import MainWindow
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-ACCELS = {
-    "win.compose": ["c", "<Control>n"],
-    "win.reply": ["r"],
-    "win.reply-all": ["a"],
-    "win.forward": ["f"],
-    "win.archive": ["e"],
-    "win.trash": ["numbersign", "Delete"],
-    "win.junk": ["exclam"],
-    "win.flag": ["s"],
-    "win.mark-unread": ["<Shift>u"],
-    "win.mark-read": ["<Shift>i"],
-    "win.labels": ["l"],
-    "win.move": ["v"],
-    "win.search": ["slash", "<Control>f"],
-    "win.refresh": ["F5", "<Control>r"],
-    "win.select-all": ["<Control>a"],
-    "win.next": ["j"],
-    "win.previous": ["k"],
-    "win.open": ["Return", "o"],
-    "win.back": ["Escape"],
-    "win.preferences": ["<Control>comma"],
-    "win.shortcuts": ["<Control>question"],
-    "app.quit": ["<Control>q"],
-}
 
 
 class FastmailApp(Adw.Application):
@@ -99,7 +76,10 @@ class FastmailApp(Adw.Application):
             "theme %s: scheme=%s dark=%s system-supports=%s gtk-theme=%s prefer-dark=%s",
             when, sm.get_color_scheme().value_nick, sm.get_dark(), sm.get_system_supports_color_schemes(),
             gs.get_property("gtk-theme-name"), gs.get_property("gtk-application-prefer-dark-theme"))
-        for action, accels in ACCELS.items():
+        # Only app.* actions are application accelerators; those run before the
+        # focused widget sees the key, so the window shortcuts live in a
+        # bubble-phase controller instead (shortcuts.py, #33).
+        for action, accels in application_accels().items():
             self.set_accels_for_action(action, accels)
 
     def do_activate(self) -> None:
