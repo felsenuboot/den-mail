@@ -252,9 +252,6 @@ image.label-color-11 { color: #a51d2d; } .chip.label-color-11 { background: alph
 }
 
 /* Masked email */
-.masked-email-address {
-  font-family: monospace;
-}
 .state-enabled { color: @success_color; }
 .state-disabled { color: @warning_color; }
 .state-deleted { color: @error_color; }

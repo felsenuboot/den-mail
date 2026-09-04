@@ -77,28 +77,32 @@ class MaskedEmailDialog(Adw.Dialog):
         self.stack.set_visible_child_name("list" if items else "empty")
 
     def _row(self, m: dict) -> Adw.ActionRow:
+        """A boxed-list row: the address, what it is for, and at most two controls
+        (the on/off switch and a menu). Activating the row copies the address."""
         state = m.get("state") or "enabled"
-        subtitle_parts = [p for p in (m.get("description"), m.get("forDomain")) if p]
+        site = (m.get("forDomain") or "").removeprefix("https://").removeprefix("http://").rstrip("/")
+        subtitle_parts = [p for p in (m.get("description"), site) if p]
         if m.get("lastMessageAt"):
             subtitle_parts.append(f"last mail {format_date(m['lastMessageAt'])}")
-        subtitle_parts.append(STATE_LABEL.get(state, state))
+        if state not in ("enabled", "disabled"):
+            subtitle_parts.append(STATE_LABEL.get(state, state))
         row = Adw.ActionRow(title=GLib.markup_escape_text(m.get("email") or ""),
-                            subtitle=" · ".join(subtitle_parts), title_selectable=True)
+                            subtitle=GLib.markup_escape_text(" · ".join(subtitle_parts)), activatable=True,
+                            tooltip_text="Copy the address")
         row.item = m
-        row.add_css_class("masked-email-address")
+        row.connect("activated", lambda *_: (copy_text(self, m["email"]), toast(self, "Address copied")))
         icon = Gtk.Image(icon_name={"enabled": "object-select-symbolic", "disabled": "fm-blocked-symbolic",
-                                    "deleted": "user-trash-symbolic"}.get(state, "fm-pending-symbolic"))
+                                    "deleted": "user-trash-symbolic"}.get(state, "fm-pending-symbolic"),
+                         tooltip_text=STATE_LABEL.get(state, state))
         icon.add_css_class(f"state-{state}")
         row.add_prefix(icon)
-        copy = Gtk.Button(icon_name="edit-copy-symbolic", tooltip_text="Copy address", valign=Gtk.Align.CENTER)
-        copy.add_css_class("flat")
-        copy.connect("clicked", lambda *_: (copy_text(self, m["email"]), toast(self, "Address copied")))
-        row.add_suffix(copy)
         if state in ("enabled", "disabled"):
-            switch = Gtk.Switch(active=state == "enabled", valign=Gtk.Align.CENTER, tooltip_text="Active")
+            switch = Gtk.Switch(active=state == "enabled", valign=Gtk.Align.CENTER,
+                                tooltip_text="Active: mail to this address reaches your inbox")
             switch.connect("state-set", lambda _s, on: self._set_state(m, "enabled" if on else "disabled"))
             row.add_suffix(switch)
         menu = Gio.Menu()
+        menu.append("Copy address", f"masked.copy::{m['id']}")
         menu.append("Edit…", f"masked.edit::{m['id']}")
         if m.get("forDomain", "").startswith("http"):
             menu.append("Open website", f"masked.open::{m['id']}")
@@ -118,7 +122,8 @@ class MaskedEmailDialog(Adw.Dialog):
         if getattr(self, "_actions", None):
             return
         group = Gio.SimpleActionGroup()
-        for name, fn in (("edit", self.edit), ("open", self._open_site),
+        for name, fn in (("copy", lambda m: (copy_text(self, m.get("email") or ""), toast(self, "Address copied"))),
+                         ("edit", self.edit), ("open", self._open_site),
                          ("restore", lambda m: self._set_state(m, "enabled")),
                          ("delete", lambda m: self._set_state(m, "deleted")), ("destroy", self._destroy)):
             a = Gio.SimpleAction.new(name, GLib.VariantType.new("s"))
