@@ -14,6 +14,7 @@ import queue
 import re
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -113,6 +114,10 @@ def parse_sort(sort: list[dict] | None) -> tuple[str, bool, bool]:
             key = "size"
             break
     return key, flagged, unread
+
+
+def _now_iso() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def query_key(spec: dict) -> str:
@@ -323,6 +328,7 @@ class SyncEngine(GObject.Object):
         "rules-applied": (GObject.SignalFlags.RUN_FIRST, None, (object,)),   # {rule id: hits} (#22)
         "contacts-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "outbox-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),     # queued changes came or went (#8)
+        "draft-created": (GObject.SignalFlags.RUN_FIRST, None, (str, str)),  # a queued draft's local id, its server id (#61)
     }
 
     def __init__(self, client: JMAPClient, db: Database, config: Config):
@@ -1226,6 +1232,19 @@ class SyncEngine(GObject.Object):
                     self._submit(payload["draft"], payload["identity_id"], payload.get("replace_id"),
                                  payload.get("in_reply_to_id"), payload.get("forwarded_id"), payload.get("send_at"))
                     self._emit("sync-status", "idle", f"Sent: {payload['draft'].get('subject') or '(no subject)'}")
+                elif kind == "draft":
+                    args: dict[str, Any] = {"accountId": acc, "create": {"draft": self._draft_object(payload["draft"])}}
+                    if payload.get("replace_id"):
+                        args["destroy"] = [payload["replace_id"]]
+                    res = self.client.call("Email/set", args)
+                    check_set_response(res, "created")
+                    new_id = res["created"]["draft"]["id"]
+                    if payload.get("replace_id"):
+                        self.db.delete_emails([payload["replace_id"]])
+                        self._emit("emails-destroyed", [payload["replace_id"]])
+                    self.db.outbox_delete(row["id"])   # before _drop_local looks for it
+                    self._drop_local(payload.get("local_id"))
+                    self._emit("draft-created", payload.get("local_id") or "", new_id)
             except TransportError as e:
                 self._set_online(False, str(e))
                 return
@@ -1303,27 +1322,97 @@ class SyncEngine(GObject.Object):
         obj["keywords"] = {KW_DRAFT: True, KW_SEEN: True}
         return obj
 
+    # ------------------------------------------------------- local drafts
+
+    LOCAL_PREFIX: ClassVar[str] = "local:"
+
+    @classmethod
+    def is_local(cls, email_id: str | None) -> bool:
+        return bool(email_id) and str(email_id).startswith(cls.LOCAL_PREFIX)
+
+    def _local_draft(self, draft: dict, local_id: str) -> None:
+        """Put a draft the server has not seen into the cache and the Drafts lists (#61)."""
+        placeholder = self._draft_object(draft)
+        text = next((v.get("value", "") for v in (draft.get("bodyValues") or {}).values()), "")
+        placeholder.update({"id": local_id, "threadId": local_id, "receivedAt": _now_iso(),
+                            "preview": text[:200], "size": len(text), "hasAttachment": False})
+        self.db.upsert_emails([{k: v for k, v in placeholder.items() if k not in ("bodyValues", "bodyStructure")}])
+        self.db.set_email_body(placeholder)
+        for q in self.db.queries_for_mailbox(self.roles[ROLE_DRAFTS]):
+            ids = [local_id] + [i for i in q["ids"] if i != local_id]
+            self.db.set_query(q["key"], q["spec"], ids, q["total"], q["query_state"], q["can_calculate_changes"],
+                              q["complete"])
+            self._emit("query-updated", q["key"])
+        self._emit("emails-changed", [local_id])
+
+    def _drop_local(self, local_id: str | None) -> None:
+        """Forget a local draft: its cache row, its place in the Drafts lists, its queued row."""
+        if not self.is_local(local_id):
+            return
+        row = self.db.outbox_find("draft", local_id)
+        if row:
+            self.db.outbox_delete(row["id"])
+        self.db.delete_emails([local_id])
+        for q in self.db.queries_for_mailbox(self.roles[ROLE_DRAFTS]):
+            if local_id in q["ids"]:
+                self.db.set_query(q["key"], q["spec"], [i for i in q["ids"] if i != local_id], q["total"],
+                                  q["query_state"], q["can_calculate_changes"], q["complete"])
+                self._emit("query-updated", q["key"])
+        self._emit("emails-destroyed", [local_id])
+        self._emit("outbox-changed")
+
+    def _resolve_local(self, replace_id: str | None) -> tuple[str | None, str | None]:
+        """(the server draft to replace, the local draft it stands for): a local id maps to the
+        server draft its queued row was replacing, if any."""
+        if not self.is_local(replace_id):
+            return replace_id, None
+        row = self.db.outbox_find("draft", replace_id)
+        return (row["payload"].get("replace_id") if row else None), replace_id
+
+    def discard_draft(self, draft_id: str) -> None:
+        """Delete a draft, on the server or the local one that never got there (#61)."""
+        if self.is_local(draft_id):
+            self.enqueue(PRIO_ACTION, lambda: self._drop_local(draft_id), "drop-draft")
+        else:
+            from .actions import destroy
+
+            self.perform(destroy([draft_id]))
+
     def save_draft(self, draft: dict, replace_id: str | None,
                    on_done: Callable[[str], None], on_error: Callable[[str], None] | None = None) -> None:
+        """Create the draft on the server, replacing `replace_id`. Unreachable, the draft is kept
+        locally, listed in Drafts and queued; `on_done` gets a local id that later saves and the
+        send pass back as `replace_id` (#61)."""
         def job() -> None:
             acc = self.client.session.account_id
+            server_id, local_id = self._resolve_local(replace_id)
             args: dict[str, Any] = {"accountId": acc, "create": {"draft": self._draft_object(draft)}}
-            if replace_id:
-                args["destroy"] = [replace_id]
+            if server_id:
+                args["destroy"] = [server_id]
             try:
                 res = self.client.call("Email/set", args)
                 check_set_response(res, "created")
             except TransportError as e:
-                self._set_online(False, str(e))
-                self._callback(on_error, "offline; the draft stays in this window")
+                local_id = local_id or f"{self.LOCAL_PREFIX}{uuid.uuid4().hex}"
+                payload = {"draft": draft, "replace_id": server_id, "local_id": local_id,
+                           "description": f"Draft: {draft.get('subject') or '(no subject)'}"}
+                row = self.db.outbox_find("draft", local_id)
+                if row:
+                    self.db.outbox_update(row["id"], payload)
+                    self._set_online(False, str(e))
+                else:
+                    self._hold("draft", payload, e)
+                self._local_draft(draft, local_id)
+                self._callback(on_done, local_id)
                 return
             except (MethodError, SetError) as e:
                 self._callback(on_error, e.description or getattr(e, "type", str(e)))
                 return
             new_id = res["created"]["draft"]["id"]
-            if replace_id:
-                self.db.delete_emails([replace_id])
-                self._emit("emails-destroyed", [replace_id])
+            if server_id:
+                self.db.delete_emails([server_id])
+                self._emit("emails-destroyed", [server_id])
+            self._drop_local(local_id)
             self._incremental_sync()
             self._callback(on_done, new_id)
 
@@ -1337,17 +1426,20 @@ class SyncEngine(GObject.Object):
         the message waits in the Scheduled folder, where it can still be cancelled.  Offline,
         the message is queued and `on_done` gets an empty id (#8)."""
         def job() -> None:
+            server_id, local_id = self._resolve_local(replace_id)
             try:
-                new_id = self._submit(draft, identity_id, replace_id, in_reply_to_id, forwarded_id, send_at)
+                new_id = self._submit(draft, identity_id, server_id, in_reply_to_id, forwarded_id, send_at)
             except TransportError as e:
-                self._hold("send", {"draft": draft, "identity_id": identity_id, "replace_id": replace_id,
+                self._hold("send", {"draft": draft, "identity_id": identity_id, "replace_id": server_id,
                                      "in_reply_to_id": in_reply_to_id, "forwarded_id": forwarded_id,
                                      "send_at": send_at}, e)
+                self._drop_local(local_id)   # the queued message carries the latest text (#61)
                 self._callback(on_done, "")
                 return
             except (MethodError, SetError) as e:
                 self._callback(on_error, e.description or getattr(e, "type", str(e)))
                 return
+            self._drop_local(local_id)
             self._incremental_sync()
             self._callback(on_done, new_id)
 

@@ -68,6 +68,13 @@ order and stopping at the first transport error; a queued change the server
 rejects raises `action-failed` and is dropped. Sends go through the same
 `_submit` as a live send, so scheduled messages queue too.
 
+A draft saved while offline is kept as a local email (`local:<uuid>`) in the
+cache and at the top of the cached Drafts queries, with one queued `draft`
+row that later saves update in place; the replay creates it on the server,
+drops the local copy and emits `draft-created(local_id, server_id)` so an
+open compose window continues against the server's copy. Sending such a
+draft drops its row: the queued `send` carries the latest text (#61).
+
 ## Labels
 
 Fastmail labels are JMAP mailboxes; a message lists all of them in

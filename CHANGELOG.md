@@ -6,6 +6,9 @@ Unreleased changes gather at the top until they are tagged.
 
 ## [Unreleased]
 
+### Features
+- Offline drafts: saving a draft while the server is unreachable keeps it locally, lists it in Drafts, and creates it on the server with the next sync; later saves and Send while still offline update that one queued draft instead of chaining, and an open compose window learns the server's id when it arrives (#61)
+
 ## [0.5.0] - 2026-09-04
 
 Milestone *Assistant*: a language-model layer with three providers, and summaries on it.

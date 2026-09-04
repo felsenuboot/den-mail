@@ -828,6 +828,17 @@ class Database:
     def outbox_count(self) -> int:
         return int(self.conn().execute("SELECT COUNT(*) AS n FROM outbox").fetchone()["n"] or 0)
 
+    def outbox_find(self, kind: str, local_id: str) -> dict | None:
+        """The queued row of this kind whose payload carries `local_id` (a queued draft, #61)."""
+        for row in self.outbox_list():
+            if row["kind"] == kind and row["payload"].get("local_id") == local_id:
+                return row
+        return None
+
+    def outbox_update(self, row_id: int, payload: dict) -> None:
+        with self._write_lock:
+            self.conn().execute("UPDATE outbox SET payload=? WHERE id=?", (json.dumps(payload), row_id))
+
     def outbox_delete(self, row_id: int) -> None:
         with self._write_lock:
             self.conn().execute("DELETE FROM outbox WHERE id=?", (row_id,))
@@ -907,6 +918,16 @@ class Database:
                 (key, json.dumps(spec), json.dumps(ids), total, query_state, 1 if can_calculate_changes else 0,
                  time.time(), 1 if complete else 0),
             )
+
+    def queries_for_mailbox(self, mailbox_id: str) -> list[dict]:
+        """The cached queries that list this mailbox (a local draft joins them, #61)."""
+        rows = self.conn().execute("SELECT key FROM query_cache").fetchall()
+        found = []
+        for r in rows:
+            q = self.get_query(r["key"])
+            if q and (q["spec"].get("filter") or {}).get("inMailbox") == mailbox_id:
+                found.append(q)
+        return found
 
     def drop_queries(self) -> None:
         with self._write_lock:
