@@ -15,6 +15,18 @@ Read this before changing anything. The full development notes are in
   left in the conversation. Label it, put it in a milestone if it fits one,
   and carry on with the work at hand.
 
+## Staying lean
+- Den Mail is a small, fast client: Python, GTK4, libadwaita, SQLite, and
+  WebKitGTK for HTML mail. Keep it that way. A change that adds a runtime
+  dependency, ships model or data files, runs work in the background by
+  default, or adds a preference row has to say in its PR why the app is better
+  with it than without, what it costs at start-up and in memory, and why a
+  smaller way does not do. Off by default and measured is the norm for
+  anything that runs on its own; features nobody asked for do not go in.
+- These are not bans. Something may one day earn a dependency or a shipped
+  model; it earns it in the PR, with numbers (`DEN_MAIL_TIMING=1`, RSS), not
+  by default.
+
 ## Branches and pull requests
 - Never commit on `master`. Branch from it as `<issue>-<slug>` for issue work
   (`21-cleanup-dialog`), `release/<version>` for a release, `chore/<slug>` for
