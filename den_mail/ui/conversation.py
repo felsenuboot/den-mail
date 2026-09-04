@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import ClassVar
 
-from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gsk, Gtk
 
 from .. import launch
 from ..avatars import sender_key
@@ -16,6 +16,39 @@ from ..models.thread import ThreadObject, format_date_long
 from ..unsubscribe import parse_list_unsubscribe
 from .message_body import MessageBody
 from .widgets import avatar, confirm, human_size, open_uri, toast
+
+COLUMN_WIDTH = 980  # the message column's maximum width
+
+
+class StartClamp(Gtk.Widget):
+    """One child, at most `maximum` wide, at the start of the widget rather than centred."""
+
+    def __init__(self, child: Gtk.Widget, maximum: int):
+        super().__init__()
+        self.maximum = maximum
+        self._child = child
+        child.set_parent(self)
+
+    def do_measure(self, orientation, for_size):
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            minimum, natural, _mb, _nb = self._child.measure(orientation, -1)
+            return minimum, max(minimum, min(natural, self.maximum)), -1, -1
+        width = min(for_size, self.maximum) if for_size > 0 else for_size
+        minimum, natural, _mb, _nb = self._child.measure(orientation, width)
+        return minimum, natural, -1, -1
+
+    def do_size_allocate(self, width, height, baseline):
+        column = min(width, self.maximum)
+        transform = None
+        if self.get_direction() == Gtk.TextDirection.RTL and column < width:
+            transform = Gsk.Transform().translate(Graphene.Point().init(width - column, 0))
+        self._child.allocate(column, height, baseline, transform)
+
+    def do_dispose(self):
+        if self._child is not None:
+            self._child.unparent()
+            self._child = None
+        Gtk.Widget.do_dispose(self)
 
 
 class AttachmentChip(Gtk.Button):
@@ -485,6 +518,7 @@ class ConversationView(Adw.NavigationPage):
     # Set by the breakpoint bin around the content when the pane is narrow; message cards
     # then drop their secondary buttons so the pane can shrink to the header bar's width.
     compact = GObject.Property(type=bool, default=False)
+    wide = GObject.Property(type=bool, default=False)
 
     def __init__(self, db, engine, tree, config, on_compose: Callable[[str, str], None],
                  on_email_action: Callable[[str, list[str]], None], avatars=None):
@@ -510,35 +544,39 @@ class ConversationView(Adw.NavigationPage):
         self.on_remove_label: Callable[[str], None] = lambda mailbox_id: None
 
         view = Adw.ToolbarView()
-        header = Adw.HeaderBar(show_title=False)
+        self.header = Adw.HeaderBar(show_title=False)
         for icon, tip, action in (("fm-reply-symbolic", "Reply (R)", "win.reply"),
                                   ("fm-reply-all-symbolic", "Reply all (A)", "win.reply-all"),
                                   ("fm-forward-symbolic", "Forward (F)", "win.forward")):
             b = Gtk.Button(icon_name=icon, tooltip_text=tip)
             b.set_action_name(action)
-            header.pack_start(b)
+            self.header.pack_start(b)
         more_menu = Gio.Menu()
         more_menu.append("Mark as unread", "win.mark-unread")
         more_menu.append("Mark as read", "win.mark-read")
         more_menu.append("Mark as spam", "win.junk")
         more_menu.append("Not spam", "win.not-junk")
         more_menu.append("Delete permanently", "win.delete-permanently")
-        more = Gtk.MenuButton(icon_name="view-more-symbolic", menu_model=more_menu, tooltip_text="More")
-        header.pack_end(more)
-        self.labels_button = Gtk.MenuButton(icon_name="fm-tag-symbolic", tooltip_text="Labels (L)")
-        header.pack_end(self.labels_button)
-        self.move_button = Gtk.MenuButton(icon_name="folder-symbolic", tooltip_text="Move to… (V)")
-        header.pack_end(self.move_button)
-        self.flag_button = Gtk.Button(icon_name="fm-star-outline-symbolic", tooltip_text="Flag (S)")
-        self.flag_button.set_action_name("win.flag")
-        header.pack_end(self.flag_button)
-        trash = Gtk.Button(icon_name="user-trash-symbolic", tooltip_text="Delete (#)")
-        trash.set_action_name("win.trash")
-        header.pack_end(trash)
+        # The thread actions travel: in the header bar normally, and next to the
+        # message column when the pane is much wider than it (see `wide`).
+        self.actions = Gtk.Box(spacing=6)
         archive = Gtk.Button(icon_name="fm-archive-symbolic", tooltip_text="Archive (E)")
         archive.set_action_name("win.archive")
-        header.pack_end(archive)
-        view.add_top_bar(header)
+        self.actions.append(archive)
+        trash = Gtk.Button(icon_name="user-trash-symbolic", tooltip_text="Delete (#)")
+        trash.set_action_name("win.trash")
+        self.actions.append(trash)
+        self.flag_button = Gtk.Button(icon_name="fm-star-outline-symbolic", tooltip_text="Flag (S)")
+        self.flag_button.set_action_name("win.flag")
+        self.actions.append(self.flag_button)
+        self.move_button = Gtk.MenuButton(icon_name="folder-symbolic", tooltip_text="Move to… (V)")
+        self.actions.append(self.move_button)
+        self.labels_button = Gtk.MenuButton(icon_name="fm-tag-symbolic", tooltip_text="Labels (L)")
+        self.actions.append(self.labels_button)
+        more = Gtk.MenuButton(icon_name="view-more-symbolic", menu_model=more_menu, tooltip_text="More")
+        self.actions.append(more)
+        self.header.pack_end(self.actions)
+        view.add_top_bar(self.header)
 
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
         self.placeholder = kanji_placeholder()
@@ -551,16 +589,19 @@ class ConversationView(Adw.NavigationPage):
         self.content.set_margin_end(16)
         self.content.set_margin_top(12)
         self.content.set_margin_bottom(24)
-        self.subject = Gtk.Label(xalign=0, wrap=True, selectable=True, focusable=False)
+        self.subject = Gtk.Label(xalign=0, wrap=True, selectable=True, focusable=False, hexpand=True)
         self.subject.add_css_class("conversation-subject")
-        self.content.append(self.subject)
+        self.subject_row = Gtk.Box(spacing=12)
+        self.subject_row.append(self.subject)
+        self.content.append(self.subject_row)
         self.chips = Adw.WrapBox(child_spacing=6, line_spacing=6)
         self.content.append(self.chips)
         self.cards_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.cards_box.set_margin_top(8)
         self.content.append(self.cards_box)
-        clamp = Adw.Clamp(maximum_size=980, tightening_threshold=800, child=self.content)
-        self.scrolled.set_child(clamp)
+        # The message column keeps a readable width and stays at the start of the pane,
+        # next to the list, rather than drifting to the middle of an ultrawide screen.
+        self.scrolled.set_child(StartClamp(self.content, COLUMN_WIDTH))
         self.stack.add_named(self.scrolled, "thread")
         # The bin decouples the pane's minimum width from the cards' natural layout: below
         # the breakpoint the cards switch to their compact form, which fits the bin's request.
@@ -569,10 +610,28 @@ class ConversationView(Adw.NavigationPage):
         compact_bp = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 580sp"))
         compact_bp.add_setter(self, "compact", True)
         content_bin.add_breakpoint(compact_bp)
+        # Far wider than the column, the header bar's actions would sit a screen away from
+        # the message; they move into the subject row then.
+        wide_bp = Adw.Breakpoint.new(Adw.BreakpointCondition.parse(f"min-width: {COLUMN_WIDTH + 320}sp"))
+        wide_bp.add_setter(self, "wide", True)
+        content_bin.add_breakpoint(wide_bp)
         view.set_content(content_bin)
         self.connect("notify::compact", lambda *_: [c.set_compact(self.compact) for c in self.cards.values()])
+        self.connect("notify::wide", lambda *_: self._place_actions())
         self.set_child(view)
         self._install_actions()
+
+    def _place_actions(self) -> None:
+        """Move the thread actions between the header bar and the subject row."""
+        parent = self.actions.get_parent()
+        if self.wide and parent is not self.subject_row:
+            if parent is not None:
+                self.header.remove(self.actions)
+            self.actions.set_valign(Gtk.Align.START)
+            self.subject_row.append(self.actions)
+        elif not self.wide and parent is self.subject_row:
+            self.subject_row.remove(self.actions)
+            self.header.pack_end(self.actions)
 
     def _install_actions(self) -> None:
         group = Gio.SimpleActionGroup()

@@ -54,6 +54,13 @@ WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 cage -- sh -
   sleep 9; grim shot.png; kill %2 %1'
 ```
 
+For an ultrawide window, give cage two headless outputs and let the app ask for
+the whole span: `WLR_HEADLESS_OUTPUTS=2` makes a 2560x720 screen, a seeded
+`config.json` with `{"window": {"width": 2560, "height": 720}}` in the fresh
+`XDG_CONFIG_HOME` sizes the window, and `grim` without `-o` captures both
+outputs in one image. Cage fullscreens a rootful Xwayland to a single output,
+so that route cannot go wider than 1280.
+
 The autopilot `measure [threshold]` step logs the window's real size, which split
 views are collapsed, the minimum width of each pane and every descendant wider
 than the threshold, which is how to find the widget that keeps a pane from
