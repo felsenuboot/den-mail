@@ -8,6 +8,7 @@ This reads what is in a cached body; it never fetches anything.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from dataclasses import dataclass
@@ -108,10 +109,8 @@ def extract(html: str | None) -> list[dict]:
             continue
     if "itemscope" in html:
         parser = _Microdata()
-        try:
+        with contextlib.suppress(Exception):   # a broken document yields what it yielded
             parser.feed(html)
-        except Exception:  # noqa: BLE001 - a broken document yields what it yielded
-            pass
         out += parser.items
     return out
 
@@ -221,9 +220,9 @@ def summarise_one(obj: dict) -> Summary | None:
                 parts.append(dep)
         elif kind == "LodgingReservation":
             parts.append(f"Stay at {_name(target)}" if _name(target) else "Stay")
-            stay = " – ".join(  # noqa: RUF001 - an en dash between two dates
-            x for x in (_when(obj.get("checkinTime") or obj.get("checkinDate")),
-                                          _when(obj.get("checkoutTime") or obj.get("checkoutDate"))) if x)
+            dates = (_when(obj.get("checkinTime") or obj.get("checkinDate")),
+                     _when(obj.get("checkoutTime") or obj.get("checkoutDate")))
+            stay = " – ".join(x for x in dates if x)  # noqa: RUF001 - an en dash between two dates
             if stay:
                 parts.append(stay)
         elif kind == "EventReservation":
