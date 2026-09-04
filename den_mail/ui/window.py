@@ -109,10 +109,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.stack.add_named(self.lock_page, "locked")
         self.idle = lock.IdleTimer(self.lock_idle)
         self.idle.set_minutes(int(config.get("lock_idle_minutes", 0)) if config.get("lock_enabled") else 0)
-        activity = Gtk.EventControllerLegacy()
-        activity.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
-        activity.connect("event", lambda *_: (self.idle.touch(), False)[1])
-        self.add_controller(activity)
+        self.track_activity(self)
         self._session_subs = lock.watch_session_lock(self.lock_from_session) if config.get("lock_enabled") else []
         self.main: Adw.NavigationSplitView | None = None
         self._install_actions()
@@ -1296,6 +1293,14 @@ class MainWindow(Adw.ApplicationWindow):
         for w in (*self.compose_windows, *self.thread_windows):
             w.set_visible(False)
         self.set_title(f"{APP_NAME} (locked)")
+
+    def track_activity(self, window: Gtk.Window) -> None:
+        """Keys and clicks in `window` count as activity for the idle lock; the compose
+        and thread windows register themselves (#55)."""
+        activity = Gtk.EventControllerLegacy()
+        activity.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        activity.connect("event", lambda *_: (self.idle.touch(), False)[1])
+        window.add_controller(activity)
 
     def lock_idle(self) -> None:
         if self.config.get("lock_enabled"):

@@ -16,6 +16,8 @@ class ThreadWindow(Adw.Window):
         super().__init__(application=main.get_application(), default_width=960, default_height=760,
                          title=thread.subject or "Conversation")
         self.main = main
+        if hasattr(main, "track_activity"):
+            main.track_activity(self)   # reading here keeps the idle lock away (#55)
         self.thread = thread
         self.mailbox_id = mailbox_id
         self.conversation = ConversationView(main.db, main.engine, main.tree, main.config, main._compose_from,
