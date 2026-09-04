@@ -1,0 +1,1 @@
+Labels and categories are coloured again: an unclosed block in the stylesheet had dropped every rule after it. A test now parses the stylesheet, and "Coloured labels and categories" in Preferences turns the colours off for plain chips
