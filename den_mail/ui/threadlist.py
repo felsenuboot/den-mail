@@ -346,8 +346,23 @@ class ThreadList(Adw.NavigationPage):
         self.search_bar.connect("notify::search-mode-enabled", self._on_search_mode)
         view.add_top_bar(self.search_bar)
         # A hint for the list on screen: what a view is for, or a tool worth knowing about.
-        self.banner = Adw.Banner(revealed=False)
+        # Adw.Banner has one button and no way to close it (#84), so this is its own row.
+        self.banner = Gtk.Revealer(reveal_child=False)
+        banner_box = Gtk.Box(spacing=8)
+        banner_box.add_css_class("list-banner")
+        self.banner_label = Gtk.Label(xalign=0, wrap=True, hexpand=True, justify=Gtk.Justification.LEFT)
+        banner_box.append(self.banner_label)
+        self.banner_button = Gtk.Button(valign=Gtk.Align.CENTER, visible=False)
+        self.banner_button.add_css_class("pill")
+        banner_box.append(self.banner_button)
+        self.banner_close = Gtk.Button(icon_name="window-close-symbolic", valign=Gtk.Align.CENTER,
+                                       tooltip_text="Dismiss")
+        self.banner_close.add_css_class("flat")
+        self.banner_close.add_css_class("circular")
+        banner_box.append(self.banner_close)
+        self.banner.set_child(banner_box)
         self._banner_handler: int | None = None
+        self._banner_close_handler: int | None = None
         view.add_top_bar(self.banner)
 
         self.selection = Gtk.MultiSelection(model=model)
@@ -858,19 +873,32 @@ class ThreadList(Adw.NavigationPage):
     # ------------------------------------------------------------ misc
 
     def set_banner(self, title: str | None, button: str | None = None,
-                   on_click: Callable[[], None] | None = None) -> None:
-        """Show a hint above the list, with an optional button; None hides it."""
+                   on_click: Callable[[], None] | None = None,
+                   on_dismiss: Callable[[], None] | None = None) -> None:
+        """Show a hint above the list, with an optional button and a close button; None hides
+        it. `on_dismiss` runs when the user closes it (the caller remembers that, #84)."""
         if self._banner_handler is not None:
-            self.banner.disconnect(self._banner_handler)
+            self.banner_button.disconnect(self._banner_handler)
             self._banner_handler = None
+        if self._banner_close_handler is not None:
+            self.banner_close.disconnect(self._banner_close_handler)
+            self._banner_close_handler = None
         if not title:
-            self.banner.set_revealed(False)
+            self.banner.set_reveal_child(False)
             return
-        self.banner.set_title(title)
-        self.banner.set_button_label(button or "")
+        self.banner_label.set_label(title)
+        self.banner_button.set_label(button or "")
+        self.banner_button.set_visible(bool(button))
         if on_click is not None:
-            self._banner_handler = self.banner.connect("button-clicked", lambda *_: on_click())
-        self.banner.set_revealed(True)
+            self._banner_handler = self.banner_button.connect("clicked", lambda *_: on_click())
+
+        def dismiss(*_):
+            self.banner.set_reveal_child(False)
+            if on_dismiss is not None:
+                on_dismiss()
+
+        self._banner_close_handler = self.banner_close.connect("clicked", dismiss)
+        self.banner.set_reveal_child(True)
 
     def set_scope_label(self, label: str) -> None:
         """What the narrow search scope is called: "This mailbox", or "This view" (#19)."""

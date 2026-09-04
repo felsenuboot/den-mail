@@ -1411,6 +1411,7 @@ class MainWindow(Adw.ApplicationWindow):
     def show_cleanup(self, category: str | None = None) -> None:
         if not self.config.get("cleanup_opened"):
             self.config.set("cleanup_opened", True)
+            self._update_banner()   # the hints about Clean up have done their job
             self._update_banner()
         self.cleanup_dialog = CleanupDialog(self.engine, self.db, self.config, self.tree, self._after_action,
                                             self.open_thread_by_id, category=category, assistant=self.assistant)
@@ -1422,24 +1423,36 @@ class MainWindow(Adw.ApplicationWindow):
         if mb is None or self.threadlist.search_active:
             self.threadlist.set_banner(None)
             return
+        dismissed = set(self.config.get("banners_dismissed") or [])
+        # The cleanup hints go for good once Clean up was opened or one of them was closed (#84).
+        cleanup_done = self.config.get("cleanup_opened") or "cleanup" in dismissed
         if mb.is_view:
             view = views.get_view(mb.id)
-            if mb.id == views.SCREENER:
+            if mb.id == views.SCREENER and "screener" not in dismissed:
                 self.threadlist.set_banner("Senders you have never heard from wait here. Open a conversation to let "
-                                           "them through or screen them out.")
-            elif view is not None and (view.category or mb.id == views.NEVER_READ):
+                                           "them through or screen them out.",
+                                           on_dismiss=lambda: self._dismiss_banner("screener"))
+            elif view is not None and (view.category or mb.id == views.NEVER_READ) and not cleanup_done:
                 self.threadlist.set_banner(f"Tired of some of these? Clean up ranks the senders behind {view.name} "
                                            "and archives, deletes or unsubscribes in bulk.", "Clean up…",
-                                           lambda: self.show_cleanup(view.category))
+                                           lambda: self.show_cleanup(view.category),
+                                           on_dismiss=lambda: self._dismiss_banner("cleanup"))
             else:
                 self.threadlist.set_banner(None)
             return
-        if mb.role == ROLE_INBOX and not self.config.get("cleanup_opened") and self._tip_starts <= 3:
+        if mb.role == ROLE_INBOX and not cleanup_done and self._tip_starts <= 3:
             self.threadlist.set_banner("New: Clean up ranks the senders you never read; archive, delete or "
                                        "unsubscribe in bulk. More under Inbox in the main menu.",
-                                       "Clean up…", self.show_cleanup)
+                                       "Clean up…", self.show_cleanup,
+                                       on_dismiss=lambda: self._dismiss_banner("cleanup"))
             return
         self.threadlist.set_banner(None)
+
+    def _dismiss_banner(self, name: str) -> None:
+        dismissed = list(self.config.get("banners_dismissed") or [])
+        if name not in dismissed:
+            dismissed.append(name)
+            self.config.set("banners_dismissed", dismissed)
 
     def show_shortcuts(self) -> None:
         dlg = Adw.ShortcutsDialog()
