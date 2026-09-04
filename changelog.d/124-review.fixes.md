@@ -1,1 +1,0 @@
-From a pass over every screen in both themes: category chips in Clean up are never cut short, the Identities, Rules and Inbox preference texts are one line each, and Suggest labels sits in its own Learning group

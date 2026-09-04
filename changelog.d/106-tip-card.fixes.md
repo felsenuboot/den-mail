@@ -1,1 +1,0 @@
-The tip on the empty conversation pane is a proper card with a border, its action is a real button, and the quick links under it are labelled buttons that wrap on a narrow pane, following the GNOME interface guidelines
