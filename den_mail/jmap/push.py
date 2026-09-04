@@ -52,13 +52,13 @@ class PushListener(threading.Thread):
         self.on_change = on_change
         self.on_status = on_status
         self.types = types
-        self._stop = threading.Event()
+        self._stopping = threading.Event()
         self._resp = None
         self._lock = threading.Lock()
         self.connected = False
 
     def stop(self) -> None:
-        self._stop.set()
+        self._stopping.set()
         with self._lock:
             resp = self._resp
         if resp is not None:
@@ -75,7 +75,7 @@ class PushListener(threading.Thread):
 
     def run(self) -> None:
         backoff = 1.0
-        while not self._stop.is_set():
+        while not self._stopping.is_set():
             try:
                 resp = self.client.open_event_source(self.types)
             except AuthError:
@@ -85,7 +85,7 @@ class PushListener(threading.Thread):
             except JMAPError as e:
                 log.info("push: connect failed (%s); retrying in %.0fs", e, backoff)
                 self._set_status(False)
-                if self._stop.wait(backoff):
+                if self._stopping.wait(backoff):
                     return
                 backoff = min(backoff * 2, 120)
                 continue
@@ -97,7 +97,7 @@ class PushListener(threading.Thread):
             except Exception as e:  # noqa: BLE001 - any read failure means reconnect
                 if time.monotonic() - opened >= self.HEALTHY_SECONDS:
                     backoff = 1.0
-                if not self._stop.is_set():
+                if not self._stopping.is_set():
                     log.info("push: stream ended (%s); reconnecting in %.0fs", e, backoff)
             finally:
                 with self._lock:
@@ -106,7 +106,7 @@ class PushListener(threading.Thread):
                 with contextlib.suppress(Exception):  # closing a dead stream
                     resp.close()
                 self._set_status(False)
-            if self._stop.wait(backoff):
+            if self._stopping.wait(backoff):
                 return
             backoff = min(backoff * 2, 120)
 
@@ -115,7 +115,7 @@ class PushListener(threading.Thread):
         event_type = None
         data_lines: list[str] = []
         last_activity = time.monotonic()
-        while not self._stop.is_set():
+        while not self._stopping.is_set():
             raw = resp.readline()
             if not raw:
                 raise ConnectionError("EOF")

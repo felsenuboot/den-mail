@@ -38,15 +38,15 @@ def _run(scripts: list[bytes], healthy_seconds: float, waited: list[float]) -> l
     changes: list[dict] = []
     listener = PushListener(client, changes.append)
     listener.HEALTHY_SECONDS = healthy_seconds
-    original_wait = listener._stop.wait
+    original_wait = listener._stopping.wait
 
     def wait(timeout=None):
         waited.append(timeout)
         if client.exhausted.is_set():
-            listener._stop.set()
+            listener._stopping.set()
         return original_wait(0)
 
-    listener._stop.wait = wait
+    listener._stopping.wait = wait
     listener.start()
     listener.join(5)
     assert not listener.is_alive()
