@@ -1,6 +1,6 @@
 pkgbase = den-mail
 	pkgdesc = Fastmail client for GNOME, built on JMAP, GTK 4 and libadwaita
-	pkgver = 0.3.0
+	pkgver = 0.4.0
 	pkgrel = 1
 	url = https://github.com/felsenuboot/den-mail
 	arch = any

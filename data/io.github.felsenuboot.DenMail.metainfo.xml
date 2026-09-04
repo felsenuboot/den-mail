@@ -42,6 +42,11 @@
     <color type="primary" scheme_preference="dark">#1c3a5c</color>
   </branding>
   <releases>
+    <release version="0.4.0" date="2026-09-04">
+      <description>
+        <p>Send later with a clock next to Send; an offline outbox that queues changes and messages while the server is unreachable; a lock screen, off by default, unlocked with the system prompt, a passphrase or a PIN; schema.org data in mail summarised above the body.</p>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-09-04">
       <description>
         <p>A Flatpak bundle with every release and an AUR package; corrections that the app learns from; the Fastmail address book for completion and contact photos; the UI run headlessly in CI.</p>

@@ -10,6 +10,10 @@ Read this before changing anything. The full development notes are in
 - Issues belong to milestones, and a milestone is a release: its title carries
   the version it ships as (`v0.3 · Release engineering`). Put a new issue in the
   milestone it belongs to, or none if it is unplanned.
+- A bug noticed or an idea had while working on something else becomes an
+  issue right away, not a fix folded into the current branch and not a note
+  left in the conversation. Label it, put it in a milestone if it fits one,
+  and carry on with the work at hand.
 
 ## Branches and pull requests
 - Never commit on `master`. Branch from it as `<issue>-<slug>` for issue work
