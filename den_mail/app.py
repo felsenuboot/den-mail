@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import threading
 from urllib.parse import parse_qs, unquote, urlparse
 
 import gi
@@ -115,7 +116,20 @@ class FastmailApp(Adw.Application):
     def do_shutdown(self) -> None:
         if self.window:
             self.window.shutdown()
+            # Take the window down and flush the request now: the main loop is gone, and the
+            # interpreter still waits for pool threads that are mid-request (a logo or a
+            # body being fetched during a first sync), for up to their timeouts. Meanwhile
+            # the compositor would see a window that no longer answers and report it as
+            # not responding. The timer bounds that wait as well.
+            self.window.destroy()
+            self.window = None
+            display = Gdk.Display.get_default()
+            if display is not None:
+                display.flush()
         Adw.Application.do_shutdown(self)
+        leave = threading.Timer(2.0, os._exit, [0])
+        leave.daemon = True
+        leave.start()
 
     def _about(self, *_) -> None:
         dlg = Adw.AboutDialog(
