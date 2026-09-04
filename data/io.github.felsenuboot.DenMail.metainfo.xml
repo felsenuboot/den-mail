@@ -42,6 +42,11 @@
     <color type="primary" scheme_preference="dark">#1c3a5c</color>
   </branding>
   <releases>
+    <release version="0.5.0" date="2026-09-04">
+      <description>
+        <p>An assistant, off by default: Ollama on this machine, any OpenAI-compatible API or Anthropic, with the key in the keyring and a daily request limit. With it on, a conversation can be summarised in a few lines, and Clean up describes a sender's newest message in one line.</p>
+      </description>
+    </release>
     <release version="0.4.0" date="2026-09-04">
       <description>
         <p>Send later with a clock next to Send; an offline outbox that queues changes and messages while the server is unreachable; a lock screen, off by default, unlocked with the system prompt, a passphrase or a PIN; schema.org data in mail summarised above the body.</p>
