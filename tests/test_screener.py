@@ -74,8 +74,9 @@ def test_engine_screens_first_time_senders_only_while_enabled(engine, server):  
     new = server.deliver("Offer", frm={"name": "Shop", "email": "new@shop.example"})
     known = server.deliver("Hello", frm={"name": "Anna", "email": "anna@example.net"})
     again = server.deliver("Hi again", frm={"name": "Stranger", "email": "stranger@example.net"})
+    # the rows may land through the running sync's thread step; the decision comes with the next one (#42)
+    pump(lambda: engine.db.screener_decision("new@shop.example") == "pending", timeout=15)
     pump(lambda: all(engine.db.get_email(i) is not None for i in (new, known, again)), timeout=15)
-    assert engine.db.screener_decision("new@shop.example") == "pending"
     assert engine.db.screener_decision("anna@example.net") is None      # seen before
     assert engine.db.screener_decision("stranger@example.net") is None  # cached before the switch
     def announced() -> set[str]:   # each delivery is its own push, sync and announcement
