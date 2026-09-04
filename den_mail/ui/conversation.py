@@ -668,6 +668,7 @@ class ConversationView(Adw.NavigationPage):
         self.summarise_button.set_action_name("win.summarise")
         self.header.pack_start(self.summarise_button)
         more_menu = Gio.Menu()
+        more_menu.append("Summarise", "win.summarise")
         more_menu.append("Mark as unread", "win.mark-unread")
         more_menu.append("Mark as read", "win.mark-read")
         more_menu.append("Mark as spam", "win.junk")
