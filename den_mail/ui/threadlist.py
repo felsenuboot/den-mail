@@ -305,9 +305,9 @@ class ThreadList(Adw.NavigationPage):
         self.refresh_button = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Refresh (F5)")
         self.refresh_button.connect("clicked", lambda *_: on_refresh())
         header.pack_end(self.refresh_button)
-        self.spinner = Adw.Spinner()
-        self.spinner.set_visible(False)
-        header.pack_end(self.spinner)
+        # While syncing the spinner takes the icon's place inside the button, so the
+        # header keeps its width and a cramped title does not re-flow.
+        self.spinner = Adw.Spinner(width_request=16, height_request=16, valign=Gtk.Align.CENTER)
         view.add_top_bar(header)
 
         self.search_bar = Gtk.SearchBar(search_mode_enabled=False, show_close_button=True)
@@ -782,8 +782,11 @@ class ThreadList(Adw.NavigationPage):
         Adw.NavigationPage.set_title(self, title)
 
     def set_syncing(self, syncing: bool) -> None:
-        self.spinner.set_visible(syncing)
-        self.refresh_button.set_visible(not syncing)
+        if syncing:
+            self.refresh_button.set_child(self.spinner)
+            self.refresh_button.add_css_class("image-button")  # set_child drops it; keeps the padding
+        else:
+            self.refresh_button.set_icon_name("view-refresh-symbolic")
 
     def _update_empty(self) -> None:
         if self.model.get_n_items() > 0:

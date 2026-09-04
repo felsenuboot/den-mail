@@ -31,7 +31,7 @@ reconnecting instead of receiving push.
 `DEN_MAIL_AUTOPILOT="sleep 3; select 0; action win.reply"` drives the UI
 from a script (see `den_mail/autopilot.py` for the commands: `select`,
 `mailbox`, `search`, `action`, `compose`, `from-popup`, `theme`, `context-menu`,
-`thread-menu`, `group off|sender|domain`, `fold N`, `fold-all on|off`, `select-mode on|off`, `toggle N`, `scope all|mailbox`, `resize`, `unread-filter on|off`, `quotes on|off`, `expand-all`, `compose-fill <to> <subject>`, `compose-send`, `undo-send`, `config <key> <json>`, `focus search|list|sidebar|body`, `state`, `row-pos <mailbox>`, `trace-keys`, `quit`, …). The screenshots in `data/screenshots/` are
+`thread-menu`, `group off|sender|domain`, `fold N`, `fold-all on|off`, `select-mode on|off`, `toggle N`, `scope all|mailbox`, `resize`, `unread-filter on|off`, `syncing on|off`, `quotes on|off`, `expand-all`, `compose-fill <to> <subject>`, `compose-send`, `undo-send`, `config <key> <json>`, `focus search|list|sidebar|body`, `state`, `row-pos <mailbox>`, `trace-keys`, `quit`, …). The screenshots in `data/screenshots/` are
 taken that way inside a headless `cage` compositor:
 
 ```

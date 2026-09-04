@@ -16,6 +16,7 @@ Commands:
   masked | identities | preferences   open that dialog
   resize <w> <h>       resize the main window
   unread-filter on|off   toggle the unread filter button
+  syncing on|off       show or hide the header's sync spinner
   quotes on|off        reveal or fold the quoted history of every shown message
   expand-all           expand every message card of the shown conversation
   body-size            log the height of every HTML body view
@@ -163,6 +164,8 @@ def _run(app, steps: list[str]) -> bool:
             for body in pills:
                 body.set_quotes_shown(shown)
             log.info("quotes: %d messages with quoted history, shown=%s", len(pills), shown)
+        elif cmd == "syncing" and win:
+            win.threadlist.set_syncing(arg.strip() in ("on", "1", "true"))
         elif cmd == "unread-filter" and win:
             win.threadlist.unread_button.set_active(arg.strip() in ("on", "1", "true"))
         elif cmd == "focus" and win:
