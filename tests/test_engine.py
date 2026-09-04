@@ -342,3 +342,20 @@ def test_photo_sequence_message_renders_with_picture(engine):
     assert part and part["type"] == "image/png"
     out = sanitize_html(c.html, allow_remote=False, cid_scheme=f"fmcid://{eid}/")
     assert f"fmcid://{eid}/part%3A2" in out.html
+
+
+def test_unread_filter_queries(engine):
+    inbox = engine.roles[ROLE_INBOX]
+    spec = mailbox_query_spec(inbox, unread_only=True)
+    assert spec["filter"] == {"inMailbox": inbox, "notKeyword": KW_SEEN}
+    key = engine.load_query(spec)
+    pump(lambda: any(a[0] == key for a in engine.events.get("query-updated", [])))
+    q = engine.db.get_query(key)
+    assert q["ids"]
+    all_key = engine.load_query(mailbox_query_spec(inbox))
+    pump(lambda: any(a[0] == all_key for a in engine.events.get("query-updated", [])))
+    assert len(q["ids"]) < len(engine.db.get_query(all_key)["ids"])  # the inbox also holds read mail
+    for eid in q["ids"]:
+        assert not (engine.db.get_email(eid).get("keywords") or {}).get(KW_SEEN)
+    conds = search_query_spec("ticket", inbox, [], unread_only=True)["filter"]["conditions"]
+    assert {"notKeyword": KW_SEEN} in conds and {"inMailbox": inbox} in conds

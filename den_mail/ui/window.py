@@ -207,6 +207,8 @@ class MainWindow(Adw.ApplicationWindow):
                                      self._on_load_more, lambda: self.engine.sync_now(), avatars=self.avatars)
         self.threadlist.set_sort(self.sort["key"], self.sort["flagged_first"], self.sort["unread_first"],
                                  self._group_mode())
+        self.threadlist.unread_button.set_active(bool(self.config.get("unread_only", False)))
+        self.threadlist.on_unread_filter = self._on_unread_filter
         self.threadlist.set_grouped(self._group_mode())
         self.threadlist.on_sort_changed = self._on_sort_changed
         self.threadlist.on_context_menu = self._on_thread_context_menu
@@ -372,7 +374,10 @@ class MainWindow(Adw.ApplicationWindow):
             return
         selected_ids = {t.thread_id for t in self.selected}
         self.model.loading = False
-        self.model.set_email_ids(q["ids"], q["total"], q["complete"])
+        ids = list(q["ids"])
+        if self.threadlist.unread_only and self.selected:
+            ids = self._keep_selected(ids)
+        self.model.set_email_ids(ids, q["total"], q["complete"])
         self._update_list_title()
         if self._pending_select_position is not None:
             pos = min(self._pending_select_position, self.model.get_n_items() - 1)
@@ -381,6 +386,16 @@ class MainWindow(Adw.ApplicationWindow):
                 self.threadlist.select_position(pos, step=1)
         elif selected_ids and not any(t in self.model.by_thread for t in selected_ids):
             self.conversation.clear()
+
+    def _keep_selected(self, ids: list[str]) -> list[str]:
+        """With the unread filter on, reading a conversation would drop it from the list
+        mid-read; the selected ones stay where they were until the user moves on."""
+        present = {e["threadId"] for e in self.db.get_emails(ids).values()}
+        for t in self.selected:
+            if t.thread_id not in present and t.email_ids:
+                pos = self.model.threads.index(t) if t in self.model.threads else len(ids)
+                ids.insert(min(pos, len(ids)), t.email_ids[-1])
+        return ids
 
     def _on_emails_changed(self, _engine, ids: list[str]) -> None:
         self.model.refresh_threads(ids)
@@ -453,19 +468,34 @@ class MainWindow(Adw.ApplicationWindow):
         self.model.loading = True
         self.model.clear()
         self.conversation.clear()
-        self.threadlist.set_empty_text("No conversations", f"{mb.name} is empty.")
+        if self.threadlist.unread_only:
+            self.threadlist.set_empty_text("No unread conversations", f"Everything in {mb.name} is read.")
+        else:
+            self.threadlist.set_empty_text("No conversations", f"{mb.name} is empty.")
         s = self._sort_for_mailbox(mb)
         self.threadlist.set_sort(s["key"], bool(s["flagged_first"]), bool(s["unread_first"]))
-        self.query_key = self.engine.load_query(mailbox_query_spec(mb.id, self._current_sort()))
+        self.query_key = self.engine.load_query(self._mailbox_query(mb))
         cached = self.db.get_query(self.query_key)
         if cached:
             self.model.set_email_ids(cached["ids"], cached["total"], cached["complete"])
         self._update_list_title()
         self.threadlist.scroll_to_top()
 
+    def _mailbox_query(self, mb: MailboxObject) -> dict:
+        return mailbox_query_spec(mb.id, self._current_sort(), self.threadlist.unread_only)
+
     def _reload_current(self) -> None:
         if self.current_mailbox:
             self._load_mailbox(self.current_mailbox)
+
+    def _on_unread_filter(self, active: bool) -> None:
+        self.config.set("unread_only", active)
+        if not self.engine:
+            return
+        if self.threadlist.search_active:
+            self.threadlist._fire_search()
+        else:
+            self._reload_current()
 
     def _update_list_title(self) -> None:
         if self.threadlist.search_active:
@@ -480,7 +510,9 @@ class MainWindow(Adw.ApplicationWindow):
             return
         live = self.tree.get(mb.id) or mb
         sub = f"{live.total} conversations" if live.total else ""
-        if live.unread and live.role not in (ROLE_TRASH, ROLE_JUNK):
+        if self.threadlist.unread_only:
+            sub = f"{live.unread} unread" if live.unread else "No unread"
+        elif live.unread and live.role not in (ROLE_TRASH, ROLE_JUNK):
             sub = f"{live.unread} unread · {sub}" if sub else f"{live.unread} unread"
         self.threadlist.set_title(live.name, sub)
 
@@ -501,7 +533,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.conversation.clear()
         self.threadlist.set_empty_text("No results", "Try different words, or search all mail.")
         self.query_key = self.engine.load_query(search_query_spec(text, mailbox_id, self.engine.trash_junk_ids(),
-                                                                  self._current_sort()))
+                                                                  self._current_sort(), self.threadlist.unread_only))
         self.threadlist.set_title("All mail" if not text else "Search", "Loading…" if not text else "Searching…")
         self.threadlist.scroll_to_top()
 
@@ -780,7 +812,7 @@ class MainWindow(Adw.ApplicationWindow):
     def refresh_mailbox(self, mb: MailboxObject) -> None:
         """Sync now and re-run the mailbox query from scratch (bypassing queryChanges)."""
         if self.current_mailbox and self.current_mailbox.id == mb.id and self.query_key:
-            self.engine.load_query(mailbox_query_spec(mb.id, self._current_sort()))
+            self.engine.load_query(self._mailbox_query(mb))
         else:
             self.sidebar.select_mailbox(mb.id)
         self.engine.sync_now()

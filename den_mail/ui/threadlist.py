@@ -278,6 +278,11 @@ class ThreadList(Adw.NavigationPage):
         header.set_title_widget(self.title_widget)
         self.search_button = Gtk.ToggleButton(icon_name="system-search-symbolic", tooltip_text="Search (Ctrl+F)")
         header.pack_end(self.search_button)
+        # Unread filter (#34): the window re-runs the mailbox or search query with it.
+        self.on_unread_filter: Callable[[bool], None] = lambda on: None
+        self.unread_button = Gtk.ToggleButton(icon_name="fm-mail-unread-symbolic", tooltip_text="Only unread")
+        self.unread_button.connect("toggled", lambda b: self.on_unread_filter(b.get_active()))
+        header.pack_end(self.unread_button)
         self.select_button = Gtk.ToggleButton(icon_name="fm-select-symbolic", tooltip_text="Select conversations")
         self.select_button.connect("toggled", lambda b: self.set_selection_mode(b.get_active()))
         header.pack_start(self.select_button)
@@ -825,6 +830,10 @@ class ThreadList(Adw.NavigationPage):
     def focus_search(self) -> None:
         self.search_bar.set_search_mode(True)
         self.search_entry.grab_focus()
+
+    @property
+    def unread_only(self) -> bool:
+        return self.unread_button.get_active()
 
     @property
     def search_active(self) -> bool:

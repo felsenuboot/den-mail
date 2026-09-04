@@ -11,6 +11,7 @@ Commands:
   compose              open a blank compose window
   masked | identities | preferences   open that dialog
   resize <w> <h>       resize the main window
+  unread-filter on|off   toggle the unread filter button
   focus <search|list|sidebar|body>   move keyboard focus, to test key routing
   state                log panes, focus, search text and the selected conversations
   row-pos <mailbox>    log where that sidebar row is, in window coordinates
@@ -127,6 +128,8 @@ def _run(app, steps: list[str]) -> bool:
             win.maximize()
         elif cmd == "measure" and win:
             _log_min_widths(win, int(arg) if arg.strip() else 250)
+        elif cmd == "unread-filter" and win:
+            win.threadlist.unread_button.set_active(arg.strip() in ("on", "1", "true"))
         elif cmd == "focus" and win:
             _focus(win, arg.strip())
         elif cmd == "state" and win:
@@ -218,10 +221,10 @@ def _log_state(win) -> None:
     focus = " < ".join(chain) if chain else None
     sidebar = win.sidebar.selected
     log.info("state: mailbox=%s sidebar=%s main.show_content=%s inner.show_content=%s search=%r search_mode=%s "
-             "focus=%s selected=%s compose=%d threads=%d",
+             "unread_only=%s items=%d focus=%s selected=%s compose=%d threads=%d",
              win.current_mailbox.name if win.current_mailbox else None, sidebar.name if sidebar else None,
              win.main.get_show_content(), win.inner.get_show_content(), win.threadlist.search_entry.get_text(),
-             win.threadlist.search_bar.get_search_mode(), focus,
+             win.threadlist.search_bar.get_search_mode(), win.threadlist.unread_only, win.model.get_n_items(), focus,
              [(t.subject, "flagged" if t.flagged else "-", "unread" if t.unread else "-") for t in win.selected],
              len(win.compose_windows), len(win.thread_windows))
 

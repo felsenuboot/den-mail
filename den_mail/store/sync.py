@@ -109,12 +109,15 @@ def query_key(spec: dict) -> str:
     return hashlib.sha1(json.dumps(spec, sort_keys=True).encode(), usedforsecurity=False).hexdigest()[:16]
 
 
-def mailbox_query_spec(mailbox_id: str, sort: list[dict] | None = None) -> dict:
-    return {"filter": {"inMailbox": mailbox_id}, "sort": sort or SORT_NEWEST, "collapseThreads": True}
+def mailbox_query_spec(mailbox_id: str, sort: list[dict] | None = None, unread_only: bool = False) -> dict:
+    filt: dict = {"inMailbox": mailbox_id}
+    if unread_only:
+        filt["notKeyword"] = KW_SEEN
+    return {"filter": filt, "sort": sort or SORT_NEWEST, "collapseThreads": True}
 
 
 def search_query_spec(text: str, mailbox_id: str | None, trash_junk: list[str],
-                      sort: list[dict] | None = None) -> dict:
+                      sort: list[dict] | None = None, unread_only: bool = False) -> dict:
     """Turn a search box string into a JMAP filter (supports from:/to:/subject:/is:/has:/before:/after:)."""
     conditions: list[dict] = []
     words: list[str] = []
@@ -151,6 +154,8 @@ def search_query_spec(text: str, mailbox_id: str | None, trash_junk: list[str],
             words.append(token)
     if words:
         conditions.append({"text": " ".join(words)})
+    if unread_only:
+        conditions.append({"notKeyword": KW_SEEN})
     if mailbox_id:
         conditions.append({"inMailbox": mailbox_id})
     elif trash_junk:
