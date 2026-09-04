@@ -5,8 +5,8 @@ same machine and network, the same window size and scenario, on an idle
 desktop. Lower is better in every chart.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="benchmark/overview-dark.svg">
-  <img alt="Six bar charts: den-mail against Fastmail's desktop app and web client for start-up, folder switch, search, opening a message, memory and idle CPU" src="benchmark/overview-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="benchmark/2026-09-04-dark.svg">
+  <img alt="Six bar charts: den-mail against Fastmail's desktop app and web client for start-up, folder switch, search, opening a message, memory and idle CPU" src="benchmark/2026-09-04-light.svg">
 </picture>
 
 | medians, 2026-09-04 | den-mail warm | den-mail cold | Fastmail app | Fastmail web |

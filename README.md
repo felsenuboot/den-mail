@@ -41,8 +41,8 @@ you own in the From field.
 ## How fast is it
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/benchmark/overview-dark.svg">
-  <img alt="den-mail against Fastmail's desktop app and web client: start-up, folder switch, search, opening a message, memory and idle CPU" src="docs/benchmark/overview-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/benchmark/2026-09-04-dark.svg">
+  <img alt="den-mail against Fastmail's desktop app and web client: start-up, folder switch, search, opening a message, memory and idle CPU" src="docs/benchmark/2026-09-04-light.svg">
 </picture>
 
 Same account, machine and network, idle desktop, medians of eight runs.
