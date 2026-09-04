@@ -92,6 +92,13 @@ chip (Primary shows none), and the funnel in the list header narrows the list
 to one category; the list keeps loading pages until enough of that category is
 on screen.
 
+A message that carries schema.org data, as shops, carriers, airlines and
+booking sites add to theirs, is Transactions for sure and shows a line above
+its body summing it up: "Parcel in transit · DHL · expected 6 Sep 18:00 ·
+00340…", "Flight LH 123 · FRA → HEL · 12 Oct 09:40", with a button that
+copies the tracking or reservation number. Only bodies already in the cache
+are read; nothing is fetched for it.
+
 When the rules get one wrong, right-click the conversation and choose
 *Categorise as…*: your word is kept over the rules, and after a few such
 corrections the app learns from them. The learned layer only speaks where

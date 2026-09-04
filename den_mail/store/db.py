@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS sender_deletions (
 CREATE TABLE IF NOT EXISTS screener (email TEXT PRIMARY KEY, decision TEXT NOT NULL, ts REAL);
 CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT, json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS contact_emails (email TEXT PRIMARY KEY, contact_id TEXT, name TEXT);
+CREATE TABLE IF NOT EXISTS structured (email_id TEXT PRIMARY KEY, kind TEXT NOT NULL, text TEXT NOT NULL, copy TEXT);
 CREATE TABLE IF NOT EXISTS bayes_docs (category TEXT PRIMARY KEY, docs INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS bayes_tokens (category TEXT, token TEXT, count INTEGER NOT NULL, PRIMARY KEY (category, token));
 """
@@ -188,7 +189,7 @@ class Database:
             c = self.conn()
             for table in ("mailboxes", "emails", "email_mailboxes", "threads", "identities", "masked_emails",
                           "query_cache", "addresses", "classification", "correspondents", "sender_deletions",
-                          "screener", "bayes_docs", "bayes_tokens", "contacts", "contact_emails"):
+                          "screener", "bayes_docs", "bayes_tokens", "contacts", "contact_emails", "structured"):
                 # table names come from the literal tuple above (Bandit B608)
                 c.execute(f"DELETE FROM {table}")  # nosec B608
             c.execute("DELETE FROM meta WHERE key LIKE 'state:%'")
@@ -671,6 +672,33 @@ class Database:
                 self.upsert_emails([{k: v for k, v in email.items() if k not in ("bodyValues", "bodyStructure")}])
             c.execute("UPDATE emails SET body_json=?, body_fetched_at=? WHERE id=?",
                       (json.dumps(email), time.time(), email["id"]))
+            self._extract_structured(c, email)
+
+    def _extract_structured(self, c: sqlite3.Connection, email: dict) -> None:
+        """schema.org data in the HTML body (#20): a summary line, and Transactions for sure."""
+        from ..classify.rules import TRANSACTIONS
+        from ..html.schema import summarise_html
+
+        values = email.get("bodyValues") or {}
+        html = "\n".join(values[p["partId"]]["value"] for p in email.get("htmlBody") or []
+                          if p.get("partId") in values and (p.get("type") or "").lower() == "text/html"
+                          and values[p["partId"]].get("value"))
+        summary = summarise_html(html)
+        if summary is None:
+            c.execute("DELETE FROM structured WHERE email_id=?", (email["id"],))
+            return
+        c.execute("INSERT OR REPLACE INTO structured(email_id, kind, text, copy) VALUES (?,?,?,?)",
+                  (email["id"], summary.kind, summary.text, summary.copy))
+        c.execute(
+            "INSERT INTO classification(email_id, category, source, confidence, ts, reason) VALUES (?,?,?,?,?,?)"
+            " ON CONFLICT(email_id) DO UPDATE SET category=excluded.category, source=excluded.source,"
+            " confidence=excluded.confidence, ts=excluded.ts, reason=excluded.reason"
+            " WHERE classification.source != ?",
+            (email["id"], TRANSACTIONS, SOURCE_RULES, 0.95, time.time(), f"schema.org {summary.kind}", SOURCE_USER))
+
+    def get_structured(self, email_id: str) -> dict | None:
+        row = self.conn().execute("SELECT kind, text, copy FROM structured WHERE email_id=?", (email_id,)).fetchone()
+        return dict(row) if row else None
 
     def patch_email(self, email_id: str, keywords: dict | None = None, mailbox_ids: dict | None = None) -> dict | None:
         """Apply a local (optimistic) change; returns the updated email."""

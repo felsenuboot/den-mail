@@ -297,6 +297,18 @@ class FakeData:
                                keywords={"$seen": True} if idx < 3 else {}, when=t - timedelta(days=3, hours=-idx * 3),
                                thread=thread, in_reply_to=prev)
             thread, prev = e["threadId"], e["messageId"][0]
+        # A shop's shipping notice with schema.org JSON-LD (#20)
+        self.add_email(frm={"name": "Blum Manufaktur", "email": "bestellung@blum.example"}, to=[me],
+                       subject="Your order 4711 has shipped", mailboxes=[inbox], when=t - timedelta(hours=3),
+                       text="Your parcel is on its way. Tracking: 00340434161094015902",
+                       html="""<html><head><script type="application/ld+json">
+{"@context": "http://schema.org", "@type": "Order", "orderNumber": "4711", "orderStatus": "http://schema.org/OrderInTransit",
+ "merchant": {"@type": "Organization", "name": "Blum Manufaktur"},
+ "acceptedOffer": [{"@type": "Offer", "itemOffered": {"@type": "Product", "name": "Kitchen scissors"}}],
+ "orderDelivery": {"@type": "ParcelDelivery", "deliveryStatus": "http://schema.org/InTransit",
+   "carrier": {"@type": "Organization", "name": "DHL"}, "trackingNumber": "00340434161094015902",
+   "expectedArrivalUntil": "2026-09-06T18:00:00+02:00"}}
+</script></head><body><p>Your parcel is on its way.</p><p>Tracking: 00340434161094015902</p></body></html>""")
         # HTML newsletter with remote images
         # Apple-Mail-style: text, a photo, text -- and no text/html part at all
         self.add_email(frm={"name": "Dana Ito", "email": "dana@example.net"}, to=[me], subject="Photo from the workshop", mailboxes=[inbox],

@@ -15,7 +15,7 @@ from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full, deliv
 from ..models.thread import ThreadObject, format_date_long
 from ..unsubscribe import identity_for, parse_list_unsubscribe
 from .message_body import MessageBody, warm_up_renderer
-from .widgets import avatar, confirm, human_size, open_uri, toast
+from .widgets import avatar, confirm, copy_text, human_size, open_uri, toast
 
 COLUMN_WIDTH = 980  # the message column's maximum width
 
@@ -227,6 +227,15 @@ class MessageCard(Gtk.Box):
         self.attachments_holder.add_css_class("attachments-row")
         self.attachments_holder.set_visible(False)
         self.body_box.append(self.attachments_holder)
+        # The schema.org summary (#20): "Parcel shipped · DHL · 0034…" with a copy button.
+        self.structured = Gtk.Box(spacing=6, visible=False)
+        self.structured.add_css_class("structured-row")
+        self.structured_label = Gtk.Label(xalign=0, ellipsize=3, hexpand=True, selectable=True)
+        self.structured.append(self.structured_label)
+        self.structured_copy = Gtk.Button(icon_name="edit-copy-symbolic", tooltip_text="Copy the number", visible=False)
+        self.structured_copy.add_css_class("flat")
+        self.structured.append(self.structured_copy)
+        self.body_box.append(self.structured)
         self.banner = RemoteContentBar(self._on_allow_remote, self._on_trust_sender)
         self.body_box.append(self.banner)
         self.truncated = Gtk.Label(label="Message was too large; showing the beginning only.", xalign=0)
@@ -264,6 +273,19 @@ class MessageCard(Gtk.Box):
             self.summary.set_label(f"to {to}" if to else "")
         else:
             self.summary.set_label(" ".join((e.get("preview") or "").split())[:140])
+
+    def _fill_structured(self) -> None:
+        info = self.view.db.get_structured(self.email_id) if self.view.db else None
+        self.structured.set_visible(info is not None)
+        if info is None:
+            return
+        self.structured_label.set_label(info["text"])
+        self.structured_copy.set_visible(bool(info.get("copy")))
+        if info.get("copy"):
+            if getattr(self, "_copy_handler", None):
+                self.structured_copy.disconnect(self._copy_handler)
+            self._copy_handler = self.structured_copy.connect(
+                "clicked", lambda *_: (copy_text(self, info["copy"]), toast(self, f"Copied {info['copy']}")))
 
     def _fill_details(self) -> None:
         e = self.email
@@ -323,6 +345,7 @@ class MessageCard(Gtk.Box):
         self.body_loaded = True
         self.email = {**self.email, **{k: v for k, v in full.items() if k != "bodyValues"}}
         self._fill_details()
+        self._fill_structured()
         self.loading.set_visible(False)
         content = assemble_body(full)
         html, text, truncated = content.html, content.text, content.truncated
