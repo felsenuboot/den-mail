@@ -13,11 +13,11 @@ class Provider(Protocol):
 
     name: str
 
-    def complete(self, system: str, user: str, json_schema: dict | None = None) -> str: ...
+    def complete(self, system: str, user: str, json_schema: dict | None = None) -> str:
+        """The model's answer as text; LLMError when the server could not or would not."""
 
     def check(self) -> str:
         """Reach the server without spending a request; a one-line verdict or LLMError."""
-        ...
 
 
 @dataclass(frozen=True)

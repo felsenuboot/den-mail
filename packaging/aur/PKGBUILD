@@ -3,7 +3,7 @@
 # After a release: bump pkgver, run `updpkgsums` and `makepkg --printsrcinfo > .SRCINFO`,
 # then push both files to the AUR repository (ssh://aur@aur.archlinux.org/den-mail.git).
 pkgname=den-mail
-pkgver=0.4.0
+pkgver=0.5.0
 pkgrel=1
 pkgdesc="Fastmail client for GNOME, built on JMAP, GTK 4 and libadwaita"
 arch=('any')
