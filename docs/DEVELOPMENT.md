@@ -100,9 +100,11 @@ which the message details show.
 The rules every session follows are in `CLAUDE.md` at the top of the repo;
 in short: an issue for everything, a branch per issue (`<issue>-<slug>`), a
 pull request with `Closes #<issue>` merged by squash so master has one commit
-per issue, a changelog line in the same PR, and a milestone per release
-whose title carries the version. A release is a `release/X.Y.Z` branch that
-bumps `VERSION` and turns the *Unreleased* changelog entries into a section,
+per issue, a changelog fragment in the same PR (one file per change in
+`changelog.d/`, see its README; `tools/changelog.py preview` shows the
+section they make), and a milestone per release whose title carries the
+version. A release is a `release/X.Y.Z` branch that bumps `VERSION` and runs
+`tools/changelog.py release X.Y.Z` to turn the fragments into a section,
 then a `vX.Y.Z` tag on the merge commit; the Release workflow
 (`.github/workflows/release.yml`) turns the tag into a GitHub release with
 that section as notes and refuses a tag that does not match `VERSION`.

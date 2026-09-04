@@ -24,13 +24,17 @@ Read this before changing anything. The full development notes are in
   `Closes #<issue>`. CI must be green.
 - Merge with **squash** (`gh pr merge --squash --delete-branch`), so master has
   one commit per issue whose message is the PR title and body.
-- Add the change to `CHANGELOG.md` under *Unreleased* in the same PR, with the
-  issue number.
+- Add the changelog line in the same PR as a fragment file
+  `changelog.d/<issue>-<slug>.<features|fixes|changes>.md` (the line without
+  the dash and the issue number; `changelog.d/README.md` says more). Nobody
+  edits `CHANGELOG.md` between releases, so branches never conflict on it.
 
 ## Releases
 - When a milestone's issues are closed: bump `VERSION` in `den_mail/__init__.py`
-  and `version` in `pyproject.toml`, move the *Unreleased* entries into a new
-  `## [X.Y.Z] - date` section, do it on a `release/X.Y.Z` branch through a PR,
+  and `version` in `pyproject.toml`, run
+  `python tools/changelog.py release X.Y.Z --intro "Milestone *Name* …"` (it
+  turns the fragments into the `## [X.Y.Z] - date` section and deletes them),
+  do it on a `release/X.Y.Z` branch through a PR,
   then tag the merge commit `vX.Y.Z` and push the tag. The Release workflow
   makes the GitHub release from the changelog section and refuses a tag that
   does not match `VERSION`; the Flatpak workflow attaches the bundle. Add a
