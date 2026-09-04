@@ -186,6 +186,14 @@ the message until then (Fastmail allows up to a year ahead) and it waits in
 the Scheduled folder, where opening it shows when it goes and a *Cancel
 send* button that puts it back in Drafts. Snoozing is not offered: Fastmail
 does not expose it to third-party clients over JMAP.
+## Address book
+
+With a token that has the Contacts scope, the app keeps your Fastmail
+address book in its cache: recipient completion offers your contacts first
+(by name or address), then the addresses seen in cached mail, and a contact
+with a photo shows it in the list and the conversation instead of the
+sender domain's logo. Without the scope nothing changes; the Account page in
+Preferences says which it is.
 
 ## Writing mail
 

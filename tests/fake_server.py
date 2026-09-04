@@ -25,6 +25,7 @@ CAP_CORE = "urn:ietf:params:jmap:core"
 CAP_MAIL = "urn:ietf:params:jmap:mail"
 CAP_SUBMISSION = "urn:ietf:params:jmap:submission"
 CAP_MASKED = "https://www.fastmail.com/dev/maskedemail"
+CAP_CONTACTS = "urn:ietf:params:jmap:contacts"
 
 
 def _now() -> str:
@@ -72,13 +73,14 @@ class FakeData:
         self.lock = threading.RLock()
         self.cv = threading.Condition(self.lock)
         self.counter = 1
-        self.states = {"Email": 1, "Mailbox": 1, "Thread": 1, "Identity": 1, "MaskedEmail": 1}
+        self.states = {"Email": 1, "Mailbox": 1, "Thread": 1, "Identity": 1, "MaskedEmail": 1, "ContactCard": 1}
         self.changes: dict[str, list[tuple[int, str, str]]] = {k: [] for k in self.states}
         self.mailboxes: dict[str, dict] = {}
         self.emails: dict[str, dict] = {}
         self.threads: dict[str, list[str]] = {}
         self.identities: dict[str, dict] = {}
         self.masked: dict[str, dict] = {}
+        self.contacts: dict[str, dict] = {}
         self.blobs: dict[str, tuple[bytes, str, str]] = {}
         self.submissions: dict[str, dict] = {}
         self.query_snapshots: dict[tuple[str, str], list[str]] = {}
@@ -128,6 +130,21 @@ class FakeData:
                 "created": created, "updated": updated, "destroyed": destroyed}
 
     # ---------------------------------------------------------------- fixture
+
+    def add_contact(self, given: str, surname: str, emails: list[str], photo: bytes | None = None) -> str:
+        """An RFC 9610 ContactCard in the address book, with a photo blob when given."""
+        with self.lock:   # re-entrant: fine from the fixture and from a test alike
+            cid = self.new_id("card")
+            card = {"@type": "Card", "version": "1.0", "id": cid, "uid": f"urn:uuid:{cid}",
+                    "name": {"components": [{"kind": "given", "value": given}, {"kind": "surname", "value": surname}]},
+                    "emails": {f"e{i}": {"address": a, "contexts": {"private": True}} for i, a in enumerate(emails)},
+                    "addressBookIds": {"ab1": True}}
+            if photo is not None:
+                bid = self.add_blob(photo, "image/png", "photo.png")
+                card["media"] = {"m1": {"kind": "photo", "blobId": bid, "mediaType": "image/png"}}
+            self.contacts[cid] = card
+            self.bump("ContactCard", cid, "created")
+            return cid
 
     def add_mailbox(self, name: str, role: str | None = None, parent: str | None = None, sort: int = 0) -> str:
         mid = self.new_id("mb")
@@ -244,6 +261,10 @@ class FakeData:
                 "lastMessageAt": _iso(now - timedelta(days=i)) if state == "enabled" else None, "emailPrefix": "",
             }
 
+        # The address book (#4): Anna with a photo, Ben without, and one address in two cards' worth of mail
+        self.add_contact("Anna", "Berger", ["anna@example.net", "anna.berger@work.example"], photo=_png_1x1((30, 120, 200)))
+        self.add_contact("Ben", "Okafor", ["ben@example.net"])
+        self.add_contact("Chiara", "Rossi", ["chiara@example.net"])
         people = [
             {"name": "Anna Berger", "email": "anna@example.net"},
             {"name": "Ben Okafor", "email": "ben@example.net"},
@@ -966,6 +987,13 @@ class Dispatcher:
             return [(name, {"accountId": ACCOUNT, "state": d.state("MaskedEmail"), "list": items, "notFound": []})]
         if name == "MaskedEmail/set":
             return [(name, d.masked_set(args))]
+        if name == "ContactCard/get":
+            ids = args.get("ids")
+            items = list(d.contacts.values()) if ids is None else [d.contacts[i] for i in ids if i in d.contacts]
+            nf = [] if ids is None else [i for i in ids if i not in d.contacts]
+            return [(name, {"accountId": ACCOUNT, "state": d.state("ContactCard"), "list": items, "notFound": nf})]
+        if name == "ContactCard/changes":
+            return [(name, d.changes_since("ContactCard", args.get("sinceState"), lambda i: i in d.contacts))]
         if name == "Core/echo":
             return [(name, args)]
         raise MethodError("unknownMethod", name)
@@ -1102,14 +1130,14 @@ class FakeJMAPServer(ThreadingHTTPServer):
                 CAP_CORE: {"maxSizeUpload": 50_000_000, "maxConcurrentUpload": 4, "maxSizeRequest": 10_000_000,
                            "maxConcurrentRequests": 4, "maxCallsInRequest": 50, "maxObjectsInGet": 1000,
                            "maxObjectsInSet": 500, "collationAlgorithms": ["i;ascii-numeric"]},
-                CAP_MAIL: {}, CAP_SUBMISSION: {}, CAP_MASKED: {},
+                CAP_MAIL: {}, CAP_SUBMISSION: {}, CAP_MASKED: {}, CAP_CONTACTS: {},
             },
             "accounts": {ACCOUNT: {"name": "felix@example.com", "isPersonal": True, "isReadOnly": False,
                                    "accountCapabilities": {CAP_MAIL: {"maxMailboxDepth": 10, "maxSizeAttachmentsPerEmail": 50_000_000,
                                                                       "mayCreateTopLevelMailbox": True},
                                                            CAP_SUBMISSION: {"submissionExtensions": {}, "maxDelayedSend": 44236800},
-                                                           CAP_MASKED: {}}}},
-            "primaryAccounts": {CAP_MAIL: ACCOUNT, CAP_SUBMISSION: ACCOUNT, CAP_MASKED: ACCOUNT},
+                                                           CAP_MASKED: {}, CAP_CONTACTS: {}}}},
+            "primaryAccounts": {CAP_MAIL: ACCOUNT, CAP_SUBMISSION: ACCOUNT, CAP_MASKED: ACCOUNT, CAP_CONTACTS: ACCOUNT},
             "username": "felix@example.com",
             "apiUrl": f"{b}/api",
             "downloadUrl": f"{b}/download/{{accountId}}/{{blobId}}/{{name}}?type={{type}}",

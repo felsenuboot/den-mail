@@ -9,7 +9,6 @@ import gi
 gi.require_version("Graphene", "1.0")
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk
 
-from ..avatars import sender_key
 from ..classify.rules import CATEGORIES, CATEGORY_NAMES, PRIMARY
 from ..models.thread import SenderGroup, ThreadListModel, ThreadObject
 from .sidebar import DRAG_PREFIX
@@ -133,7 +132,7 @@ class ThreadRow(Gtk.Box):
             return
         first = o.summary.from_addresses[0] if o.summary.from_addresses else None
         self.avatar.set_text((first.get("name") or first.get("email") or "?") if first else "?")
-        self.avatar_key = sender_key(first.get("email")) if first else None
+        self.avatar_key = self.avatars.key_for(first.get("email")) if (first and self.avatars) else None
         self.refresh_avatar(first.get("email") if first else None)
         self.participants.set_label(("Draft: " if o.is_draft else "") + o.participants)
         self.subject.set_label(o.subject)
@@ -242,7 +241,7 @@ class SenderHeader(Gtk.Box):
         if g is None:
             return
         self.email = g.email or None
-        self.avatar_key = sender_key(self.email)
+        self.avatar_key = self.avatars.key_for(self.email) if self.avatars else None
         self.avatar.set_text(g.name or "?")
         self.name.set_label(g.name)
         self.address.set_label(g.detail or "")
