@@ -117,7 +117,14 @@ def polkit_check(on_result: Callable[[bool, str | None], None], action_id: str =
 
 
 def _service() -> Secret.Service:
-    return Secret.Service.get_sync(Secret.ServiceFlags.LOAD_COLLECTIONS, None)
+    """The Secret Service proxy with its collections loaded. Raises GLib.Error when no
+    daemon owns the name: the proxy alone comes up fine without one, and loading the
+    collections then trips a libsecret assertion, so the owner is checked first."""
+    service = Secret.Service.get_sync(Secret.ServiceFlags.NONE, None)
+    if not service.get_name_owner():
+        raise GLib.Error("no Secret Service is running")
+    service.load_collections_sync(None)
+    return service
 
 
 def keyring_collection(service=None):
@@ -134,15 +141,15 @@ def keyring_available() -> bool:
     try:
         _service()
         return True
-    except GLib.Error as e:
-        log.debug("no secret service: %s", e.message)
+    except Exception as e:  # noqa: BLE001 - GLib.Error, or libsecret's own complaints
+        log.debug("no secret service: %s", e)
         return False
 
 
 def keyring_exists() -> bool:
     try:
         return keyring_collection() is not None
-    except GLib.Error:
+    except Exception:  # noqa: BLE001
         return False
 
 
