@@ -5,6 +5,7 @@ from __future__ import annotations
 from gi.repository import Adw, Gio, GLib, Gtk
 
 from ..models.thread import format_date
+from .a11y import watch as _a11y_watch
 from .widgets import confirm, copy_text, open_uri, toast
 
 STATE_LABEL = {"enabled": "Active", "disabled": "Blocked (to Trash)", "deleted": "Deleted (bounces)",
@@ -53,6 +54,7 @@ class MaskedEmailDialog(Adw.Dialog):
         view.set_content(self.stack)
         self.toast_overlay = Adw.ToastOverlay(child=view)
         self.set_child(self.toast_overlay)
+        _a11y_watch(self)   # icon-only buttons get their tooltip as accessible name (#123)
         self.reload()
         engine.refresh_masked()
 
@@ -112,7 +114,7 @@ class MaskedEmailDialog(Adw.Dialog):
             menu.append("Delete", f"masked.delete::{m['id']}")
         if not m.get("lastMessageAt"):
             menu.append("Delete permanently", f"masked.destroy::{m['id']}")
-        more = Gtk.MenuButton(icon_name="view-more-symbolic", menu_model=menu, valign=Gtk.Align.CENTER)
+        more = Gtk.MenuButton(icon_name="view-more-symbolic", menu_model=menu, valign=Gtk.Align.CENTER, tooltip_text="More")
         more.add_css_class("flat")
         row.add_suffix(more)
         self._ensure_actions()

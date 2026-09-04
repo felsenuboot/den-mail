@@ -10,6 +10,7 @@ from __future__ import annotations
 from gi.repository import Gio, Gtk
 
 from ..models.thread import ThreadObject
+from .a11y import watch as _a11y_watch
 from .conversation import ConversationView
 from .labels import MailboxPickerPopover
 
@@ -49,6 +50,7 @@ class BesideColumn(Gtk.Box):
         self.conversation.header.pack_end(close)
         self.append(self.conversation)
         self._install_actions()
+        _a11y_watch(self)   # icon-only buttons get their tooltip as accessible name (#123)
         self._handlers = [main.engine.connect("emails-changed", self._on_emails_changed),
                           main.engine.connect("emails-destroyed", self._on_emails_changed)]
 

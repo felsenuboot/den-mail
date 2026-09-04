@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from gi.repository import Adw, GLib, Gtk
 
+from .a11y import watch as _a11y_watch
 from .widgets import open_uri, toast
 
 ALIASES_URL = "https://app.fastmail.com/settings/addresses"
@@ -34,6 +35,7 @@ class IdentitiesDialog(Adw.Dialog):
         view.set_content(self.page)
         self.toast_overlay = Adw.ToastOverlay(child=view)
         self.set_child(self.toast_overlay)
+        _a11y_watch(self)   # icon-only buttons get their tooltip as accessible name (#123)
         self.groups: list[Adw.PreferencesGroup] = []
         self.rows: list[tuple[Adw.ExpanderRow, str]] = []
         self.reload()

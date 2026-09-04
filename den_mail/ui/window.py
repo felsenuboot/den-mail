@@ -29,6 +29,7 @@ from ..store.sync import (
     search_mailboxes,
     search_query_spec,
 )
+from .a11y import watch as _a11y_watch
 from .beside import MIN_WINDOW_WIDTH, BesideColumn
 from .cleanup import CleanupDialog
 from .compose import ComposeWindow
@@ -118,6 +119,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._session_subs = lock.watch_session_lock(self.lock_from_session) if config.get("lock_enabled") else []
         self.main: Adw.NavigationSplitView | None = None
         self._install_actions()
+        _a11y_watch(self)   # icon-only buttons get their tooltip as accessible name (#123)
         shortcuts.install(self)
         self.connect("close-request", self._on_close_request)
 
