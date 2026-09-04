@@ -30,14 +30,30 @@ class FastmailApp(Adw.Application):
         GLib.set_application_name(APP_NAME)
         self.config = Config()
         self.window: MainWindow | None = None
+        self._held = False   # the hold that keeps the process alive while the window is hidden (#2)
+
+    def hide_to_background(self) -> None:
+        """The window closed with "keep running" on: hide it, keep syncing and notifying."""
+        if not self._held:
+            self.hold()
+            self._held = True
+        if self.window is not None:
+            self.window.set_visible(False)
+
+    def _release_background(self) -> None:
+        if self._held:
+            self.release()
+            self._held = False
 
     def _quit(self, *_) -> None:
         win = getattr(self, "window", None)
         if win is not None:
+            win.quitting = True   # the close that follows must not hide to the background (#2)
             for w in list(win.compose_windows):
                 w.close()  # may show the "Save draft?" dialog and stay open
             if win.compose_windows or win.flush_sends(self.quit):
                 return
+        self._release_background()
         self.quit()
 
     def do_startup(self) -> None:

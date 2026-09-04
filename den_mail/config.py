@@ -23,6 +23,7 @@ DEFAULTS: dict[str, Any] = {
     "undo_send_seconds": 10,  # how long a sent message waits with an Undo toast; 0 sends at once
     "group_by_sender": "off",  # "off" | "sender" | "domain": a row per sender/organisation above its conversations
     "notify_new_mail": True,
+    "run_in_background": False,  # closing the window hides it and keeps syncing for notifications (#2)
     "poll_interval_seconds": 300,
     "thread_page_size": 50,
     "sidebar_width": 260,
