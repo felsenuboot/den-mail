@@ -95,8 +95,27 @@ class PreferencesDialog(Adw.PreferencesDialog):
 
         scheme.connect("notify::selected", on_scheme)
         appearance.add(scheme)
-        appearance.add(_switch(config, "sender_avatars", True, "Show sender logos",
-                               "Looks up the sender domain's BIMI logo or favicon (contacts that domain once)"))
+        from ..avatars import SOURCES, logo_source
+
+        logos = Adw.ComboRow(title="Sender logos", model=Gtk.StringList.new([
+            "From each sender's site", "Through DuckDuckGo's icon service", "BIMI only, no web contact", "Off"]))
+        logos.set_selected(SOURCES.index(logo_source(config)))
+        subtitles = {
+            "direct": "The domain's BIMI record, its favicon, or an icon its home page links to; each domain is contacted once",
+            "proxy": "Favicons from icons.duckduckgo.com: sender sites see nothing, DuckDuckGo sees the domains",
+            "bimi": "Only the BIMI logo from DNS; most senders have none, so most rows show initials",
+            "off": "Initials only",
+        }
+
+        def on_logos(row, _p):
+            source = SOURCES[row.get_selected()]
+            config.set("avatar_source", source)
+            config.set("sender_avatars", source != "off")
+            row.set_subtitle(subtitles[source])
+
+        logos.set_subtitle(subtitles[logo_source(config)])
+        logos.connect("notify::selected", on_logos)
+        appearance.add(logos)
         page.add(appearance)
 
         reading = Adw.PreferencesGroup(title="Reading")

@@ -1,18 +1,23 @@
 """Sender logos for the conversation list (BIMI first, favicon fallback).
 
 Lookups happen per sender *domain*, never per message, and are cached on
-disk. They still contact the sender's web server for the favicon, so the
-feature can be switched off in Preferences.
+disk. Where they look is the "Sender logos" choice in Preferences (#63):
+directly at the sender's site (BIMI record, then the usual icon paths, then
+the icons the home page links to), through DuckDuckGo's icon service so
+only one third party sees the domains, BIMI only (a DNS query, no web
+contact), or not at all.
 """
 
 from __future__ import annotations
 
 import contextlib
+import html
 import logging
 import math
 import re
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -37,9 +42,45 @@ TARGET_SIZE = 128
 DARK_LOGO_LUMA = 0.35   # mean luminance below which a logo gets a light plate on the dark theme
 USER_AGENT = "Mozilla/5.0 (X11; Linux) den-mail avatar fetcher"
 BIMI_URL_RE = re.compile(r"\bl=([^;\s]+)")
+SOURCES = ["direct", "proxy", "bimi", "off"]   # the "Sender logos" choice (#63)
+PROXY_URL = "https://icons.duckduckgo.com/ip3/{domain}.ico"
+MAX_HTML = 300_000
+LINK_RE = re.compile(r"<link\b[^>]*>", re.IGNORECASE)
+ATTR_RE = re.compile(r"""([a-zA-Z-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""")
 # second-level public suffixes where the registrable domain has three labels
 SECOND_LEVEL = {"co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "co.jp", "or.jp", "ne.jp",
                 "co.nz", "com.br", "com.mx", "co.za", "com.sg", "com.hk", "co.in"}
+
+
+def logo_source(config) -> str:
+    """The configured source; the switch from before #63 still counts as off."""
+    source = config.get("avatar_source") or ""
+    if source in SOURCES:
+        return source
+    return "direct" if config.get("sender_avatars", True) else "off"
+
+
+def icon_links(page: str, base_url: str) -> list[str]:
+    """The icons a page links to (<link rel="icon" …>), largest and touch icons first,
+    https only, resolved against the page's URL."""
+    found: list[tuple[int, int, str]] = []
+    for n, tag in enumerate(LINK_RE.findall(page[:MAX_HTML])):
+        attrs = {m.group(1).lower(): html.unescape(m.group(2) or m.group(3) or m.group(4) or "")
+                 for m in ATTR_RE.finditer(tag)}
+        rel = attrs.get("rel", "").lower().split()
+        href = attrs.get("href", "").strip()
+        if not href or not ({"icon", "apple-touch-icon", "apple-touch-icon-precomposed"} & set(rel)):
+            continue
+        url = urllib.parse.urljoin(base_url, href)
+        if not url.startswith("https://"):
+            continue
+        size = 0
+        with contextlib.suppress(ValueError):
+            size = max(int(s.split("x")[0]) for s in attrs.get("sizes", "").lower().split() if "x" in s)
+        touch = 1 if "apple-touch-icon" in rel or "apple-touch-icon-precomposed" in rel else 0
+        found.append((-(size or (180 if touch else 0)), n, url))
+    seen: set[str] = set()
+    return [u for _s, _n, u in sorted(found) if not (u in seen or seen.add(u))]
 
 
 def sender_key(email: str | None) -> str | None:
@@ -77,7 +118,11 @@ class AvatarService(GObject.Object):
 
     @property
     def enabled(self) -> bool:
-        return bool(self.config.get("sender_avatars", True))
+        return logo_source(self.config) != "off"
+
+    @property
+    def source(self) -> str:
+        return logo_source(self.config)
 
     def shutdown(self) -> None:
         self._pool.shutdown(wait=False, cancel_futures=True)
@@ -243,24 +288,51 @@ class AvatarService(GObject.Object):
         except GLib.Error as e:
             log.debug("avatar cache write failed: %s", e)
 
-    def _lookup(self, domain: str):
+    def _candidates(self, domain: str, source: str | None = None) -> list[str]:
+        """Where a domain's logo is looked for, in order, for the configured source."""
+        source = source or self.source
         root = registrable_domain(domain)
         candidates: list[str] = []
+        if source == "off":
+            return candidates
         for d in dict.fromkeys([domain, root]):
             url = self._bimi(d)
             if url:
                 candidates.append(url)
+        if source == "bimi":
+            return candidates
+        if source == "proxy":
+            candidates += [PROXY_URL.format(domain=d) for d in dict.fromkeys([root, domain])]
+            return candidates
         for d in dict.fromkeys([root, domain, f"www.{root}"]):
             candidates.append(f"https://{d}/apple-touch-icon.png")
             candidates.append(f"https://{d}/favicon.ico")
-        for url in candidates:
-            data = self._download(url)
-            if not data:
-                continue
-            pixbuf = self._decode(data)
+        return candidates
+
+    def _lookup(self, domain: str):
+        source = self.source
+        for url in self._candidates(domain, source):
+            pixbuf = self._decode_download(url)
             if pixbuf is not None:
                 return pixbuf
+        if source != "direct":
+            return None
+        # No icon at the usual paths: the home page may link to one (#63); one page, once per domain.
+        root = registrable_domain(domain)
+        for base in dict.fromkeys([f"https://{root}/", f"https://www.{root}/"]):
+            page = self._download(base, html_ok=True)
+            if not page:
+                continue
+            for url in icon_links(page.decode("utf-8", "replace"), base)[:4]:
+                pixbuf = self._decode_download(url)
+                if pixbuf is not None:
+                    return pixbuf
+            break
         return None
+
+    def _decode_download(self, url: str):
+        data = self._download(url)
+        return self._decode(data) if data else None
 
     @staticmethod
     def _bimi(domain: str) -> str | None:
@@ -319,15 +391,20 @@ class AvatarService(GObject.Object):
         return Gdk.pixbuf_get_from_surface(surface, 0, 0, size, size)
 
     @staticmethod
-    def _download(url: str) -> bytes | None:
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "image/*,*/*;q=0.5"})
+    def _download(url: str, html_ok: bool = False) -> bytes | None:
+        """The bytes at an https URL: an image, or with `html_ok` a page (for its icon links)."""
+        if not url.startswith("https://"):
+            return None
+        accept = "text/html;q=0.9,*/*;q=0.5" if html_ok else "image/*,*/*;q=0.5"
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": accept})
         try:
-            # candidates are built from https:// URLs only (BIMI record or the sender domain)
+            # https:// only, checked above (BIMI record, the sender domain, the icon service)
             with urllib.request.urlopen(req, timeout=8) as resp:  # nosec B310
                 ctype = (resp.headers.get("Content-Type") or "").lower()
-                if "text/html" in ctype:
+                if ("text/html" in ctype) != html_ok:
                     return None
-                return resp.read(MAX_BYTES + 1)[:MAX_BYTES]
+                limit = MAX_HTML if html_ok else MAX_BYTES
+                return resp.read(limit + 1)[:limit]
         except (urllib.error.URLError, TimeoutError, ConnectionError, OSError, ValueError):
             return None
 

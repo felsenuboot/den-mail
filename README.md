@@ -109,7 +109,8 @@ Something off? See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 The token lives in the system keyring. Remote images stay blocked until you
 allow them or trust the sender, attachments download on request, and sender
 logos come from the sender's domain (BIMI or favicon), which says nothing about
-a particular message; they can be turned off in Preferences.
+a particular message; Preferences can route them through DuckDuckGo's icon
+service instead, keep to BIMI (a DNS query, no web contact), or turn them off.
 
 ## Contributing
 
