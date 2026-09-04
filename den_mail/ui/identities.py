@@ -133,7 +133,7 @@ class IdentitiesDialog(Adw.Dialog):
                 "bcc": [{"name": None, "email": a.strip()} for a in bcc.get_text().split(",") if a.strip()] or None,
             }
             self.engine.identity_update(ident["id"], patch, on_done=lambda: toast(self, "Identity saved"),
-                                        on_error=lambda m: toast(self, f"Save failed: {m}"))
+                                        on_error=lambda m: toast(self, f"Could not save: {m}"))
 
         save.connect("clicked", on_save)
         for w in (name, reply_to, bcc):

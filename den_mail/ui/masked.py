@@ -206,7 +206,7 @@ class MaskedEmailDialog(Adw.Dialog):
             if response == "save":
                 self.engine.masked_set(update={m["id"]: {"description": desc.get_text().strip(),
                                                          "forDomain": domain.get_text().strip()}},
-                                       on_error=lambda msg: toast(self, f"Save failed: {msg}"))
+                                       on_error=lambda msg: toast(self, f"Could not save: {msg}"))
 
         dlg.connect("response", on_response)
         dlg.present(self)

@@ -462,7 +462,7 @@ class ComposeWindow(Adw.Window):
             self._mark_dirty()
 
         def failed(msg: str) -> None:
-            toast(self, f"Upload of {name} failed: {msg}")
+            toast(self, f"Could not upload {name}: {msg}")
             self._remove_attachment(chip)
 
         self.engine.upload(data, ctype, done, failed)
