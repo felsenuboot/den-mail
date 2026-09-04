@@ -28,8 +28,7 @@ listview.thread-list > row {
   padding: 0;
 }
 listview.thread-list.grouped {
-  /* a touch darker than the window, so the gaps between the cards show in dark mode too */
-  background: mix(@window_bg_color, black, 0.12);
+  background: @window_bg_color;
 }
 listview.thread-list.grouped > row {
   padding: 0 12px;
@@ -45,33 +44,36 @@ listview.thread-list.grouped > row {
 .thread-row .preview {
   font-size: 0.9em;
 }
-/* the card: in the dark palette the card colour is barely lighter than the window, so the
-   edge does the separating; the rows inside keep a fainter line */
+/* the card, as libadwaita draws a boxed list: card colour, 12px corners, and the same
+   15% currentColor line for the outline and the separators in either theme; the rows
+   inside sit on a shade, like the nested list of an expander row */
 .sender-header,
 .thread-row.in-group {
-  background: @card_bg_color;
-  border: 1px solid alpha(@card_shade_color, 0.9);
+  background-color: @card_bg_color;
+  color: @card_fg_color;
+  border-left: 1px solid alpha(currentColor, 0.15);
+  border-right: 1px solid alpha(currentColor, 0.15);
 }
 .sender-header {
   padding: 8px 6px 8px 12px;
   margin-top: 12px;
   border-radius: 12px 12px 0 0;
-  border-bottom: none;
+  border-top: 1px solid alpha(currentColor, 0.15);
 }
 .sender-header.card-only {
   border-radius: 12px;
-  border-bottom: 1px solid alpha(@card_shade_color, 0.9);
+  border-bottom: 1px solid alpha(currentColor, 0.15);
 }
 .thread-row.in-group {
   /* the text lines up with the sender's name above (12px padding, 32px logo, 8px gap = 52px):
      34px padding, then the 8px unread dot and its 10px gap */
   padding: 8px 12px 8px 34px;
-  border-top: 1px solid alpha(@card_shade_color, 0.5);
-  border-bottom: none;
+  background-image: image(alpha(@card_shade_color, 0.5));
+  border-top: 1px solid alpha(currentColor, 0.15);
 }
 .thread-row.in-group.card-last {
   border-radius: 0 0 12px 12px;
-  border-bottom: 1px solid alpha(@card_shade_color, 0.9);
+  border-bottom: 1px solid alpha(currentColor, 0.15);
 }
 listview.thread-list.grouped > row:last-child .thread-row,
 listview.thread-list.grouped > row:last-child .sender-header.card-only {
@@ -80,11 +82,11 @@ listview.thread-list.grouped > row:last-child .sender-header.card-only {
 /* selection and hover are drawn by the card, not by the list row */
 listview.thread-list.grouped > row:selected .thread-row,
 listview.thread-list.grouped > row:selected .sender-header {
-  background: mix(@card_bg_color, @accent_bg_color, 0.25);
+  background-image: image(alpha(@accent_bg_color, 0.25));
 }
 listview.thread-list.grouped > row:hover:not(:selected) .thread-row,
 listview.thread-list.grouped > row:hover:not(:selected) .sender-header {
-  background: mix(@card_bg_color, @window_fg_color, 0.05);
+  background-image: image(alpha(currentColor, 0.04));
 }
 .sender-header .heading.unread {
   font-weight: 700;
@@ -93,6 +95,9 @@ listview.thread-list.grouped > row:hover:not(:selected) .sender-header {
   min-width: 24px;
   min-height: 24px;
   padding: 0;
+}
+.sender-header .expander.expanded {
+  color: @accent_color;
 }
 .thread-row .unread-dot {
   color: @accent_color;

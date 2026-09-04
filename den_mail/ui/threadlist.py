@@ -241,6 +241,10 @@ class SenderHeader(Gtk.Box):
                 w.remove_css_class("unread")
         self.expander.set_icon_name("pan-end-symbolic" if g.collapsed else "pan-down-symbolic")
         self.expander.set_tooltip_text("Unfold this sender" if g.collapsed else "Fold this sender")
+        if g.collapsed:  # an open group's chevron takes the accent colour, like an expander row's
+            self.expander.remove_css_class("expanded")
+        else:
+            self.expander.add_css_class("expanded")
         # A folded group is a card of its own; an open one is the top of its card.
         if g.collapsed:
             self.add_css_class("card-only")
