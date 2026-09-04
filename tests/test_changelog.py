@@ -30,8 +30,8 @@ Milestone *Assistant*.
 
 
 def test_the_repository_fragments_are_valid():
-    fragments = tool.read_fragments()
-    assert fragments, "changelog.d/ has at least this PR's fragment"
+    fragments = tool.read_fragments()      # empty right after a release, and that is fine
+    assert (tool.FRAGMENTS / "README.md").exists()
     for f in fragments:
         assert f.kind in tool.ORDER and f.text and f.line.endswith(f"(#{f.issue})")
 

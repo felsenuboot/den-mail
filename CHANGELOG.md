@@ -9,6 +9,26 @@ Unreleased changes gather at the top until they are tagged.
 Changes waiting for the next release are one file each in `changelog.d/`;
 `python tools/changelog.py preview` shows the section they will make.
 
+## [0.6.0] - 2026-09-04
+
+Everything the Standalone milestone held after 0.5.0: offline drafts, the keyring unlock, logo sources, label suggestions, background running, two conversations side by side, closable hints, rules explained, and changelog fragments for the process.
+
+### Features
+- Lock: a third way to unlock, through the keyring. Choosing it creates a keyring collection of the app's own ("Den Mail"), which the keyring daemon locks with the app and unlocks with its own prompt; the login keyring and other apps are never touched, and it works inside a Flatpak. "Unlock with" in Preferences now lists every method available on the machine (#66)
+- Sender logos: a site without a favicon at the usual paths is asked once for the icon its home page links to; and "Sender logos" in Preferences chooses where logos come from: each sender's site, DuckDuckGo's icon service so sender sites see nothing, BIMI only with no web contact, or off (#63)
+- Offline drafts: saving a draft while the server is unreachable keeps it locally, lists it in Drafts, and creates it on the server with the next sync; later saves and Send while still offline update that one queued draft instead of chaining, and an open compose window learns the server's id when it arrives (#61)
+- Label suggestions: the app learns from the mail you have labelled and, when it is sure, offers "Work?" as a chip on a conversation that lacks the label; one click applies it. Off in Preferences → Inbox if unwanted; folders are never suggested (#60)
+- Open beside: on a wide window (an ultrawide monitor), "Open beside" in a conversation's context menu (or B) pins it in a second column next to the reading pane, with its own Reply, Archive, labels and summary, while the list keeps driving the first; on a narrower window it opens a thread window as before (#35)
+- Run in the background: with "Keep running when the window is closed" on (Preferences → Account), closing the window keeps the sync going and new-mail notifications coming; a click on one, or starting the app again, brings the window back, and Quit in the main menu (Ctrl+Q) ends it (#2)
+
+### Fixes
+- The hints above the list (Clean up in the Inbox and the category views, the Screener's) have a close button, and once closed, or once Clean up has been opened, the cleanup hints stay away (#84)
+- The Search quick link's tooltip is a sentence about what the search does instead of a bare list of operators (#80)
+
+### Changes
+- Rules: the Rules dialog, the "Always for this sender" prompt and the Inbox preferences say plainly that these rules are Den Mail's own, run on this computer while the app is open, and are not the rules in Fastmail's settings, with a link to those for rules that should run on the server (#85)
+- Changelog lines live one per file in changelog.d/ until a release assembles them, so pull requests no longer conflict on CHANGELOG.md (#57)
+
 ## [0.5.0] - 2026-09-04
 
 Milestone *Assistant*: a language-model layer with three providers, and summaries on it.
