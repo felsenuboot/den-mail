@@ -66,13 +66,14 @@ class PreferencesDialog(Adw.PreferencesDialog):
                  on_sidebar_views: Callable[[bool], None] | None = None,
                  on_screener: Callable[[bool], None] | None = None,
                  on_open: Callable[[str], None] | None = None,
-                 rules_count: int = 0, contact_count: int = 0):
+                 rules_count: int = 0, contact_count: int = 0,
+                 on_lock_changed: Callable[[], None] | None = None):
         """`on_open(action)` activates a window action such as "cleanup" or "rules"."""
         super().__init__(title="Preferences")
         self.config = config
         self.add(self._general_page(config, on_manage_identities))
         self.add(self._inbox_page(config, on_sidebar_views, on_screener, on_open, rules_count))
-        self.add(self._account_page(config, session, on_sign_out, on_clear_cache, contact_count))
+        self.add(self._account_page(config, session, on_sign_out, on_clear_cache, contact_count, on_lock_changed))
 
     # ------------------------------------------------------------- General
 
@@ -161,10 +162,74 @@ class PreferencesDialog(Adw.PreferencesDialog):
         page.add(screener)
         return page
 
+    # ------------------------------------------------------------- Privacy
+
+    def _privacy_group(self, config, on_lock_changed) -> Adw.PreferencesGroup:
+        from .. import lock
+
+        changed = on_lock_changed or (lambda: None)
+        polkit = lock.policy_installed()
+        group = Adw.PreferencesGroup(
+            title="Lock",
+            description=("Hides the mail behind a lock page; unlocking asks the system's own authentication prompt."
+                         if polkit else
+                         "Hides the mail behind a lock page; unlocking asks for a passphrase set here. The system's "
+                         "own prompt needs the polkit policy file installed (see the README). A privacy screen, "
+                         "not a security boundary: the cache and the token are not encrypted."))
+        group.add(_switch(config, "lock_enabled", False, "Lock screen", "Lock from the main menu or Ctrl+Shift+L",
+                          lambda _on: changed()))
+        idle = Adw.ComboRow(title="Lock when idle", model=Gtk.StringList.new(
+            ["Never", "After 1 minute", "After 5 minutes", "After 15 minutes", "After 30 minutes", "After an hour"]))
+        current = int(config.get("lock_idle_minutes", 0))
+        idle.set_selected(lock.IDLE_CHOICES.index(current) if current in lock.IDLE_CHOICES else 0)
+        idle.connect("notify::selected", lambda r, _p: (config.set("lock_idle_minutes", lock.IDLE_CHOICES[r.get_selected()]), changed()))
+        group.add(idle)
+        group.add(_switch(config, "lock_with_session", True, "Lock with the session",
+                          "When the desktop locks or the screensaver starts"))
+        if not polkit:
+            has = bool(config.get("lock_passphrase"))
+            row = Adw.ActionRow(title="Passphrase", subtitle="Set" if has else "None yet: the lock page opens without asking",
+                                activatable=True)
+            row.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
+            row.connect("activated", lambda *_: self._set_passphrase(config, row))
+            group.add(row)
+        return group
+
+    def _set_passphrase(self, config, row: Adw.ActionRow) -> None:
+        from .. import lock
+
+        first = Gtk.PasswordEntry(show_peek_icon=True, placeholder_text="Passphrase")
+        second = Gtk.PasswordEntry(show_peek_icon=True, placeholder_text="Again", activates_default=True)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.append(first)
+        box.append(second)
+        dlg = Adw.AlertDialog(heading="Den Mail passphrase", body="Asked for when unlocking. Leave both empty to remove it.")
+        dlg.set_extra_child(box)
+        dlg.add_response("cancel", "Cancel")
+        dlg.add_response("ok", "Set")
+        dlg.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_default_response("ok")
+        dlg.set_close_response("cancel")
+
+        def on_response(_d, response):
+            if response != "ok":
+                return
+            if first.get_text() != second.get_text():
+                self._set_passphrase(config, row)
+                return
+            config.set("lock_passphrase", lock.hash_passphrase(first.get_text()) if first.get_text() else "")
+            row.set_subtitle("Set" if first.get_text() else "None yet: the lock page opens without asking")
+
+        dlg.connect("response", on_response)
+        dlg.present(self)
+        first.grab_focus()
+
     # ------------------------------------------------------------- Account
 
-    def _account_page(self, config, session, on_sign_out, on_clear_cache, contact_count: int = 0) -> Adw.PreferencesPage:
+    def _account_page(self, config, session, on_sign_out, on_clear_cache, contact_count: int = 0,
+                      on_lock_changed=None) -> Adw.PreferencesPage:
         page = Adw.PreferencesPage(title="Account", icon_name="avatar-default-symbolic", name="account")
+        page.add(self._privacy_group(config, on_lock_changed))
 
         sync = Adw.PreferencesGroup(title="Sync & notifications")
         sync.add(_switch(config, "notify_new_mail", True, "Notify about new mail"))

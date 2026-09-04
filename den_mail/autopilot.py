@@ -18,6 +18,7 @@ Commands:
   preferences <general|inbox|account>   open that Preferences page
   sender-rule <address>   open the "Always for this sender" prompt
   screen allow|block <address>   decide a screened sender
+  lock | unlock        the lock screen (unlock skips the prompt)
   cleanup-all <mark_read|archive|trash|unsubscribe>   select every sender in the open cleanup dialog and run that
   resize <w> <h>       resize the main window
   unread-filter on|off   toggle the unread filter button
@@ -133,6 +134,10 @@ def _run(app, steps: list[str]) -> bool:
         elif cmd == "cleanup-all" and win and getattr(win, "cleanup_dialog", None):
             win.cleanup_dialog.select_all.set_active(True)
             win.cleanup_dialog.run(arg.strip())
+        elif cmd == "lock" and win:
+            win.lock()
+        elif cmd == "unlock" and win:
+            win._unlocked()
         elif cmd == "screen" and win:
             decision, _, addr = arg.strip().partition(" ")
             win.screener_decide(addr.strip(), decision == "allow")

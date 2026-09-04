@@ -31,6 +31,10 @@ DEFAULTS: dict[str, Any] = {
     "cleanup_tip_starts": 0,  # how often the Inbox has shown the "Clean up" tip; it stops after a few starts
     "cleanup_opened": False,  # the tip also stops once Clean up has been opened
     "tip_index": 0,  # which tip the empty conversation pane shows; advances with every start
+    "lock_enabled": False,  # the lock screen (#28)
+    "lock_idle_minutes": 0,  # lock after this long without activity; 0 = never
+    "lock_with_session": True,  # lock when the desktop session locks
+    "lock_passphrase": "",  # salted PBKDF2 hash; used where no polkit policy is installed
     "window": {"width": 1400, "height": 900, "maximized": False},
     "signature_position": "below",
 }

@@ -8,6 +8,7 @@ Unreleased changes gather at the top until they are tagged.
 
 ### Features
 - schema.org data in HTML mail (orders, parcels, invoices, flight, train, hotel and event reservations) makes the message Transactions for sure and shows a summary line above the body with a copy button for the tracking or reservation number (#20)
+- A lock screen: on demand, after some idle time or when the session locks; unlocking through the system's authentication prompt where the polkit policy is installed, else a passphrase (#28)
 - Offline outbox: archive, label, delete and send while the connection is down; the changes stay applied locally, queue in the cache and go out with the next sync, and the sidebar counts what is waiting (#8)
 - Send later: a clock next to Send schedules the message for a preset or any time; it waits in Scheduled and can be cancelled from the conversation (#6)
 

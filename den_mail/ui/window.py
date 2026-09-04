@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 from gi.repository import Adw, Gio, GLib, Gtk
 
-from .. import APP_NAME, rules, secrets, shortcuts, timing, views
+from .. import APP_NAME, lock, rules, secrets, shortcuts, timing, views
 from ..avatars import AvatarService
 from ..classify.rules import CATEGORY_NAMES
 from ..config import Config, database_path
@@ -96,6 +96,24 @@ class MainWindow(Adw.ApplicationWindow):
         self.loading = Adw.StatusPage(title="Connecting…")
         self.loading.set_child(Adw.Spinner())
         self.stack.add_named(self.loading, "loading")
+        # The lock screen (#28): the mail is hidden until the user proves it is them.
+        self.locked = False
+        self._before_lock = "main"
+        self.lock_page = Adw.StatusPage(icon_name="fm-lock-symbolic", title="Locked",
+                                        description="Your mail is hidden until you unlock Den Mail.")
+        unlock = Gtk.Button(label="Unlock", halign=Gtk.Align.CENTER)
+        unlock.add_css_class("suggested-action")
+        unlock.add_css_class("pill")
+        unlock.connect("clicked", lambda *_: self.unlock())
+        self.lock_page.set_child(unlock)
+        self.stack.add_named(self.lock_page, "locked")
+        self.idle = lock.IdleTimer(self.lock_idle)
+        self.idle.set_minutes(int(config.get("lock_idle_minutes", 0)) if config.get("lock_enabled") else 0)
+        activity = Gtk.EventControllerLegacy()
+        activity.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        activity.connect("event", lambda *_: (self.idle.touch(), False)[1])
+        self.add_controller(activity)
+        self._session_subs = lock.watch_session_lock(self.lock_from_session) if config.get("lock_enabled") else []
         self.main: Adw.NavigationSplitView | None = None
         self._install_actions()
         shortcuts.install(self)
@@ -228,6 +246,7 @@ class MainWindow(Adw.ApplicationWindow):
         section.append("Identities & Aliases…", "win.identities")
         primary.append_section("Account", section)
         section = Gio.Menu()
+        section.append("Lock", "win.lock")
         section.append("Preferences", "win.preferences")
         section.append("Keyboard Shortcuts", "win.shortcuts")
         section.append("About Den Mail", "app.about")
@@ -327,6 +346,7 @@ class MainWindow(Adw.ApplicationWindow):
             "cleanup": self.show_cleanup,
             "identities": lambda: IdentitiesDialog(self.engine, self.db, self.config).present(self),
             "preferences": self.show_preferences,
+            "lock": self.lock,
             "preferences-inbox": lambda: self.show_preferences("inbox"),
             "shortcuts": self.show_shortcuts,
             "goto-inbox": lambda: self._goto_role(ROLE_INBOX),
@@ -681,6 +701,11 @@ class MainWindow(Adw.ApplicationWindow):
     def _notify(self, e: dict, sender: dict, icon_path) -> None:
         app = self.get_application()
         if app is None:
+            return
+        if self.locked:   # nothing about the message while the mail is hidden
+            n = Gio.Notification.new("New mail")
+            n.set_default_action("app.activate")
+            app.send_notification(f"mail-{e['id']}", n)
             return
         n = Gio.Notification.new(sender.get("name") or sender.get("email") or "New mail")
         n.set_body(e.get("subject") or "(no subject)")
@@ -1258,6 +1283,75 @@ class MainWindow(Adw.ApplicationWindow):
 
     # ------------------------------------------------------------ dialogs
 
+    # ---------------------------------------------------------------- lock
+
+    def lock(self) -> None:
+        """Hide everything behind the lock page; compose and thread windows go too."""
+        if self.locked or self.stack.get_visible_child_name() in ("login", "loading"):
+            return
+        self.locked = True
+        self._before_lock = self.stack.get_visible_child_name() or "main"
+        self.stack.set_visible_child_name("locked")
+        for w in (*self.compose_windows, *self.thread_windows):
+            w.set_visible(False)
+        self.set_title(f"{APP_NAME} (locked)")
+
+    def lock_idle(self) -> None:
+        if self.config.get("lock_enabled"):
+            self.lock()
+
+    def lock_from_session(self) -> None:
+        if self.config.get("lock_enabled") and self.config.get("lock_with_session", True):
+            self.lock()
+
+    def unlock(self) -> None:
+        """The system prompt where the polkit policy is installed, else the passphrase."""
+        if not self.locked:
+            return
+        if lock.policy_installed():
+            lock.polkit_check(lambda ok, err: self._unlocked() if ok else self._toast(
+                f"Not unlocked{': ' + err if err else ''}", 5))
+            return
+        stored = self.config.get("lock_passphrase") or ""
+        if not stored:
+            self._unlocked()   # nothing to check against: the lock was only a curtain
+            return
+        entry = Gtk.PasswordEntry(show_peek_icon=True, activates_default=True)
+        dlg = Adw.AlertDialog(heading="Unlock Den Mail", body="Your Den Mail passphrase.")
+        dlg.set_extra_child(entry)
+        dlg.add_response("cancel", "Cancel")
+        dlg.add_response("ok", "Unlock")
+        dlg.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_default_response("ok")
+        dlg.set_close_response("cancel")
+
+        def on_response(_d, response):
+            if response != "ok":
+                return
+            if lock.check_passphrase(entry.get_text(), stored):
+                self._unlocked()
+            else:
+                self._toast("Wrong passphrase", 4)
+
+        dlg.connect("response", on_response)
+        dlg.present(self)
+        entry.grab_focus()
+
+    def _unlocked(self) -> None:
+        self.locked = False
+        self.stack.set_visible_child_name(self._before_lock)
+        for w in (*self.compose_windows, *self.thread_windows):
+            w.set_visible(True)
+        self.set_title(APP_NAME)
+        self.idle.touch()
+
+    def apply_lock_settings(self) -> None:
+        """After a change in Preferences: the idle timer and the session watch follow the switches."""
+        enabled = bool(self.config.get("lock_enabled"))
+        self.idle.set_minutes(int(self.config.get("lock_idle_minutes", 0)) if enabled else 0)
+        if enabled and not self._session_subs:
+            self._session_subs = lock.watch_session_lock(self.lock_from_session)
+
     def show_preferences(self, page: str | None = None) -> None:
         self.preferences_dialog = PreferencesDialog(self.config, self.client.session if self.client else None,
                           on_sign_out=lambda: confirm(self, "Sign out?", "The local cache will be removed.",
@@ -1267,6 +1361,7 @@ class MainWindow(Adw.ApplicationWindow):
                           on_sidebar_views=self.set_sidebar_views,
                           on_screener=self.set_screener,
                           on_open=lambda name: self.lookup_action(name).activate(None),
+                          on_lock_changed=self.apply_lock_settings,
                           rules_count=len(rules.load_rules(self.config)),
                           contact_count=self.db.contact_count() if self.db else 0,
                           )

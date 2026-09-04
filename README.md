@@ -45,6 +45,8 @@ offline and follows changes as they happen.
   bulk archive, delete, mark read and unsubscribe per sender.
 - 📐 **Rules.** Always label, archive, read or delete mail from a sender,
   a domain, a list or a category, applied as it arrives.
+- 🔒 **Lock.** Hide the mail behind a lock page, on demand, when idle or with
+  the session; unlock with the system prompt or a passphrase.
 - 🔔 **Desktop.** Notifications with the sender's logo, `mailto:` links, keyboard
   shortcuts.
 
