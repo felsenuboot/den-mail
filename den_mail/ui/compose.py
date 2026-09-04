@@ -46,6 +46,8 @@ class ComposeWindow(Adw.Window):
         super().__init__(application=parent.get_application(), default_width=820, default_height=680,
                          title="New Message")
         self.parent_window = parent
+        if hasattr(parent, "track_activity"):
+            parent.track_activity(self)   # typing here keeps the idle lock away (#55)
         self.preferred_identity_id = preferred_identity_id
         self.engine = engine
         self.db = db
