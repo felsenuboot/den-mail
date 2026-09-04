@@ -70,7 +70,7 @@ def panel(x: float, y: float, w: float, title: str, unit: str, values: dict[str,
         parts.append(f'<text x="{x + label_w - 10}" y="{cy + bar_h - 5}" text-anchor="end" font-size="13" '
                      f'fill="{t["text"]}">{label}</text>')
         if client not in values:
-            parts.append(f'<text x="{baseline_x + 8}" y="{cy + bar_h - 5}" font-size="13" fill="{t["muted"]}">–</text>')
+            parts.append(f'<text x="{baseline_x + 8}" y="{cy + bar_h - 5}" font-size="13" fill="{t["muted"]}">no data</text>')
             continue
         v = values[client]
         length = max(6, plot_w * v / biggest)
