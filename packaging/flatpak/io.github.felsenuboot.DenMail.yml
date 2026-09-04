@@ -18,13 +18,13 @@ finish-args:
   - --device=dri               # WebKitGTK rendering
   - --talk-name=org.freedesktop.secrets   # the API token in the keyring
   - --filesystem=xdg-download  # saving attachments
+# The SDK's appstreamcli compose fails with a bare file-read-error on this
+# tree although the host's succeeds; the bundle is sideloaded, not listed in
+# a software centre, so the composed catalogue is not needed.
+appstream-compose: false
 modules:
   - name: den-mail
     buildsystem: simple
-    # The SDK's appstreamcli compose fails with a bare file-read-error on this
-    # tree although the host's succeeds; the bundle is sideloaded, not listed in
-    # a software centre, so the composed catalogue is not needed.
-    appstream-compose: false
     build-commands:
       - pip3 install --prefix=/app --no-deps --no-build-isolation .
       - install -Dm644 data/io.github.felsenuboot.DenMail.desktop -t /app/share/applications
