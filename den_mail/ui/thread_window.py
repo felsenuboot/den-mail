@@ -21,7 +21,7 @@ class ThreadWindow(Adw.Window):
         self.thread = thread
         self.mailbox_id = mailbox_id
         self.conversation = ConversationView(main.db, main.engine, main.tree, main.config, main._compose_from,
-                                             self._email_action, avatars=main.avatars)
+                                             self._email_action, avatars=main.avatars, assistant=main.assistant)
         self.conversation.on_remove_label = lambda mid: main._label_toggle(main.tree.get(mid), False,
                                                                            threads=[self.thread])
         self.labels_popover = MailboxPickerPopover(
@@ -62,6 +62,7 @@ class ThreadWindow(Adw.Window):
             "forward": lambda: self.main._compose_from("forward", self.conversation.latest_email_id()),
             "labels": lambda: self.conversation.labels_button.popup(),
             "move": lambda: self.conversation.move_button.popup(),
+            "summarise": lambda: self.conversation.summarise(),
         }
         for kind in ("archive", "trash", "junk", "not-junk", "flag", "mark-read", "mark-unread", "delete-permanently"):
             specs[kind] = lambda kind=kind: self._email_action(kind if kind != "delete-permanently" else "destroy",

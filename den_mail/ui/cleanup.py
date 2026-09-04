@@ -12,6 +12,7 @@ from ..classify.rules import CATEGORIES, CATEGORY_NAMES, H_LIST_UNSUBSCRIBE, PRI
 from ..models.thread import format_date
 from ..store import actions
 from ..store.actions import UndoRecord
+from ..summaries import Summariser
 from ..unsubscribe import parse_list_unsubscribe
 from .newsletters import run_unsubscribe
 from .widgets import avatar, chip, confirm, human_size, toast
@@ -60,10 +61,12 @@ class SenderRow(Adw.ExpanderRow):
 
 class CleanupDialog(Adw.Dialog):
     def __init__(self, engine, db, config, tree, on_action: Callable[[UndoRecord | None], None] | None = None,
-                 on_open_thread: Callable[[str], None] | None = None, category: str | None = None):
+                 on_open_thread: Callable[[str], None] | None = None, category: str | None = None,
+                 assistant=None):
         super().__init__(title="Clean up", content_width=720, content_height=720)
         self.engine = engine
         self.db = db
+        self.summariser = Summariser(db, engine, assistant) if assistant is not None else None
         self.config = config
         self.tree = tree
         self.on_action = on_action
@@ -175,6 +178,8 @@ class CleanupDialog(Adw.Dialog):
 
     def _fill(self, row: SenderRow) -> None:
         row.filled = True
+        if self.summariser is not None and self.summariser.available:
+            self._summarise_row(row)
         for m in senders.messages_of(self.db, row.stats.email, self.engine.trash_junk_ids()):
             r = Adw.ActionRow(title=GLib.markup_escape_text(m["subject"] or "(no subject)"),
                               subtitle=GLib.markup_escape_text(format_date(m["received_at"] or "")),
@@ -185,6 +190,15 @@ class CleanupDialog(Adw.Dialog):
             if self.on_open_thread is not None:
                 r.connect("activated", lambda _r, tid=m["thread_id"]: self.on_open_thread(tid))
             row.add_row(r)
+
+    def _summarise_row(self, row: SenderRow) -> None:
+        """Their newest message in one line (#68), so one can decide without opening anything."""
+        line = Adw.ActionRow(title="Their newest message, in one line", subtitle="Summarising…")
+        line.add_prefix(Gtk.Image(icon_name="fm-assistant-symbolic"))
+        line.add_css_class("summary-line")
+        row.add_row(line)
+        self.summariser.sender(row.stats.email, lambda s: line.set_subtitle(GLib.markup_escape_text(s.text)),
+                               lambda m: (line.set_subtitle(GLib.markup_escape_text(m)), line.add_css_class("error")))
 
     def _filter(self, row: Gtk.ListBoxRow) -> bool:
         text = self.search.get_text().strip().lower()

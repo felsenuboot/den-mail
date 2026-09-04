@@ -279,7 +279,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.threadlist.on_sort_changed = self._on_sort_changed
         self.threadlist.on_context_menu = self._on_thread_context_menu
         self.conversation = ConversationView(self.db, self.engine, self.tree, self.config, self._compose_from,
-                                             self._email_action, avatars=self.avatars)
+                                             self._email_action, avatars=self.avatars, assistant=self.assistant)
         self.conversation.on_remove_label = lambda mid: self._label_toggle(self.tree.get(mid), False)
         self.conversation.screener_check = self._screener_pending
         self.conversation.on_screener_decision = self.screener_decide
@@ -348,6 +348,8 @@ class MainWindow(Adw.ApplicationWindow):
             "preferences": self.show_preferences,
             "lock": self.lock,
             "preferences-inbox": lambda: self.show_preferences("inbox"),
+            "preferences-assistant": lambda: self.show_preferences("assistant"),
+            "summarise": lambda: self.conversation.summarise(),
             "shortcuts": self.show_shortcuts,
             "goto-inbox": lambda: self._goto_role(ROLE_INBOX),
             "goto-drafts": lambda: self._goto_role(ROLE_DRAFTS),
@@ -1394,7 +1396,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.config.set("cleanup_opened", True)
             self._update_banner()
         self.cleanup_dialog = CleanupDialog(self.engine, self.db, self.config, self.tree, self._after_action,
-                                            self.open_thread_by_id, category=category)
+                                            self.open_thread_by_id, category=category, assistant=self.assistant)
         self.cleanup_dialog.present(self)
 
     def _update_banner(self) -> None:

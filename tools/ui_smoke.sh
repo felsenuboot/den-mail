@@ -46,6 +46,7 @@ shot dialogs "sleep 3; identities; sleep 1; masked; sleep 1; action win.newslett
 shot cleanup-run "sleep 4; cleanup; sleep 2; cleanup-all mark_read; sleep 3; cleanup-all archive" 12
 shot preferences "sleep 3; preferences inbox" 7
 shot assistant "sleep 3; config assistant_enabled true; preferences assistant" 7
+shot summary "sleep 3; config assistant_enabled true; select 1; sleep 2; action win.summarise" 9
 shot sender-rule "sleep 3; sender-rule digest@lists.example.com" 7
 shot narrow "sleep 3; resize 700 600; sleep 2; select 1" 8
 

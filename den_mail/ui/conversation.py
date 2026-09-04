@@ -13,6 +13,7 @@ from ..classify.rules import CATEGORY_NAMES
 from ..html.body import assemble_body
 from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full, delivered_to
 from ..models.thread import ThreadObject, format_date_long
+from ..summaries import Summariser
 from ..unsubscribe import identity_for, parse_list_unsubscribe
 from .message_body import MessageBody, warm_up_renderer
 from .widgets import avatar, confirm, copy_text, human_size, open_uri, toast
@@ -626,13 +627,14 @@ class ConversationView(Adw.NavigationPage):
     wide = GObject.Property(type=bool, default=False)
 
     def __init__(self, db, engine, tree, config, on_compose: Callable[[str, str], None],
-                 on_email_action: Callable[[str, list[str]], None], avatars=None):
+                 on_email_action: Callable[[str, list[str]], None], avatars=None, assistant=None):
         super().__init__(title="Conversation", tag="conversation")
         self.db = db
         self.engine = engine
         self.tree = tree
         self.config = config
         self.avatars = avatars
+        self.summariser = Summariser(db, engine, assistant) if assistant is not None and db is not None else None
         self.style_manager = Adw.StyleManager.get_default()
         self._handlers: list[tuple[object, int]] = []
         self._handlers.append((self.style_manager,
@@ -656,6 +658,11 @@ class ConversationView(Adw.NavigationPage):
             b = Gtk.Button(icon_name=icon, tooltip_text=tip)
             b.set_action_name(action)
             self.header.pack_start(b)
+        # Summarise (#68): only while the assistant is on; the bar with the answer sits above the cards.
+        self.summarise_button = Gtk.Button(icon_name="fm-assistant-symbolic", tooltip_text="Summarise this conversation",
+                                           visible=False)
+        self.summarise_button.set_action_name("win.summarise")
+        self.header.pack_start(self.summarise_button)
         more_menu = Gio.Menu()
         more_menu.append("Mark as unread", "win.mark-unread")
         more_menu.append("Mark as read", "win.mark-read")
@@ -728,6 +735,19 @@ class ConversationView(Adw.NavigationPage):
         cancel.connect("clicked", lambda *_: self.on_cancel_scheduled(self._scheduled_id))
         self.scheduled_bar.append(cancel)
         self.content.append(self.scheduled_bar)
+        self.summary_bar = Gtk.Box(spacing=8, visible=False)
+        self.summary_bar.add_css_class("summary-bar")
+        self.summary_label = Gtk.Label(xalign=0, wrap=True, hexpand=True, selectable=True, valign=Gtk.Align.START)
+        self.summary_bar.append(self.summary_label)
+        again = Gtk.Button(icon_name="view-refresh-symbolic", valign=Gtk.Align.START, tooltip_text="Summarise again")
+        again.add_css_class("flat")
+        again.connect("clicked", lambda *_: self.summarise(force=True))
+        self.summary_bar.append(again)
+        close = Gtk.Button(icon_name="window-close-symbolic", valign=Gtk.Align.START, tooltip_text="Hide the summary")
+        close.add_css_class("flat")
+        close.connect("clicked", lambda *_: self.summary_bar.set_visible(False))
+        self.summary_bar.append(close)
+        self.content.append(self.summary_bar)
         self.cards_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.cards_box.set_margin_top(8)
         self.content.append(self.cards_box)
@@ -882,6 +902,7 @@ class ConversationView(Adw.NavigationPage):
             self.cards_box.remove(child)
         self.screener_bar.set_visible(False)
         self.scheduled_bar.set_visible(False)
+        self.summary_bar.set_visible(False)
         self.stack.set_visible_child_name("empty")
 
     def show_multi(self, count: int) -> None:
@@ -902,6 +923,7 @@ class ConversationView(Adw.NavigationPage):
         self._fill_chips(thread)
         self._fill_screener(thread)
         self._fill_scheduled(emails)
+        self._fill_summary(same_thread)
         if not same_thread:
             self.cards = {}
             while child := self.cards_box.get_first_child():
@@ -940,6 +962,43 @@ class ConversationView(Adw.NavigationPage):
                 self.scheduled_label.set_label(f"Scheduled: goes out {schedule.describe(sub['send_at'] or '')}.")
                 break
         self.scheduled_bar.set_visible(bool(self._scheduled_id))
+
+    def _fill_summary(self, same_thread: bool) -> None:
+        """The cached summary appears at once; a stale one (new replies) is hidden until asked again."""
+        available = self.summariser is not None and self.summariser.available
+        self.summarise_button.set_visible(available)
+        hit = self.summariser.cached_thread(self.thread_id) if available and self.thread_id else None
+        if hit is not None:
+            self._show_summary(hit.text)
+        elif not same_thread or not available:
+            self.summary_bar.set_visible(False)
+
+    def _show_summary(self, text: str, error: bool = False) -> None:
+        self.summary_label.set_label(text)
+        self.summary_bar.remove_css_class("error")
+        if error:
+            self.summary_bar.add_css_class("error")
+        self.summary_bar.set_visible(True)
+
+    def summarise(self, force: bool = False) -> None:
+        """Ask the assistant for the thread's summary (#68); the answer lands above the cards."""
+        if self.summariser is None or not self.thread_id:
+            return
+        if not self.summariser.available:
+            self._show_summary("The assistant is off; turn it on in Preferences → Assistant.", error=True)
+            return
+        thread_id = self.thread_id
+        self._show_summary("Summarising…")
+
+        def done(summary) -> None:
+            if self.thread_id == thread_id:
+                self._show_summary(summary.text)
+
+        def failed(message: str) -> None:
+            if self.thread_id == thread_id:
+                self._show_summary(message, error=True)
+
+        self.summariser.thread(thread_id, done, failed, force=force)
 
     def _fill_screener(self, thread: ThreadObject) -> None:
         first = thread.summary.from_addresses[0] if thread.summary.from_addresses else {}

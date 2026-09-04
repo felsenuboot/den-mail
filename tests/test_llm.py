@@ -204,7 +204,7 @@ def test_assistant_budget_and_indicator(config, server):
     server.answers["/api/chat"] = (500, {"error": "boom"})
     with pytest.raises(llm.LLMError):
         a.ask("s", "u")
-    assert a.status().startswith("Assistant: ") and "500" in a.status()
+    assert a.status() == "Assistant: error" and "500" in a.last_error
     assert "on this machine" in a.describe() and "0 of 2" in a.describe()
 
 

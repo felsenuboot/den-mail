@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS outbox (
 CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT, json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS contact_emails (email TEXT PRIMARY KEY, contact_id TEXT, name TEXT);
 CREATE TABLE IF NOT EXISTS structured (email_id TEXT PRIMARY KEY, kind TEXT NOT NULL, text TEXT NOT NULL, copy TEXT);
+CREATE TABLE IF NOT EXISTS summaries (key TEXT PRIMARY KEY, text TEXT NOT NULL, fingerprint TEXT NOT NULL, model TEXT, ts REAL);
 CREATE TABLE IF NOT EXISTS bayes_docs (category TEXT PRIMARY KEY, docs INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS bayes_tokens (category TEXT, token TEXT, count INTEGER NOT NULL, PRIMARY KEY (category, token));
 """
@@ -193,7 +194,7 @@ class Database:
             for table in ("mailboxes", "emails", "email_mailboxes", "threads", "identities", "masked_emails",
                           "query_cache", "addresses", "classification", "correspondents", "sender_deletions",
                           "screener", "bayes_docs", "bayes_tokens", "submissions", "contacts", "contact_emails",
-                          "outbox", "structured"):
+                          "outbox", "structured", "summaries"):
                 # table names come from the literal tuple above (Bandit B608)
                 c.execute(f"DELETE FROM {table}")  # nosec B608
             c.execute("DELETE FROM meta WHERE key LIKE 'state:%'")
@@ -699,6 +700,20 @@ class Database:
             " confidence=excluded.confidence, ts=excluded.ts, reason=excluded.reason"
             " WHERE classification.source != ?",
             (email["id"], TRANSACTIONS, SOURCE_RULES, 0.95, time.time(), f"schema.org {summary.kind}", SOURCE_USER))
+
+    # ------------------------------------------------------------ summaries
+
+    def get_summary(self, key: str) -> dict | None:
+        """A cached assistant summary (#68): {text, fingerprint, model, ts}; the caller checks the fingerprint."""
+        row = self.conn().execute("SELECT text, fingerprint, model, ts FROM summaries WHERE key=?", (key,)).fetchone()
+        return dict(row) if row else None
+
+    def set_summary(self, key: str, text: str, fingerprint: str, model: str = "") -> None:
+        with self._write_lock:
+            c = self.conn()
+            c.execute("INSERT OR REPLACE INTO summaries(key, text, fingerprint, model, ts) VALUES (?,?,?,?,?)",
+                      (key, text, fingerprint, model, time.time()))
+            c.commit()
 
     def get_structured(self, email_id: str) -> dict | None:
         row = self.conn().execute("SELECT kind, text, copy FROM structured WHERE email_id=?", (email_id,)).fetchone()

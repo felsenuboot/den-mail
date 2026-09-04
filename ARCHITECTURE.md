@@ -158,6 +158,13 @@ error, and tells its listeners so the status bar can show the count. The
 assistant is off by default; the Preferences page says whether the mail text
 stays on the machine for the chosen server.
 
+`summaries.py` is the first feature on it: `Summariser.thread()` and
+`.sender()` build a prompt from the cached bodies (quoted history stripped,
+older messages cut first), ask on their own thread, deliver on the main loop
+and store the answer in the `summaries` table under a key with a fingerprint
+of the message ids, so a new reply invalidates a thread's summary and a
+second look is free.
+
 ## Testing
 
 `tests/fake_server.py` is an in-process JMAP server with a fixture account

@@ -7,6 +7,7 @@ Unreleased changes gather at the top until they are tagged.
 ## [Unreleased]
 
 ### Features
+- Summarise a conversation: with the assistant on, a sparkle in the conversation header (and Ctrl+Shift+S) sums the thread up in a few lines above the messages, quoted history left out, cached per thread; Clean up shows a one-line description of a sender's newest message on the expanded row (#68)
 - An assistant layer behind the coming summaries: an Assistant page in Preferences chooses Ollama on this machine, any OpenAI-compatible API or Anthropic, with the server, the model, a key kept in the keyring, a requests-per-day limit, a Test button and a note on whether mail text leaves the machine; off by default (#69)
 
 ### Fixes

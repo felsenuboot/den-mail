@@ -37,6 +37,11 @@ TIPS: tuple[Tip, ...] = (
         "from:anna is:unread has:attachment older_than:7d label:work — combine them, quote phrases, and switch "
         "the scope to all mail to search the whole account.",
         "win.search", "Search"),
+    Tip("Let a language model read the long thread",
+        "With an assistant set up, the sparkle in the conversation header sums a thread up in a few lines, and "
+        "Clean up shows a one-line description of a sender's newest message. Ollama on this machine keeps "
+        "the mail text local; other providers plug in.",
+        "win.preferences-assistant", "Assistant preferences"),
     Tip("Keyboard first",
         "j and k move, e archives, # deletes, r replies, s flags, l labels, v moves, / searches, g then i goes "
         "to the Inbox. The full list is in the shortcuts dialog.",
