@@ -29,6 +29,7 @@ from ..store.sync import (
     search_mailboxes,
     search_query_spec,
 )
+from .beside import MIN_WINDOW_WIDTH, BesideColumn
 from .cleanup import CleanupDialog
 from .compose import ComposeWindow
 from .conversation import ConversationView
@@ -296,7 +297,15 @@ class MainWindow(Adw.ApplicationWindow):
         self.conversation.move_button.set_popover(self.move_popover)
         self.conversation.move_button.connect("notify::active", lambda b, _p: self.move_popover._rebuild() if b.get_active() else None)
 
-        self.inner = Adw.NavigationSplitView(sidebar=self.threadlist, content=self.conversation,
+        # The reading pane: the conversation the list drives, and beside it, on a wide
+        # window, a second one pinned with "Open beside" (#35).
+        self.beside = BesideColumn(self)
+        self.reading = Gtk.Box(spacing=0)
+        self.reading.append(self.conversation)
+        self.reading.append(self.beside)
+        self.conversation.set_hexpand(True)
+        reading_page = Adw.NavigationPage(child=self.reading, title="Conversation", tag="reading")
+        self.inner = Adw.NavigationSplitView(sidebar=self.threadlist, content=reading_page,
                                              min_sidebar_width=300, max_sidebar_width=520,
                                              sidebar_width_fraction=0.36)
         inner_page = Adw.NavigationPage(child=self.inner, title="Mail", tag="mail")
@@ -319,6 +328,10 @@ class MainWindow(Adw.ApplicationWindow):
         bp2.add_setter(self.inner, "collapsed", True)
         self.add_breakpoint(bp1)
         self.add_breakpoint(bp2)
+        # Too narrow for two conversations: the pinned one goes (a thread window is the fallback).
+        bp3 = Adw.Breakpoint.new(Adw.BreakpointCondition.parse(f"max-width: {self._beside_min_width() - 1}sp"))
+        bp3.connect("apply", lambda *_: self.beside.close())
+        self.add_breakpoint(bp3)
 
     def _install_actions(self) -> None:
         specs = {
@@ -342,6 +355,7 @@ class MainWindow(Adw.ApplicationWindow):
             "next": lambda: self._move_selection(1),
             "previous": lambda: self._move_selection(-1),
             "open": lambda: self.selected and self._on_activate_thread(self.selected[-1]),
+            "open-beside": self.open_beside,
             "back": self._go_back,
             "masked": lambda: MaskedEmailDialog(self.engine, self.db).present(self),
             "newsletters": lambda: NewslettersDialog(self.engine, self.db, self.config, self._after_action).present(self),
@@ -466,6 +480,7 @@ class MainWindow(Adw.ApplicationWindow):
         top = Gio.Menu()
         if not many:
             top.append("Open in new window", "win.open")
+            top.append("Open beside", "win.open-beside")
             if sender.get("email"):
                 item = Gio.MenuItem.new(f"Find all conversations with {sender.get('name') or sender['email']}", None)
                 item.set_action_and_target_value("win.find-sender", GLib.Variant("s", sender["email"]))
@@ -998,6 +1013,24 @@ class MainWindow(Adw.ApplicationWindow):
         if summary is not None:
             self.open_thread_window(ThreadObject(summary))
 
+    def _beside_min_width(self) -> int:
+        """How wide the window must be for a second column; a config key for other tastes and the smoke test."""
+        return int(self.config.get("beside_min_width") or MIN_WINDOW_WIDTH)
+
+    def open_beside(self) -> None:
+        """Pin the selected conversation in the second column (#35); on a narrow window, a thread window."""
+        if not self.selected:
+            return
+        thread = self.selected[-1]
+        if self.get_width() < self._beside_min_width() or self.inner.get_collapsed():
+            self.open_thread_window(thread)
+            return
+        self.beside.show(thread, self.model.mailbox_id)
+        if self.config.get("mark_read_on_open", True):
+            unread = self.beside.conversation.unread_email_ids()
+            if unread:
+                self.engine.perform(actions.mark_read(unread, True))
+
     def open_thread_window(self, thread: ThreadObject) -> None:
         for w in self.thread_windows:
             if w.thread.thread_id == thread.thread_id:
@@ -1492,6 +1525,8 @@ class MainWindow(Adw.ApplicationWindow):
         return self.flush_sends(self.close)
 
     def shutdown(self) -> None:
+        if getattr(self, "beside", None) is not None:
+            self.beside.detach()
         for w in list(self.compose_windows):
             w.destroy()
         for w in list(self.thread_windows):

@@ -34,6 +34,7 @@ ACCELS: dict[str, list[str]] = {
     "win.next": ["j"],
     "win.previous": ["k"],
     "win.open": ["Return", "o"],
+    "win.open-beside": ["b"],
     "win.back": ["Escape"],
     "win.preferences": ["<Control>comma"],
     "win.lock": ["<Control><Shift>l"],
@@ -53,7 +54,8 @@ CHORD_TIMEOUT_MS = 1500
 # accelerator, *extra accelerators the widgets provide themselves).
 DIALOG: tuple[tuple[str, tuple[tuple[str, ...], ...]], ...] = (
     ("Navigation", (("Next conversation", "win.next", "Down"), ("Previous conversation", "win.previous", "Up"),
-                    ("Open conversation", "win.open"), ("Back", "win.back"), ("Search", "win.search"),
+                    ("Open conversation", "win.open"), ("Open beside", "win.open-beside"),
+                    ("Back", "win.back"), ("Search", "win.search"),
                     ("Go to Inbox", "win.goto-inbox"), ("Go to Drafts", "win.goto-drafts"),
                     ("Refresh", "win.refresh"))),
     ("Conversations", (("Archive", "win.archive"), ("Delete", "win.trash"), ("Mark as spam", "win.junk"),

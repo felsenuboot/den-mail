@@ -124,6 +124,14 @@ The engine rebuilds the models after bootstrap at most every few hours.
 `Database.label_suggestions(email)` returns the labels a message lacks whose
 model is confident; the conversation shows them as dashed chips with a plus
 that applies the label through the usual action (#60).
+## Two conversations side by side
+
+`ui/beside.py` is a second `ConversationView` in the reading pane with a
+`win` action group of its own, the way the thread window has one, so the
+toolbar inside it acts on the pinned thread while the list's selection
+drives the first pane. It appears on "Open beside" when the window is at
+least `MIN_WINDOW_WIDTH` wide and folds away through a breakpoint below
+that; narrower windows get a thread window instead (#35).
 
 ## Screener
 
