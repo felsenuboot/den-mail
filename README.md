@@ -45,12 +45,8 @@ you own in the From field.
   <img alt="den-mail against Fastmail's desktop app and web client: start-up, folder switch, search, opening a message, memory and idle CPU" src="docs/benchmark/overview-light.svg">
 </picture>
 
-Same account, machine and network, an idle desktop, medians of five or more
-runs; lower is better. The local cache is what makes the difference: folders
-and the inbox come from SQLite and the server's answer only refreshes them.
-Without a cache (first start) den-mail needs 2.5 s to the inbox, like any
-client syncing from scratch. Method, full table and the rows behind the
-picture: [docs/BENCHMARK.md](docs/BENCHMARK.md).
+Same account, machine and network, idle desktop, medians of eight runs.
+Numbers, method and how to run it: [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
 | Light and dark theme | Group by sender |
 | --- | --- |

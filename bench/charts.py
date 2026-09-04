@@ -27,13 +27,17 @@ METRICS = [
     ("pss_end_mib", "Memory with a message open (PSS)", "MiB"),
     ("idle_cpu_pct", "CPU at rest with a message open", "% of a core"),
 ]
+# libadwaita's own colours: the window and card surfaces and text of its light and dark
+# styles, and GNOME's palette for the clients (Blue 4/3, Orange 4, Green 5; the darker
+# orange and green also on the dark surface, where Orange 3 and Green 4 are too light).
 THEMES = {
-    "light": {"surface": "#fcfcfb", "text": "#0b0b0b", "muted": "#52514e", "grid": "#e4e3df",
-              "series": ["#2a78d6", "#eb6834", "#1baf7a"]},
-    "dark": {"surface": "#1a1a19", "text": "#ffffff", "muted": "#c3c2b7", "grid": "#33332f",
-             "series": ["#3987e5", "#d95926", "#199e70"]},
+    "light": {"window": "#fafafb", "card": "#ffffff", "edge": "rgba(0,0,6,0.07)", "text": "rgba(0,0,0,0.8)",
+              "muted": "rgba(0,0,0,0.55)", "series": ["#1c71d8", "#e66100", "#26a269"]},
+    "dark": {"window": "#222226", "card": "#303034", "edge": "rgba(0,0,6,0.36)", "text": "#ffffff",
+             "muted": "rgba(255,255,255,0.55)", "series": ["#3584e4", "#e66100", "#26a269"]},
 }
-FONT = "Inter, Cantarell, -apple-system, 'Segoe UI', system-ui, sans-serif"
+PANEL_H = 150
+FONT = "Cantarell, Inter, -apple-system, 'Segoe UI', system-ui, sans-serif"
 
 
 def medians(files: list[Path]) -> dict[str, dict[str, float]]:
@@ -57,13 +61,14 @@ def fmt(value: float, unit: str) -> str:
 def panel(x: float, y: float, w: float, title: str, unit: str, values: dict[str, float], t: dict) -> str:
     """One metric: title, three labelled bars from a shared left baseline, lower is better."""
     label_w, value_w, bar_h, row_h = 108, 78, 18, 30
-    plot_w = w - label_w - value_w
-    top = 26
-    parts = [f'<text x="{x}" y="{y + 12}" font-size="14" font-weight="600" fill="{t["text"]}">{title}</text>']
+    top = 40
+    parts = [f'<rect x="{x}" y="{y}" width="{w}" height="{PANEL_H}" rx="12" fill="{t["card"]}" stroke="{t["edge"]}"/>',
+             f'<text x="{x + 16}" y="{y + 26}" font-size="14" font-weight="700" fill="{t["text"]}">{title}</text>']
     biggest = max(values.values()) if values else 1
+    x += 16
+    w -= 32
+    plot_w = w - label_w - value_w
     baseline_x = x + label_w
-    parts.append(f'<line x1="{baseline_x}" y1="{y + top - 6}" x2="{baseline_x}" y2="{y + top + row_h * len(CLIENTS) - 8}" '
-                 f'stroke="{t["grid"]}" stroke-width="1"/>')
     for i, (client, label) in enumerate(CLIENTS):
         cy = y + top + i * row_h
         colour = t["series"][i]
@@ -84,28 +89,28 @@ def panel(x: float, y: float, w: float, title: str, unit: str, values: dict[str,
 
 def overview(data: dict[str, dict[str, float]], theme: str) -> str:
     t = THEMES[theme]
-    cols, panel_w, panel_h, margin, gap = 2, 440, 128, 24, 24
-    header = 58
+    cols, panel_w, panel_h, margin, gap = 2, 440, PANEL_H, 24, 16
+    header = 64
     rows = (len(METRICS) + cols - 1) // cols
     width = margin * 2 + cols * panel_w + (cols - 1) * gap
-    height = header + rows * panel_h + margin
+    height = header + rows * panel_h + (rows - 1) * gap + margin
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
              f'font-family="{FONT}" role="img" aria-label="den-mail against Fastmail\'s desktop app and web client">',
-             f'<rect width="{width}" height="{height}" fill="{t["surface"]}"/>',
+             f'<rect width="{width}" height="{height}" fill="{t["window"]}"/>',
              f'<text x="{margin}" y="{margin + 4}" font-size="17" font-weight="700" fill="{t["text"]}">'
              f'den-mail against Fastmail\'s own clients</text>',
              f'<text x="{margin}" y="{margin + 24}" font-size="13" fill="{t["muted"]}">'
-             f'Same account, machine and network, an idle desktop, five runs each, medians. Lower is better everywhere.</text>']
+             f'Same account, machine and network, an idle desktop, medians of eight runs. Lower is better everywhere.</text>']
     # legend: swatch and name per client, in the fixed order
     lx = width - margin
     for i, (_client, label) in reversed(list(enumerate(CLIENTS))):
         lx -= 8 + len(label) * 7.2
-        parts.append(f'<rect x="{lx - 18:.0f}" y="{margin - 6}" width="12" height="12" rx="2" fill="{t["series"][i]}"/>')
+        parts.append(f'<rect x="{lx - 18:.0f}" y="{margin - 6}" width="12" height="12" rx="6" fill="{t["series"][i]}"/>')
         parts.append(f'<text x="{lx:.0f}" y="{margin + 4}" font-size="13" fill="{t["muted"]}">{label}</text>')
         lx -= 30
     for n, (key, title, unit) in enumerate(METRICS):
         px = margin + (n % cols) * (panel_w + gap)
-        py = header + (n // cols) * panel_h
+        py = header + (n // cols) * (panel_h + gap)
         values = {c: data[c][key] for c, _l in CLIENTS if c in data and key in data[c]}
         parts.append(panel(px, py, panel_w, title, unit, values, t))
     parts.append("</svg>")

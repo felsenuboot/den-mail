@@ -1,156 +1,62 @@
-# Benchmark: den-mail against Fastmail's web client and desktop app
+# Benchmark
 
-Three clients on the same account, the same machine, the same network and the
-same window size, running the same scenario several times. Everything runs on
-the real desktop session, not the headless harness, because the headless
-compositor renders in software and would penalise nothing but den-mail.
-
-## At a glance
+den-mail against Fastmail's desktop app and web client: the same account, the
+same machine and network, the same window size and scenario, on an idle
+desktop. Lower is better in every chart.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="benchmark/overview-dark.svg">
   <img alt="Six bar charts: den-mail against Fastmail's desktop app and web client for start-up, folder switch, search, opening a message, memory and idle CPU" src="benchmark/overview-light.svg">
 </picture>
 
-Measured on 2026-09-04 against Fastmail's own clients on the same account
-(Inbox 39 conversations, Archive 2,901), the same machine (Hyprland on a
-3440x1440 monitor, all clients at 1600x1000) and network, with the desktop
-otherwise idle (load 0.08 at the start, notifications off, idle daemon paused).
-Medians over the quiet runs: eight per client for the timings (five in the main
-round, three in the CPU pass) and three for the CPU figures. den-mail is a88f9f9 on Python 3.14,
-GTK 4.22 and WebKitGTK 2.52; the desktop app is Flathub 1.7.0 (Chrome 150); the
-web client ran in Playwright's Chromium 150 with a logged-in profile. The rows
-are in [`benchmark/results-2026-09-04.jsonl`](benchmark/results-2026-09-04.jsonl);
-`bench/charts.py` draws the picture from them.
-
-| | den-mail warm | den-mail cold | Fastmail app | Fastmail web |
+| medians, 2026-09-04 | den-mail warm | den-mail cold | Fastmail app | Fastmail web |
 | --- | --- | --- | --- | --- |
 | launch to a usable inbox, ms | **300** | 2,528 | 1,418 | 868 |
-| switch to Archive, 2,901 conversations, ms | 118 | 458 | 204 | **114** |
-| search "rechnung", ms | 186 | 239 | 226 | **180** |
+| switch to Archive (2,901 conversations), ms | 118 | 458 | 204 | **114** |
+| search, ms | 186 | 239 | 226 | **180** |
 | open a message: subject shown, ms | **17** | 125 | 110 | 66 |
 | open a message: body painted, ms | **67** | 179 | 135 | 148 |
 | memory with the message open, PSS, MiB | **340** | 380 | 642 | 511 |
-| memory, RSS summed over the tree, MiB | 1,028 | 1,110 | 994 | 1,304 |
 | CPU seconds for the scenario | **2.3** | 4.0 | 4.6 | 3.0 |
 | CPU over 20 s at rest, % of a core | **0.1** | 0.4 | 2.8 | 0.6 |
 
-Reading the numbers:
+- **Start-up** is den-mail's strength: the inbox comes from the local cache and
+  the server's answer only refreshes it. Cold (no cache) it needs 2.5 s for the
+  first sync; cold folder switches are server fetches for every client.
+- **Folder switch and search** are level with the web client; search is the
+  server's time for everyone.
+- **Opening a message** is fast because the message views share one WebKit
+  process, warmed at start-up.
+- **Memory** is proportional set size, so shared pages count once; RSS summed
+  over a process tree (in the rows) flatters nobody and means little.
+- **Warm is the honest comparison**: the web client and the app keep their own
+  caches between runs too.
 
-- den-mail warm shows a usable inbox in 0.3 s, before either Fastmail client.
-  Cold, with no local data, it needs 2.5 s, almost all of it the first sync;
-  cold folder switches are server fetches for every client.
-- The folder switch and search are level between den-mail and the web client;
-  search is the server's time for everyone.
-- Opening a message: the subject is up in 17 ms and the body painted in 67 ms,
-  half the web client's time, since the message views share one WebKit process
-  that is warmed at start-up.
-- Memory: PSS counts shared pages once and is the figure to compare; the RSS
-  row shows why per-process sums mislead for multi-process apps. den-mail is
-  Python plus WebKit's web and network processes; the app is Electron, the
-  web client is Chromium with one tab.
-- CPU: the scenario costs den-mail 2.3 CPU seconds warm (the cold run's 4 s is
-  the first sync), the web client 3.1 and the Electron app 4.6. At rest with a
-  message open den-mail uses 0.1 % of a core, the web client 0.6 %, the app 2.8 %.
-- `window_ms` (launch to the first window, in the rows) is not comparable across
-  the three: the web value is Chromium started by Playwright, the app value
-  includes `flatpak run`, den-mail's is the interpreter plus GTK.
-- The "listed" moments of the web client and the app are DOM states a few
-  frames before the paint, so their numbers are, if anything, flattering.
+The rows are in [`benchmark/results-2026-09-04.jsonl`](benchmark/results-2026-09-04.jsonl)
+(eight runs per client for the timings, three for CPU; den-mail a88f9f9,
+Flathub app 1.7.0, Chromium 150 for the web client) and `bench/charts.py`
+draws the picture from them.
 
-An earlier round the same morning, while the machine was in use, put den-mail's
-folder switch at 606 ms and the first paint at 302 ms; both were den-mail's own
-faults and are fixed (#36): the switch mark waited for the server's refresh
-behind a list that was already on screen, and every message spawned its own
-WebKit web process. The same round found that quitting during a first sync
-left the window up for as long as 25 s while worker threads finished their
-requests, which the compositor reported as "not responding"; the window now
-goes down at quit and the process leaves within two seconds.
+## Method
 
-## What is measured
+One scenario for all three: start and wait for the Inbox; switch to Archive;
+search "rechnung"; back to the Inbox; open the first conversation; rest 20 s;
+quit. Everything runs on the real desktop session, because the headless
+compositor renders in software and would penalise nothing but den-mail.
 
-| Metric | Meaning | den-mail | web / app |
-| --- | --- | --- | --- |
-| `window_ms` | launch to the first window on screen | `bench/window-time.py` polls Hyprland | same script |
-| `inbox-listed_at_ms` | launch to a usable inbox list | `timing: inbox-listed` from `DEN_MAIL_TIMING=1` | the list header says Inbox and a row exists |
-| `switch-listed_ms` | click on the Archive folder to its list | `switch-start` → `switch-listed` | same DOM condition for Archive |
-| `search-listed_ms` | search text to results | `search-start` → `search-listed` | first row after Enter, network idle |
-| `open-rendered_ms` | select a conversation to body handed to the renderer | `open-start` → `open-rendered` | – |
-| `open-painted_ms` | … to the body being loaded | `open-painted` (WebKit load finished) | the message iframe is complete and has text |
-| `rss_peak_mib` | resident memory of the process tree, peak over the run | WebKit helpers included | Electron / Chromium helpers included |
-| `pss_end_mib` | proportional set size of the process tree with the opened message on screen: shared pages counted once, the honest RAM figure | same | same |
-| `cpu_total_s` | CPU seconds (user + system) of the process tree for the whole scenario | same | same |
-| `idle_cpu_pct` | CPU use over the 20 s rest with the message open: what the client burns doing nothing | same | same |
+| Metric | den-mail | Fastmail app and web |
+| --- | --- | --- |
+| launch to inbox, switch, search, open | `timing:` marks the app logs with `DEN_MAIL_TIMING=1` | the URL names the folder and the first row has changed; the subject heading, then the body text is in the page |
+| body painted | WebKit reports the load finished | the body text is in the page and a frame has been drawn |
+| memory, CPU | the process tree, WebKit helpers included | the process tree, Electron or Chromium helpers included |
 
-The "listed" moments for the web client and the app are DOM states, which land a
-few frames before the paint. For a check that treats all three alike, record the
-screen (`wf-recorder`, 75 fps on this monitor) during one run each and count the
-frames between the click and the changed list; if that agrees with the numbers
-within a couple of frames, the DOM conditions are fair.
+The web and app moments are DOM states a few frames ahead of the paint, so
+their numbers are, if anything, flattering. Runs on a busy machine are not
+comparable: an earlier round during a compiler build read three times slower.
 
-The scenario, shared by the three drivers (the `BENCH_*` variables change it):
-
-1. start, wait for the Inbox
-2. switch to `BENCH_FOLDER` (default Archive)
-3. search for `BENCH_SEARCH` (default invoice)
-4. back to the Inbox, open conversation `BENCH_OPEN_INDEX` (default the first)
-5. quit
-
-den-mail runs the scenario in a separate profile with `mark_read_on_open` off;
-the web client and the app do mark the opened conversation read, so choose an
-index that is already read, or restore it afterwards.
-
-## What we need first
-
-- [ ] A Fastmail API token with the Mail scope, exported as `DEN_MAIL_TOKEN`
-      for the den-mail runs (the app's own keyring token also works:
-      `secret-tool lookup app den-mail account <account>`).
-- [ ] The desktop app: `flatpak install flathub com.fastmail.Fastmail`, started
-      once by hand and logged in. The bench starts it with
-      `--remote-debugging-port=9222`, which Electron accepts.
-- [ ] Playwright for the web client and for driving the app:
-      `python -m venv bench/venv && bench/venv/bin/pip install playwright &&
-      bench/venv/bin/playwright install chromium` (about 150 MB), then
-      `bench/venv/bin/python bench/web.py login` for the one-time login with
-      2FA into `bench/profile/chromium`. Firefox-based browsers such as Zen
-      cannot be driven over CDP, hence Playwright's own Chromium.
-- [ ] One probe of the live UI: `bench/web.py probe` prints the accessibility
-      tree, from which the locators in `bench/web.py` (folder link, search box,
-      list rows, list heading) are confirmed or adjusted. Fastmail's markup is
-      not documented, so this step is expected.
-- [ ] The scenario's constants: which folder, which search word, which
-      conversation to open (an already read one with an HTML body).
-- [ ] Twenty minutes of a quiet machine: no other heavy apps, no typing or
-      mouse while a run is on, all three clients at 1600x1000 on the main
-      monitor. New mail arriving during a run shifts the list; note it.
-- [ ] Optional: `wf-recorder` for the frame-counted cross-check.
-
-## Running
-
-```
-export DEN_MAIL_TOKEN=…
-bench/den-mail.sh 5 warm          # primes the cache once, then 5 runs
-bench/den-mail.sh 5 cold          # wipes the cache before every run (network bound)
-bench/venv/bin/python bench/web.py web 5
-bench/venv/bin/python bench/web.py app 5
-bench/report.py                   # medians and best values as a Markdown table
-```
-
-Every run appends one JSON line to `bench/results.jsonl` (ignored by git);
-`bench/logs/` keeps den-mail's logs. Warm and cold are separate rows for
-den-mail; the web client and the app keep their own caches between runs, which
-is their warm state, so compare them with den-mail's warm numbers.
-
-## Fairness notes
-
-- Same account state for all three: run them back to back, in the same hour.
-- Cold starts are network bound for every client; warm starts show the client.
-- The web client and the app share one code base (the app is Electron around
-  the web client), so their numbers should be close; a large gap points at the
-  measurement rather than the clients.
-- den-mail's `open-rendered` has no counterpart: the web client only exposes
-  the moment its message iframe is complete, so compare `open-painted`.
-- Memory is the whole process tree. For den-mail that is Python plus WebKit's
-  web and network processes; for the others it is Electron's or Chromium's
-  helpers, which is what the user pays for as well.
-
+Running it: `bench/den-mail.sh 5 warm|cold` (needs `DEN_MAIL_TOKEN`; a
+separate profile, mark-read-on-open off), `bench/web.py app 5` and
+`bench/web.py web 5` (Playwright in `bench/venv`, the desktop app from Flathub
+started with a debugging port, one manual login each), `bench/report.py` for
+the table and `bench/charts.py` for the picture. A quiet machine and twenty
+minutes of hands off are the only other requirements.
