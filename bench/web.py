@@ -115,9 +115,11 @@ def scenario(page, t0: float, row: dict) -> None:
     row["open-painted_ms"] = now_ms(t)
 
 
-def tree_rss_mib(pid: int) -> int:
-    out = subprocess.run([str(HERE / "tree-rss.sh"), str(pid)], capture_output=True, text=True).stdout.strip()
-    return int(out or 0)
+def tree_memory(pid: int) -> dict:
+    """RSS and PSS of the process tree in MiB, with the opened message on screen."""
+    out = subprocess.run([str(HERE / "tree-rss.sh"), str(pid)], capture_output=True, text=True).stdout.split()
+    rss, pss = (int(out[0]), int(out[1])) if len(out) == 2 else (0, 0)
+    return {"rss_peak_mib": rss, "pss_end_mib": pss}
 
 
 def chromium_root_pid() -> int:
@@ -149,7 +151,7 @@ def run_web(runs: int) -> None:
             page.goto("https://app.fastmail.com/mail/Inbox/", wait_until="commit")
             row = {"client": "web", "run": i, "window_ms": now_ms(t0)}
             scenario(page, t0, row)
-            row["rss_peak_mib"] = tree_rss_mib(chromium_root_pid())
+            row.update(tree_memory(chromium_root_pid()))
             ctx.close()
             record(row)
             time.sleep(2)
@@ -176,7 +178,7 @@ def run_app(runs: int) -> None:
             page = next(pg for ctx in browser.contexts for pg in ctx.pages if "fastmail" in pg.url)
             row = {"client": "app", "run": i, "window_ms": info["window_ms"]}
             scenario(page, t0, row)
-            row["rss_peak_mib"] = tree_rss_mib(info["pid"])
+            row.update(tree_memory(info["pid"]))
             browser.close()
             subprocess.run(["flatpak", "kill", "com.fastmail.Fastmail"], check=False)
             time.sleep(4)

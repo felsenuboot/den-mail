@@ -380,9 +380,7 @@ class MainWindow(Adw.ApplicationWindow):
         q = self.db.get_query(key)
         if not q:
             return
-        if self._timing_pending:
-            timing.mark(f"{self._timing_pending}-listed")
-            self._timing_pending = None
+        self._timing_listed()
         selected_ids = {t.thread_id for t in self.selected}
         self.model.loading = False
         ids = list(q["ids"])
@@ -397,6 +395,11 @@ class MainWindow(Adw.ApplicationWindow):
                 self.threadlist.select_position(pos, step=1)
         elif selected_ids and not any(t in self.model.by_thread for t in selected_ids):
             self.conversation.clear()
+
+    def _timing_listed(self) -> None:
+        if self._timing_pending:
+            timing.mark(f"{self._timing_pending}-listed")
+            self._timing_pending = None
 
     def _keep_selected(self, ids: list[str]) -> list[str]:
         """With the unread filter on, reading a conversation would drop it from the list
@@ -492,6 +495,7 @@ class MainWindow(Adw.ApplicationWindow):
         cached = self.db.get_query(self.query_key)
         if cached:
             self.model.set_email_ids(cached["ids"], cached["total"], cached["complete"])
+            self._timing_listed()  # the list is usable now; the server's answer only refreshes it
         self._update_list_title()
         self.threadlist.scroll_to_top()
 

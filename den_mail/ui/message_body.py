@@ -83,11 +83,22 @@ def _on_cid_request(request) -> None:
 
 if HAVE_WEBKIT:
 
+    _primary_view = None
+
+    def _related_view():
+        """A never-shown view every message view is related to, so they share its web
+        process instead of each spawning one (that spawn was most of the time from
+        selecting a message to its first paint)."""
+        global _primary_view
+        if _primary_view is None:
+            _primary_view = WebKit.WebView(web_context=_get_context(), network_session=_session)
+        return _primary_view
+
     class _SizedWebView(WebKit.WebView):
         """A WebView that grows to its content height (no inner scrolling)."""
 
         def __init__(self):
-            super().__init__(web_context=_get_context(), network_session=_session)
+            super().__init__(web_context=_get_context(), network_session=_session, related_view=_related_view())
             settings = self.get_settings()
             settings.set_enable_javascript(True)  # needed for evaluate_javascript()
             settings.set_enable_javascript_markup(False)  # ...but pages may not run their own

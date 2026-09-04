@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 rows = [json.loads(line) for line in Path(sys.argv[1] if len(sys.argv) > 1 else "bench/results.jsonl").read_text().splitlines() if line.strip()]
-metrics = ["window_ms", "inbox-listed_at_ms", "switch-listed_ms", "search-listed_ms", "open-rendered_ms", "open-painted_ms", "rss_peak_mib"]
+metrics = ["window_ms", "inbox-listed_at_ms", "switch-listed_ms", "search-listed_ms", "open-rendered_ms", "open-painted_ms", "rss_peak_mib", "pss_end_mib"]
 clients = sorted({(r["client"], r.get("mode", "")) for r in rows})
 print("| metric | " + " | ".join(f"{c}{' ' + m if m else ''}" for c, m in clients) + " |")
 print("| --- | " + " | ".join("---" for _ in clients) + " |")

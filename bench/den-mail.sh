@@ -22,13 +22,19 @@ run() {
   local win; win=$(DEN_MAIL_TIMING=1 DEN_MAIL_AUTOPILOT="$SCENARIO" \
     python3 "$HERE/window-time.py" denmail -- sh -c "cd '$ROOT' && exec python3 -m den_mail >'$log' 2>&1")
   local pid; pid=$(echo "$win" | python3 -c 'import json,sys; print(json.load(sys.stdin)["pid"])')
-  # memory while the opened message is on screen: sample until the app exits, keep the peak
-  local peak=0 rss
-  while kill -0 "$pid" 2>/dev/null; do rss=$("$HERE/tree-rss.sh" "$pid" 2>/dev/null || echo 0); ((rss > peak)) && peak=$rss; sleep 0.5; done
-  python3 - "$log" "$win" "$peak" "$MODE" "$1" <<'PY' >> "$HERE/results.jsonl"
+  # memory: sample the tree until the app exits; keep the RSS peak and the last PSS (the
+  # opened message on screen, the sync done)
+  local peak=0 pss=0 sample
+  while kill -0 "$pid" 2>/dev/null; do
+    sample=$("$HERE/tree-rss.sh" "$pid" 2>/dev/null || echo "0 0")
+    ((${sample% *} > peak)) && peak=${sample% *}
+    ((${sample#* } > 0)) && pss=${sample#* }
+    sleep 0.5
+  done
+  python3 - "$log" "$win" "$peak" "$pss" "$MODE" "$1" <<'PY' >> "$HERE/results.jsonl"
 import json, re, sys
-log, win, peak, mode, run = sys.argv[1:]
-row = {"client": "den-mail", "mode": mode, "run": int(run), "rss_peak_mib": int(peak), **json.loads(win)}
+log, win, peak, pss, mode, run = sys.argv[1:]
+row = {"client": "den-mail", "mode": mode, "run": int(run), "rss_peak_mib": int(peak), "pss_end_mib": int(pss), **json.loads(win)}
 row.pop("pid", None); row.pop("address", None)
 for m in re.finditer(r"timing: (\S+) at=(\d+)(?: took=(\d+))?", open(log, errors="replace").read()):
     event, at, took = m.groups()

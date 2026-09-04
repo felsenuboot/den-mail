@@ -16,6 +16,7 @@ compositor renders in software and would penalise nothing but den-mail.
 | `open-rendered_ms` | select a conversation to body handed to the renderer | `open-start` → `open-rendered` | – |
 | `open-painted_ms` | … to the body being loaded | `open-painted` (WebKit load finished) | the message iframe is complete and has text |
 | `rss_peak_mib` | resident memory of the process tree, peak over the run | WebKit helpers included | Electron / Chromium helpers included |
+| `pss_end_mib` | proportional set size of the process tree with the opened message on screen: shared pages counted once, the honest RAM figure | same | same |
 
 The "listed" moments for the web client and the app are DOM states, which land a
 few frames before the paint. For a check that treats all three alike, record the
