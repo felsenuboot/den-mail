@@ -62,6 +62,8 @@ CLASSIFY_HEADERS = (H_LIST_POST, H_LIST_ID, H_LIST_UNSUBSCRIBE, H_PRECEDENCE, H_
 
 SOURCE_RULES = "rules"
 SOURCE_USER = "user"
+SOURCE_BAYES = "bayes"      # the learned layer (#23): only where the rules were unsure
+SURE = 0.8                  # a rules verdict at or above this is never overridden by learning
 # Bump when a rule changes: a cache classified by an older version is run through the rules again.
 RULES_VERSION = "2"
 
