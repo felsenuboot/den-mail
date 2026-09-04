@@ -19,7 +19,9 @@ def test_cache_knows_senders_and_keeps_decisions(db):  # noqa: F811
     db.upsert_emails([email("a", "Hi", "anna@example.net", "Anna", to="me@example.com"),
                       email("s", "Re", "me@example.com", to="paul@example.net", mailboxes=("mb-sent",), seen=True)])
     assert db.knows_sender("Anna@Example.net")          # cached as a sender
+    assert not db.knows_sender("anna@example.net", {"a"})   # ... but not by the batch being judged (#42)
     assert db.knows_sender("paul@example.net")          # written to
+    assert not db.knows_sender("me2@example.net")       # a recipient of cached mail is not a known sender
     assert db.knows_sender("me@example.com") and db.knows_sender("x@example.org")   # own addresses never screen
     assert not db.knows_sender("new@shop.example")
     db.screener_set(["New@Shop.example"], "pending")

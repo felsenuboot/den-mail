@@ -464,17 +464,23 @@ class Database:
 
     # ------------------------------------------------------------ screener
 
-    def knows_sender(self, addr: str) -> bool:
-        """Has this address appeared in cached mail (as sender or recipient), been
-        written to, or been screened already?  The screener (#24) treats anyone
-        else as a first-time sender."""
+    def knows_sender(self, addr: str, except_ids: list[str] | set[str] = ()) -> bool:
+        """Has this address sent cached mail other than `except_ids`, been written
+        to, or been screened already?  The screener (#24) treats anyone else as a
+        first-time sender.  `except_ids` is the batch being judged: a sync can
+        cache a message through the thread step before Email/changes lists it as
+        created, and that copy must not make its own sender known (#42)."""
         addr = (addr or "").strip().lower()
         if not addr or self.is_own_address(addr):
             return True
         c = self.conn()
-        return (c.execute("SELECT 1 FROM addresses WHERE email=?", (addr,)).fetchone() is not None
-                or c.execute("SELECT 1 FROM correspondents WHERE email=?", (addr,)).fetchone() is not None
-                or c.execute("SELECT 1 FROM screener WHERE email=?", (addr,)).fetchone() is not None)
+        if (c.execute("SELECT 1 FROM correspondents WHERE email=?", (addr,)).fetchone() is not None
+                or c.execute("SELECT 1 FROM screener WHERE email=?", (addr,)).fetchone() is not None):
+            return True
+        for row in c.execute("SELECT id FROM emails WHERE from_email=?", (addr,)):
+            if row["id"] not in except_ids:
+                return True
+        return False
 
     def screener_set(self, addrs: list[str] | set[str], decision: str) -> None:
         """decision: "pending" (in the Screener), "allow" (reaches the Inbox) or "block"."""
