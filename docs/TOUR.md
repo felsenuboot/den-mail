@@ -80,6 +80,19 @@ empty list that says so; a date that does not parse is searched as text.
 
 ![Search for has:attachment](../data/screenshots/search.png)
 
+## Newsletters
+
+*Newsletters…* in the main menu scans the account for mail that carries a
+List-Unsubscribe header and lists one row per sender: how many messages, how
+many unread, when the last one came, and how the sender lets you leave
+(one-click request, an unsubscribe mail, or a web page). Tick the senders
+you are done with, choose whether to keep, archive or delete their mail,
+and press Unsubscribe. Requests go out one after another; a one-click
+request that fails falls back to the sender's other methods, and a sender
+you have already left shows the date.
+
+![Newsletters dialog](../data/screenshots/newsletters.png)
+
 ## Writing mail
 
 The From field lists your starred identities first; "Show all identities…"

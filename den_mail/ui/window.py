@@ -34,6 +34,7 @@ from .labels import MailboxPickerPopover
 from .login import LoginPage
 from .masked import MaskedEmailDialog
 from .message_body import set_cid_resolver
+from .newsletters import NewslettersDialog
 from .outbox import PendingSend
 from .preferences import PreferencesDialog
 from .sidebar import Sidebar
@@ -196,6 +197,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _build_main(self) -> None:
         primary = Gio.Menu()
         section = Gio.Menu()
+        section.append("Newsletters…", "win.newsletters")
         section.append("Masked Email…", "win.masked")
         section.append("Identities & Aliases…", "win.identities")
         primary.append_section(None, section)
@@ -287,6 +289,7 @@ class MainWindow(Adw.ApplicationWindow):
             "open": lambda: self.selected and self._on_activate_thread(self.selected[-1]),
             "back": self._go_back,
             "masked": lambda: MaskedEmailDialog(self.engine, self.db).present(self),
+            "newsletters": lambda: NewslettersDialog(self.engine, self.db, self.config, self._after_action).present(self),
             "identities": lambda: IdentitiesDialog(self.engine, self.db, self.config).present(self),
             "preferences": self.show_preferences,
             "shortcuts": self.show_shortcuts,

@@ -13,7 +13,7 @@ from ..avatars import sender_key
 from ..html.body import assemble_body
 from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full
 from ..models.thread import ThreadObject, format_date_long
-from ..unsubscribe import parse_list_unsubscribe
+from ..unsubscribe import identity_for, parse_list_unsubscribe
 from .message_body import MessageBody, warm_up_renderer
 from .widgets import avatar, confirm, human_size, open_uri, toast
 
@@ -692,68 +692,30 @@ class ConversationView(Adw.NavigationPage):
                 lambda: self._run_unsubscribe(card, plan))
 
     def _run_unsubscribe(self, card: MessageCard, plan) -> None:
+        from .newsletters import done_text, run_unsubscribe
         sender_email = (card.sender_email or "").lower()
         button = card.unsubscribe_btn
+        button.set_sensitive(False)
 
-        def done(*_) -> None:
+        def done(used) -> None:
             button.set_sensitive(True)
             self.config.mark_unsubscribed(sender_email)
             for c in self.cards.values():
                 if (c.sender_email or "").lower() == sender_email:
                     c.refresh_unsubscribe()
-            toast(self, {"one-click": f"Unsubscribe request sent to {plan.target}",
-                         "browser": f"Opened the unsubscribe page at {plan.target}",
-                         "mailto": f"Unsubscribe message sent to {plan.target}"}[plan.kind], 4)
+            toast(self, done_text(used), 4)
 
-        def retry_with_fallback(message: str) -> None:
+        def failed(message: str) -> None:
             button.set_sensitive(True)
-            nxt = plan.fallback()
-            if nxt is None:
-                toast(self, f"Unsubscribe via {plan.target} failed: {message}", 6)
-                return
-            how = {"mailto": f"sending a message to {nxt.target}",
-                   "browser": f"opening the page at {nxt.target}"}[nxt.kind]
-            toast(self, f"Unsubscribe via {plan.target} failed ({message}); {how} instead", 6)
-            self._run_unsubscribe(card, nxt)
+            toast(self, message, 6)
 
-        if plan.kind == "one-click":
-            button.set_sensitive(False)
-            self.engine.unsubscribe_one_click(plan.url, done, retry_with_fallback)
-        elif plan.kind == "browser":
-            open_uri(plan.url, self.get_root())
-            done()
-        else:
-            ident = self.identity_for(card.email)
-            if ident is None:
-                retry_with_fallback("no identity to send from")
-                return
-            draft = {"from": [{"name": ident.get("name") or None, "email": ident["email"]}],
-                     "to": [{"name": None, "email": plan.to}],
-                     "subject": plan.subject or "unsubscribe",
-                     "textBody": [{"partId": "t", "type": "text/plain"}],
-                     "bodyValues": {"t": {"value": plan.body or "unsubscribe"}}}
-            button.set_sensitive(False)
-
-            self.engine.send_email(draft, ident["id"], None, done, retry_with_fallback)
+        run_unsubscribe(self.engine, self.db, card.email, plan, self.get_root(), done, failed,
+                        lambda note: toast(self, note, 6))
 
     def identity_for(self, email: dict) -> dict | None:
-        """The identity a message was delivered to (Delivered-To, To, Cc), else the primary one."""
-        identities = self.db.get_identities()
-        if not identities:
-            return None
-        by_email = {(i.get("email") or "").lower(): i for i in identities}
-        wildcards = [i for i in identities if (i.get("email") or "").startswith("*@")]
-        candidates = [email.get("header:Delivered-To:asText") or ""] + [
-            a.get("email", "") for a in (email.get("to") or []) + (email.get("cc") or [])]
-        for addr in (c.strip().lower() for c in candidates if c):
-            if addr in by_email:
-                return by_email[addr]
-            for w in wildcards:
-                if addr.endswith(w["email"][1:].lower()):
-                    return {**w, "email": addr}
+        """The identity a message was delivered to, else the primary one."""
         session = getattr(getattr(self.engine, "client", None), "session", None)
-        primary = (getattr(session, "username", "") or "").lower()
-        return by_email.get(primary) or identities[0]
+        return identity_for(self.db.get_identities(), getattr(session, "username", "") or "", email)
 
     def _on_avatar_ready(self, _service, key: str) -> None:
         for card in self.cards.values():

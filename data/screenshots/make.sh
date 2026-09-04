@@ -31,6 +31,7 @@ shot search "sleep 3; search has:attachment" 9
 shot compose "sleep 3; compose; sleep 2; from-popup" 9
 shot identities "sleep 3; identities" 8
 shot masked "sleep 3; masked" 8
+shot newsletters "sleep 3; action win.newsletters" 8
 shot preferences "sleep 3; preferences" 8
 # the theme split: light above the diagonal, dark below it
 magick "$HERE/inbox-light.png" \( "$HERE/inbox-dark.png" \( -size 1280x720 xc:black -fill white -draw "polygon 1280,0 1280,720 0,720" \) -alpha off -compose copy_opacity -composite \) -compose over -composite "$HERE/theme-split.png" && echo "made theme-split"

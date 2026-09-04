@@ -294,6 +294,19 @@ class FakeData:
                        headers={"List-Unsubscribe": "<mailto:unsubscribe@archlinux.org?subject=unsubscribe%20news>, "
                                                     "<{base}unsubscribe/arch-news>",
                                 "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"})
+        # More list mail: a mailto-only sender with several issues, a web-page-only one, and one in Trash
+        weekly = {"name": "Weekly Digest", "email": "digest@lists.example.com"}
+        for i in range(3):
+            self.add_email(frm=weekly, to=[me], subject=f"Digest #{40 + i}", text=f"Issue {40 + i}.",
+                           mailboxes=[inbox, newsletters], keywords={"$seen": True} if i else {},
+                           when=t - timedelta(days=7 * i + 1),
+                           headers={"List-Unsubscribe": "<mailto:leave@lists.example.com?subject=unsubscribe>"})
+        self.add_email(frm={"name": "Shop Promotions", "email": "promo@shop.example"}, to=[me], subject="Sale ends soon",
+                       text="Everything must go.", mailboxes=[inbox], when=t - timedelta(days=2),
+                       headers={"List-Unsubscribe": "<https://shop.example/unsubscribe?u=42>"})
+        self.add_email(frm=weekly, to=[me], subject="Digest #39", text="Old issue.", mailboxes=[trash],
+                       keywords={"$seen": True}, when=t - timedelta(days=30),
+                       headers={"List-Unsubscribe": "<mailto:leave@lists.example.com?subject=unsubscribe>"})
         # Message with inline image and PDF attachment
         self.add_email(frm=people[5], to=[shop], subject="Your ticket: Berlin → München",
                        html='<p>Thanks for booking. Your ticket is attached.</p><p><img src="cid:logo@fake" alt="logo"></p>',
@@ -419,6 +432,10 @@ class FakeData:
                     f"{a.get('name') or ''} {a.get('email')}" for k in ("from", "to", "cc") for a in (e.get(k) or [])
                 ]).lower()
                 if not all(w in hay for w in value.lower().split()):
+                    return False
+            elif key == "header":
+                raw = e["_headers"].get(value[0])
+                if raw is None or (len(value) > 1 and value[1].lower() not in raw.lower()):
                     return False
             elif key == "before":
                 if e["receivedAt"] >= value:

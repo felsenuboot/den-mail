@@ -33,7 +33,8 @@ you own in the From field.
   ones you use, manage Masked Email addresses.
 - **Bulk actions.** Ctrl/Shift-click or the Select button with checkboxes;
   group by sender (any sort order), fold groups, act on a whole sender at once.
-- **One-click unsubscribe**, an unread filter, quoted history folded behind
+- **One-click unsubscribe**, and a Newsletters dialog to leave many lists at
+  once and clear out their mail, an unread filter, quoted history folded behind
   a `···` pill, search operators
   (`from:` `to:` `subject:` `is:unread` `has:attachment` `label:` `in:`
   `before:` `after:` `older_than:7d`, quoted phrases),
@@ -73,8 +74,13 @@ cd den-mail
 ./install.sh
 ```
 
-That adds a launcher, desktop entry and icons to your user profile. You can
-also run `./bin/den-mail` straight from the checkout.
+That adds a launcher, desktop entry and icons to your user profile. The
+launcher runs straight from the checkout, so there is no build step and no
+copy to keep in sync. You can also run `./bin/den-mail` directly.
+
+To update, quit the app and run `./update.sh` in the checkout: it pulls the
+latest commit and re-runs `install.sh` for any icon or desktop-entry changes.
+A plain `git pull` is enough when you only want the code.
 
 On first start the app asks for a Fastmail API token. Create one under
 *Settings → Privacy & Security → API tokens* with the **Mail**, **Submission**

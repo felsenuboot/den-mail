@@ -107,3 +107,23 @@ def one_click_request(url: str, timeout: float = 15.0) -> None:
         raise UnsubscribeError(str(getattr(e, "reason", None) or e)) from e
     if not 200 <= status < 300:
         raise UnsubscribeError(f"HTTP {status}")
+
+
+def identity_for(identities: list[dict], primary: str, email: dict) -> dict | None:
+    """The identity a message was delivered to (Delivered-To, To, Cc), else the primary one.
+
+    A wildcard identity (`*@example.org`) matches any address under it and is returned with that address.
+    """
+    if not identities:
+        return None
+    by_email = {(i.get("email") or "").lower(): i for i in identities}
+    wildcards = [i for i in identities if (i.get("email") or "").startswith("*@")]
+    candidates = [email.get("header:Delivered-To:asText") or ""] + [
+        a.get("email", "") for a in (email.get("to") or []) + (email.get("cc") or [])]
+    for addr in (c.strip().lower() for c in candidates if c):
+        if addr in by_email:
+            return by_email[addr]
+        for w in wildcards:
+            if addr.endswith(w["email"][1:].lower()):
+                return {**w, "email": addr}
+    return by_email.get((primary or "").lower()) or identities[0]
