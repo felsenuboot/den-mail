@@ -633,10 +633,14 @@ class ComposeWindow(Adw.Window):
 
         def done(new_id: str) -> None:
             self.dirty = False
+<<<<<<< HEAD
             if not new_id:   # queued while offline (#8)
                 toast(self.parent_window, "Offline: the message goes out when the connection is back", 6)
             else:
                 toast(self.parent_window, f"Scheduled for {schedule.describe(send_at)}" if send_at else "Message sent")
+=======
+            toast(self.parent_window, f"Scheduled for {schedule.describe(send_at)}" if send_at else "Message sent")
+>>>>>>> master
             self.destroy()
 
         def failed(message: str) -> None:
@@ -649,9 +653,13 @@ class ComposeWindow(Adw.Window):
 
         seconds = int(self.config.get("undo_send_seconds", 10)) if self.config else 0
         schedule_send = getattr(self.parent_window, "schedule_send", None)
+<<<<<<< HEAD
         if send_at or not self.engine.online:
             # A scheduled message needs no undo countdown (it can be cancelled until it goes); offline,
             # the draft could not be parked on the server anyway, so the message is queued as it is.
+=======
+        if send_at:   # a scheduled message needs no undo countdown: it can be cancelled until it goes
+>>>>>>> master
             self.engine.send_email(email, ident.id, self.draft_id, done, failed, in_reply_to_id=reply_id,
                                    forwarded_id=fwd_id, send_at=send_at)
             return

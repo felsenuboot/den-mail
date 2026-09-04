@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.felsenuboot.DenMail</id>
+  <name>Den Mail</name>
+  <summary>Fastmail client for GNOME</summary>
+  <developer id="io.github.felsenuboot"><name>felsenuboot</name></developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>A fast Fastmail client built on JMAP, GTK 4 and libadwaita. A local cache makes folder switches instant and keeps mail readable offline; changes arrive by push.</p>
+    <p>Labels with drag and drop, undo for every action including sending, sanitised HTML with remote content held back, identities and Masked Email, search operators, sorting and grouping by sender, local categories, sidebar views such as Newsletters and Never read, a cleanup dialog that ranks senders and archives, deletes or unsubscribes in bulk, rules, and a screener for first-time senders.</p>
+  </description>
+  <launchable type="desktop-id">io.github.felsenuboot.DenMail.desktop</launchable>
+  <url type="homepage">https://github.com/felsenuboot/den-mail</url>
+  <url type="bugtracker">https://github.com/felsenuboot/den-mail/issues</url>
+  <url type="vcs-browser">https://github.com/felsenuboot/den-mail</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>The inbox in the dark theme</caption>
+      <image>https://raw.githubusercontent.com/felsenuboot/den-mail/master/data/screenshots/inbox-dark.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Clean up: senders ranked by how pointless their mail looks</caption>
+      <image>https://raw.githubusercontent.com/felsenuboot/den-mail/master/data/screenshots/cleanup.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Views answered from the local cache</caption>
+      <image>https://raw.githubusercontent.com/felsenuboot/den-mail/master/data/screenshots/views.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1" />
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">720</display_length>
+  </requires>
+  <branding>
+    <color type="primary" scheme_preference="light">#a8d0f0</color>
+    <color type="primary" scheme_preference="dark">#1c3a5c</color>
+  </branding>
+  <releases>
+    <release version="0.3.0" date="2026-09-04">
+      <description>
+        <p>A Flatpak bundle with every release and an AUR package; corrections that the app learns from; the Fastmail address book for completion and contact photos; the UI run headlessly in CI.</p>
+      </description>
+    </release>
+    <release version="0.2.0" date="2026-09-04">
+      <description>
+        <p>Sidebar views, rules, the cleanup dialog, the screener for first-time senders, Preferences on three pages, and tips.</p>
+      </description>
+    </release>
+    <release version="0.1.0" date="2026-09-04">
+      <description><p>The first working client.</p></description>
+    </release>
+  </releases>
+</component>

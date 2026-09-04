@@ -29,7 +29,10 @@ Read this before changing anything. The full development notes are in
   `## [X.Y.Z] - date` section, do it on a `release/X.Y.Z` branch through a PR,
   then tag the merge commit `vX.Y.Z` and push the tag. The Release workflow
   makes the GitHub release from the changelog section and refuses a tag that
-  does not match `VERSION`. Close the milestone.
+  does not match `VERSION`; the Flatpak workflow attaches the bundle. Add a
+  `<release>` to `data/io.github.felsenuboot.DenMail.metainfo.xml` and bump
+  `pkgver` in `packaging/aur/PKGBUILD` in the same release PR. Close the
+  milestone.
 - A milestone is a minor version; a fix shipped between milestones is a patch
   version with the same steps.
 

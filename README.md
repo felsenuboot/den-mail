@@ -54,24 +54,44 @@ Fastmail's desktop app and web client.
 
 ## Install
 
-Python 3.12+, PyGObject, GTK 4, libadwaita 1.5+, libsecret and WebKitGTK 6.0.
-Optional: setproctitle, so the process is listed as `den-mail` instead of
-`python3`.
+**Flatpak, any distribution.** Every [release](https://github.com/felsenuboot/den-mail/releases)
+carries a single-file bundle built on the GNOME runtime:
 
 ```
-# Arch
-sudo pacman -S --needed python-gobject gtk4 libadwaita libsecret webkitgtk-6.0 python-setproctitle
-# Fedora: python3-gobject gtk4 libadwaita libsecret webkitgtk6.0 python3-setproctitle
-# Debian/Ubuntu: python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 gir1.2-webkit-6.0 python3-setproctitle
+flatpak install --user den-mail.flatpak
+```
 
+Den Mail is not on Flathub (Flathub does not take submissions made with AI
+assistance, and this one was), so updates are a new bundle from the next
+release. To build the bundle yourself: `flatpak-builder --user --install
+--force-clean build packaging/flatpak/io.github.felsenuboot.DenMail.yml` in
+a checkout.
+
+**Arch Linux.** `packaging/aur/PKGBUILD` builds a package from the release
+tarball: `cd packaging/aur && makepkg -si`.
+
+**From a checkout, any distribution.** Python 3.12+, PyGObject, GTK 4,
+libadwaita 1.5+, libsecret and WebKitGTK 6.0; setproctitle is optional (the
+process is listed as `den-mail` instead of `python3`).
+
+| Distribution | Packages |
+| --- | --- |
+| Arch | `python-gobject gtk4 libadwaita libsecret webkitgtk-6.0 python-setproctitle` |
+| Fedora | `python3-gobject gtk4 libadwaita libsecret webkitgtk6.0 python3-setproctitle` |
+| Debian, Ubuntu | `python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 gir1.2-webkit-6.0 python3-setproctitle` |
+| openSUSE | `python3-gobject python3-gobject-Gdk typelib-1_0-Gtk-4_0 typelib-1_0-Adw-1 typelib-1_0-Secret-1 typelib-1_0-WebKit-6_0 python3-setproctitle` |
+
+```
 git clone https://github.com/felsenuboot/den-mail.git
 cd den-mail
 ./install.sh
 ```
 
-This adds a launcher, desktop entry and icons for your user. The launcher runs
-from the checkout, so `./update.sh` (a pull plus the same install step) is the
-whole update. `./bin/den-mail` runs it without installing anything.
+This adds a launcher, desktop entry, icons and the AppStream metadata for
+your user. The launcher runs from the checkout, so `./update.sh` (a pull plus
+the same install step) is the whole update. `./bin/den-mail` runs it without
+installing anything. Where the GObject stack is installed system-wide,
+`pipx install --system-site-packages .` gives a `den-mail` command instead.
 
 On first start the app asks for a Fastmail API token: create one under
 *Settings → Privacy & Security → API tokens* with the Mail, Submission and

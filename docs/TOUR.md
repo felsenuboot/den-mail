@@ -178,6 +178,7 @@ dialog links to Fastmail's own rules settings.
 
 ![Always for this sender](../data/screenshots/rules.png)
 
+<<<<<<< HEAD
 ## Offline
 
 Without a connection the cache still shows every folder and message it has
@@ -186,6 +187,8 @@ is applied locally, queued in the cache, and sent with the first sync after
 the connection returns; the sidebar says how many changes are waiting. A
 queued change the server then rejects is reported in a toast and dropped.
 
+=======
+>>>>>>> master
 ## Send later
 
 The clock next to Send offers this afternoon, this evening, tomorrow morning
