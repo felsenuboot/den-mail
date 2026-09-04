@@ -8,6 +8,7 @@ from gi.repository import Adw, GLib, Gtk
 
 from .. import llm
 from ..llm.http import host_of
+from .preferences import advanced_row
 
 LIMIT_RANGE = (1, 5000, 10)
 
@@ -40,7 +41,7 @@ def assistant_page(dialog: Adw.PreferencesDialog, config, assistant: llm.Assista
     limit.set_title("Requests per day")
     limit.set_subtitle("All features together; the status bar counts them")
     limit.set_value(assistant.limit)
-    group.add(limit)
+    group.add(advanced_row(limit))
 
     where = Adw.ActionRow(title="Where the mail text goes")
     where_icon = Gtk.Image()

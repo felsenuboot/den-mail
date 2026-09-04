@@ -64,6 +64,14 @@ def _switch(config, key: str, default: bool, title: str, subtitle: str = "",
     return row
 
 
+def advanced_row(*rows: Gtk.Widget) -> Adw.ExpanderRow:
+    """The rows a page needs rarely, folded behind one "Advanced" row (#107)."""
+    exp = Adw.ExpanderRow(title="Advanced", subtitle="Rarely needed")
+    for r in rows:
+        exp.add_row(r)
+    return exp
+
+
 def _link(title: str, subtitle: str, on_activate: Callable[[], None] | None) -> Adw.ActionRow:
     """A row that opens something else (a dialog, a page)."""
     row = Adw.ActionRow(title=title, subtitle=subtitle, activatable=on_activate is not None)
@@ -410,7 +418,7 @@ class PreferencesDialog(Adw.PreferencesDialog):
         poll.set_subtitle("Used when the push connection is unavailable")
         poll.set_value(config.get("poll_interval_seconds", 300))
         poll.connect("notify::value", lambda r, _p: config.set("poll_interval_seconds", int(r.get_value())))
-        sync.add(poll)
+        sync.add(advanced_row(poll))
         page.add(sync)
 
         account = Adw.PreferencesGroup(title="Account")
