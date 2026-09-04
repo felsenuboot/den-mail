@@ -1412,7 +1412,7 @@ class MainWindow(Adw.ApplicationWindow):
         if mb.role == ROLE_INBOX and not self.config.get("cleanup_opened") and self._tip_starts <= 3:
             self.threadlist.set_banner("New: Clean up ranks the senders you never read; archive, delete or "
                                        "unsubscribe in bulk. More under Inbox in the main menu.",
-                                       "Clean up…", lambda: self.show_cleanup())
+                                       "Clean up…", self.show_cleanup)
             return
         self.threadlist.set_banner(None)
 

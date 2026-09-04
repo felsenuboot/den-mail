@@ -6,6 +6,9 @@ Unreleased changes gather at the top until they are tagged.
 
 ## [Unreleased]
 
+### Fixes
+- The five CodeQL alerts open on master are gone: an attribution regex restructured, an unused result, a wrapper lambda, an unused import and a procedure's return value (#72)
+
 ## [0.4.0] - 2026-09-04
 
 Milestone *Submission queue and engine lifetime* (send later, offline outbox), plus the lock screen and schema.org data in mail.

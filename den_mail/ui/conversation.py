@@ -752,7 +752,12 @@ class ConversationView(Adw.NavigationPage):
         self.connect("notify::wide", lambda *_: self._place_actions())
         self.set_child(view)
         self._install_actions()
-        GLib.idle_add(lambda: (warm_up_renderer(), False)[1], priority=GLib.PRIORITY_LOW)  # after the first paint
+        GLib.idle_add(self._warm_up, priority=GLib.PRIORITY_LOW)  # after the first paint
+
+    @staticmethod
+    def _warm_up() -> bool:
+        warm_up_renderer()
+        return False
 
     def _place_actions(self) -> None:
         """Move the thread actions between the header bar and the subject row."""
