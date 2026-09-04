@@ -182,15 +182,11 @@ listview.thread-list.grouped > row:hover:not(:selected) .sender-header {
 .beside-column {
   border-left: 1px solid alpha(@borders, 0.8);
 }
-.summary-bar {
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: alpha(@accent_bg_color, 0.12);
-  border-left: 3px solid alpha(@accent_bg_color, 0.6);
+.summary-card {
+  padding: 8px 14px 12px 14px;
 }
-.summary-bar.error {
-  background: alpha(@error_bg_color, 0.12);
-  border-left-color: alpha(@error_bg_color, 0.6);
+.summary-card.error label.caption {
+  color: @error_color;
 }
 .structured-row {
   padding: 6px 12px;
