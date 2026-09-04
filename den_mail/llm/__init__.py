@@ -122,6 +122,11 @@ class Assistant:
     def limit(self) -> int:
         return max(1, int(self.config.get("assistant_daily_limit") or DEFAULT_DAILY_LIMIT))
 
+    @property
+    def model_name(self) -> str:
+        spec, _url, model = settings(self.config)
+        return f"{spec.key}/{model}"
+
     def used_today(self) -> int:
         usage = self.config.get("assistant_usage") or {}
         return int(usage.get("count") or 0) if usage.get("date") == _today() else 0
@@ -138,10 +143,11 @@ class Assistant:
         return f"{model} at {url} ({where}); {self.used_today()} of {self.limit} requests used today"
 
     def status(self) -> str:
-        """The status-bar fragment: empty until a request was made today."""
+        """The status-bar fragment: empty until a request was made today. The last error's
+        text is on the feature that asked; the bar only says that something failed."""
         used = self.used_today()
         if self.last_error:
-            return f"Assistant: {self.last_error}"
+            return "Assistant: error"
         return f"Assistant: {used} of {self.limit} today" if used else ""
 
     def reset(self) -> None:

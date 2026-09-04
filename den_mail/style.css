@@ -170,6 +170,16 @@ listview.thread-list.grouped > row:hover:not(:selected) .sender-header {
   border-radius: 12px;
   background: alpha(@accent_bg_color, 0.12);
 }
+.summary-bar {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: alpha(@accent_bg_color, 0.12);
+  border-left: 3px solid alpha(@accent_bg_color, 0.6);
+}
+.summary-bar.error {
+  background: alpha(@error_bg_color, 0.12);
+  border-left-color: alpha(@error_bg_color, 0.6);
+}
 .structured-row {
   padding: 6px 12px;
   font-weight: 600;

@@ -942,6 +942,17 @@ class SyncEngine(GObject.Object):
 
     _body_properties: ClassVar[list[str]] = list(EMAIL_BODY_PROPERTIES)
 
+    def fetch_body_now(self, email_id: str) -> dict | None:
+        """The cached body, fetched first when missing; for callers on their own thread (summaries, #68)."""
+        body = self.db.get_email_body(email_id)
+        if body is None and self.client is not None:
+            try:
+                self._job_fetch_body(email_id)
+            except JMAPError as e:
+                log.warning("body for %s not fetched: %s", email_id, e)
+            body = self.db.get_email_body(email_id)
+        return body
+
     def _job_fetch_body(self, email_id: str) -> None:
         acc = self.client.session.account_id
         res = None
