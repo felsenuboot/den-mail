@@ -16,10 +16,12 @@ Milestone *Sender cleanup*, plus the views that came just before it.
 - Clean up: every sender ranked by how pointless their mail looks, with bulk Mark read, Archive, Delete and Unsubscribe that reach every message on the server, one Undo for the whole run, and "Always…" rules per sender (#21)
 - Screener: optionally hold mail from first-time senders in a Screener view until they are let through or screened out (#24)
 - Preferences on three pages (General, Inbox, Account), an Inbox heading in the main menu, a broom in the sidebar, banners in the views, and a tip of the day under the empty conversation pane
+- Quick links under the tip card: Clean up, Newsletters, Rules, Search, Shortcuts (#43)
 
 ### Fixes
 - Loading a mailbox or view clears the remembered selection; with the unread filter on, the previous mailbox's open conversation was carried into the next list
 - Engine tests no longer share one config file (GLib caches the config directory per process)
+- The screener no longer misses a sender whose mail arrived while a sync was already running (#42)
 
 ## [0.1.0] - 2026-09-04
 
