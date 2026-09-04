@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 from gi.repository import Adw, Gio, GLib, Gtk
 
-from .. import secrets, shortcuts, timing
+from .. import APP_NAME, secrets, shortcuts, timing
 from ..avatars import AvatarService
 from ..config import Config, database_path
 from ..html.body import find_inline_part
@@ -39,7 +39,7 @@ log = logging.getLogger(__name__)
 
 class MainWindow(Adw.ApplicationWindow):
     def __init__(self, app: Adw.Application, config: Config):
-        super().__init__(application=app, title="Fastmail")
+        super().__init__(application=app, title=APP_NAME)
         self.config = config
         win = config.get("window", {})
         self.set_default_size(int(win.get("width", 1400)), int(win.get("height", 900)))
