@@ -497,6 +497,7 @@ class TipCard(Gtk.Box):
         self.tips = tips
         self.config = config
         self.index = int(config.get("tip_index", 0))
+        self.add_css_class("card")       # the HIG's card: background, border, rounded corners (#106)
         self.add_css_class("tip-card")
         self.set_size_request(420, -1)
         head = Gtk.Label(label="Tip", xalign=0)
@@ -509,8 +510,7 @@ class TipCard(Gtk.Box):
         self.text = Gtk.Label(xalign=0, wrap=True, max_width_chars=48)
         self.append(self.text)
         row = Gtk.Box(spacing=6, margin_top=6)
-        self.button = Gtk.Button()
-        self.button.add_css_class("flat")
+        self.button = Gtk.Button()        # the tip's own action: a real button, not a flat link
         row.append(self.button)
         spacer = Gtk.Box(hexpand=True)
         row.append(spacer)
@@ -543,12 +543,12 @@ QUICK_LINKS = (
 
 
 def quick_links() -> Gtk.Widget:
-    """One flat button per tool worth knowing about, whatever tip is showing (#43)."""
-    row = Gtk.Box(spacing=4, halign=Gtk.Align.CENTER)
+    """One labelled button per tool worth knowing about, whatever tip is showing (#43); they
+    wrap when the pane is narrow (#106)."""
+    row = Adw.WrapBox(child_spacing=6, line_spacing=6, halign=Gtk.Align.CENTER, justify=Adw.JustifyMode.NONE)
     row.add_css_class("quick-links")
     for label, icon, action, tip in QUICK_LINKS:
         b = Gtk.Button(child=Adw.ButtonContent(icon_name=icon, label=label), tooltip_text=tip)
-        b.add_css_class("flat")
         b.set_action_name(action)
         row.append(b)
     return row

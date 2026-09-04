@@ -323,8 +323,6 @@ image.label-color-11 { color: #a51d2d; } .chip.label-color-11 { background: alph
 /* the conversation pane while nothing is selected */
 .tip-card {
   padding: 14px 18px;
-  border-radius: 12px;
-  background: alpha(currentColor, 0.05);
 }
 .kanji-placeholder {
   margin: 24px;
