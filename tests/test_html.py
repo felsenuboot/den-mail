@@ -1,5 +1,11 @@
-from den_mail.html.compose import (email_body_text, forward_subject, parse_address_list, quote_text, reply_subject,
-                                   text_to_html)
+from den_mail.html.compose import (
+    email_body_text,
+    forward_subject,
+    parse_address_list,
+    quote_text,
+    reply_subject,
+    text_to_html,
+)
 from den_mail.html.sanitize import BLOCKED_PIXEL, sanitize_html
 from den_mail.html.totext import html_to_markup, html_to_text, quote_layout, split_quoted_text
 
