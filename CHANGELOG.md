@@ -6,6 +6,10 @@ Unreleased changes gather at the top until they are tagged.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-04
+
+Milestone *Submission queue and engine lifetime* (send later, offline outbox), plus the lock screen and schema.org data in mail.
+
 ### Features
 - schema.org data in HTML mail (orders, parcels, invoices, flight, train, hotel and event reservations) makes the message Transactions for sure and shows a summary line above the body with a copy button for the tracking or reservation number (#20)
 - A lock screen: on demand, after some idle time or when the session locks; unlocking through the system's authentication prompt where the polkit policy is installed, else a passphrase (#28)
