@@ -9,6 +9,29 @@ Unreleased changes gather at the top until they are tagged.
 Changes waiting for the next release are one file each in `changelog.d/`;
 `python tools/changelog.py preview` shows the section they will make.
 
+## [0.6.2] - 2026-09-05
+
+The first evening of polish: colours back, cards you can see in the dark, GNOME-style cards and buttons, the version in the app, accessible names, one-line texts, an Advanced row in Preferences, and a tour that covers everything.
+
+### Features
+- The version is visible in the app: About, the Account page of Preferences, and the tooltip of the app name in the sidebar show it, with the git commit as the build when the app runs from a checkout (#112)
+
+### Fixes
+- Compose: opening a window no longer logs a GTK warning about the From address being parsed as markup (#129)
+- Every error toast says "Could not …" followed by the reason, instead of a mix of "… failed" and "Could not …" (#125)
+- From a pass over every screen in both themes: category chips in Clean up are never cut short, the Identities, Rules and Inbox preference texts are one line each, and Suggest labels sits in its own Learning group (#124)
+- Accessibility: every icon-only button has a name a screen reader can say (its tooltip), and the few buttons that had no tooltip got one (#123)
+- Dark mode: the tip, summary and message cards have a lighter background and a visible edge, so they stand out from the pane the way they do in light mode (#122)
+- The summary above a conversation is a card with a "Summary" caption and its controls in the corner, like the tip card, instead of a tinted bar with an accent stripe (#118)
+- The tip on the empty conversation pane is a proper card with a border, its action is a real button, and the quick links under it are labelled buttons that wrap on a narrow pane, following the GNOME interface guidelines (#106)
+- Labels and categories are coloured again: an unclosed block in the stylesheet had dropped every rule after it. A test now parses the stylesheet, and "Coloured labels and categories" in Preferences turns the colours off for plain chips (#105)
+
+### Changes
+- docs/RUST.md weighs a Rust port: where the time goes, what a rewrite would cost, and the recommendation not to port (#132)
+- Summarise is also in the conversation's More menu, with its shortcut, so the sparkle in the header is one of three ways rather than the only one (#116)
+- Preferences: the rows one rarely needs (the fallback poll interval, the assistant's requests per day) fold behind an Advanced row, so each page shows what matters first (#107)
+- The tour has a path through the first ten minutes, sections for the assistant and summaries, label suggestions, two conversations side by side and background running, the three unlock methods, fresh screenshots, and an aligned dictionary entry at the top (#103)
+
 ## [0.6.1] - 2026-09-05
 
 Fixes for what the first day of use turned up: notifications, PINs, the keyring choice, thinking models, and shorter preference texts.

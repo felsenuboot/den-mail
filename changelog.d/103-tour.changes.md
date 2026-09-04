@@ -1,1 +1,0 @@
-The tour has a path through the first ten minutes, sections for the assistant and summaries, label suggestions, two conversations side by side and background running, the three unlock methods, fresh screenshots, and an aligned dictionary entry at the top
