@@ -1,0 +1,35 @@
+# A tag vX.Y.Z on master becomes a GitHub release whose notes are that
+# version's section of CHANGELOG.md. The tag must match the version in
+# den_mail/__init__.py, so a release cannot ship the wrong number.
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the tag against the version in the code
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          code="$(sed -n 's/^VERSION = "\(.*\)"/\1/p' den_mail/__init__.py)"
+          if [ "$tag" != "$code" ]; then echo "tag $tag but VERSION is $code" >&2; exit 1; fi
+          grep -q "^## \[$tag\]" CHANGELOG.md || { echo "no CHANGELOG.md section for $tag" >&2; exit 1; }
+      - name: Notes from the changelog
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          awk -v v="$tag" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md > notes.md
+          cat notes.md
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "Den Mail $GITHUB_REF_NAME" --notes-file notes.md
