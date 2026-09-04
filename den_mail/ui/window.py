@@ -186,6 +186,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.avatars.contact_photo = self.db.contact_photo_for
         self.avatars.download_blob = e.fetch_blob
         e.connect("contacts-changed", lambda _e: self._on_contacts_changed())
+        e.connect("outbox-changed", lambda _e: self._update_status())
         set_cid_resolver(self._resolve_cid)
         e.start()
         self.stack.set_visible_child_name("main")
@@ -263,6 +264,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.conversation.on_remove_label = lambda mid: self._label_toggle(self.tree.get(mid), False)
         self.conversation.screener_check = self._screener_pending
         self.conversation.on_screener_decision = self.screener_decide
+        self.conversation.on_cancel_scheduled = self.cancel_scheduled
         self.labels_popover = MailboxPickerPopover(self.tree, "labels",
                                                    on_toggle=self._label_toggle,
                                                    on_create=self._create_label_and_apply)
@@ -395,6 +397,14 @@ class MainWindow(Adw.ApplicationWindow):
             self._goto_role(ROLE_INBOX)
         self._sync_screened()
         self._schedule_view_refresh()
+
+    def cancel_scheduled(self, email_id: str) -> None:
+        """Take a scheduled message back (#6): it returns to Drafts unsent."""
+        if not email_id:
+            return
+        self.engine.cancel_scheduled(email_id, lambda: self._toast("Send cancelled; the message is back in Drafts"),
+                                     lambda m: self._toast(f"Could not cancel: {m}", 6))
+        self.conversation.scheduled_bar.set_visible(False)
 
     def sender_rule(self, sender: str) -> None:
         """"Always for this sender…" (#22): store a rule, optionally run it over their mail now."""
@@ -649,10 +659,12 @@ class MainWindow(Adw.ApplicationWindow):
         if not self.engine:
             return
         msg = getattr(self, "_status_message", "")
+        queued = self.engine.outbox_count()
+        waiting = f"{queued} change{'s' if queued != 1 else ''} waiting" if queued else ""
         if msg:
             self.sidebar.set_status(msg)
         elif not self.engine.online:
-            self.sidebar.set_status("Offline — showing cached mail")
+            self.sidebar.set_status(f"Offline — {waiting}, sent when back" if waiting else "Offline — showing cached mail")
         elif self.engine.push_connected:
             self.sidebar.set_status("Connected (push)")
         else:
@@ -1193,8 +1205,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.pending_sends.remove(pending)
         self._sends_in_flight += 1
 
-        def done(_new_id: str) -> None:
-            self._toast("Message sent")
+        def done(new_id: str) -> None:
+            self._toast("Message sent" if new_id else "Offline: the message goes out when the connection is back", 6)
             self._send_finished()
 
         def failed(message: str) -> None:

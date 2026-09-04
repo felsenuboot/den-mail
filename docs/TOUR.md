@@ -185,6 +185,22 @@ dialog links to Fastmail's own rules settings.
 
 ![Always for this sender](../data/screenshots/rules.png)
 
+## Offline
+
+Without a connection the cache still shows every folder and message it has
+listed. Archiving, labelling, deleting and sending keep working: the change
+is applied locally, queued in the cache, and sent with the first sync after
+the connection returns; the sidebar says how many changes are waiting. A
+queued change the server then rejects is reported in a toast and dropped.
+
+## Send later
+
+The clock next to Send offers this afternoon, this evening, tomorrow morning
+or afternoon, Monday morning, or any time from a calendar. The server holds
+the message until then (Fastmail allows up to a year ahead) and it waits in
+the Scheduled folder, where opening it shows when it goes and a *Cancel
+send* button that puts it back in Drafts. Snoozing is not offered: Fastmail
+does not expose it to third-party clients over JMAP.
 ## Address book
 
 With a token that has the Contacts scope, the app keeps your Fastmail
