@@ -29,6 +29,7 @@ DEFAULTS: dict[str, Any] = {
     "avatar_source": "",  # "direct" | "proxy" | "bimi" | "off": where sender logos come from (#63); "" = sender_avatars
     "sidebar_views": True,  # the Views section (#19): local lists such as Newsletters and Never read
     "screener": False,  # first-time senders wait in the Screener view until let through (#24)
+    "label_suggestions": True,  # chips offering a label the learned models are sure about (#60)
     "cleanup_tip_starts": 0,  # how often the Inbox has shown the "Clean up" tip; it stops after a few starts
     "cleanup_opened": False,  # the tip also stops once Clean up has been opened
     "banners_dismissed": [],  # banners closed with their X, by name ("cleanup", "screener"); they stay away (#84)

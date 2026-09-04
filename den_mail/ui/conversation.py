@@ -650,6 +650,7 @@ class ConversationView(Adw.NavigationPage):
         self.cards: dict[str, MessageCard] = {}
         self.current_mailbox_id: str | None = None
         self.on_remove_label: Callable[[str], None] = lambda mailbox_id: None
+        self.on_add_label: Callable[[str], None] = lambda mailbox_id: None   # a suggestion chip (#60)
 
         view = Adw.ToolbarView()
         self.header = Adw.HeaderBar(show_title=False)
@@ -1041,7 +1042,36 @@ class ConversationView(Adw.NavigationPage):
                 box.append(x)
             self.chips.append(box)
             shown += 1
+        shown += self._fill_suggestions(thread)
         self.chips.set_visible(shown > 0)
+
+    def _fill_suggestions(self, thread: ThreadObject) -> int:
+        """Labels the learned models are sure about (#60): a dashed chip with a plus that applies it."""
+        if not self.db or not self.config.get("label_suggestions", True) or not self.db.labels_ready:
+            return 0
+        newest = self.db.get_email(thread.email_ids[-1]) if thread.email_ids else None
+        present = set(thread.summary.mailbox_ids)
+        shown = 0
+        for s in self.db.label_suggestions(newest):
+            mb = self.tree.get(s.label_id)
+            if mb is None or s.label_id in present:
+                continue
+            box = Gtk.Box(spacing=2)
+            box.add_css_class("chip")
+            box.add_css_class("chip-suggestion")
+            box.add_css_class(f"label-color-{mb.color_index}")
+            words = ", ".join(t.split(":", 1)[-1] for t in s.evidence[:3])
+            box.set_tooltip_text(f"The app thinks this belongs under {self.tree.path_name(s.label_id)} "
+                                 f"({s.probability:.0%}, going by {words}). Click to add the label.")
+            add = Gtk.Button(icon_name="list-add-symbolic")
+            add.add_css_class("flat")
+            add.add_css_class("circular")
+            add.connect("clicked", lambda _b, m=s.label_id: self.on_add_label(m))
+            box.append(add)
+            box.append(Gtk.Label(label=f"{self.tree.path_name(s.label_id)}?"))
+            self.chips.append(box)
+            shown += 1
+        return shown
 
     def _update_flag_button(self, thread: ThreadObject) -> None:
         self.flag_button.set_icon_name("fm-star-symbolic" if thread.flagged else "fm-star-outline-symbolic")

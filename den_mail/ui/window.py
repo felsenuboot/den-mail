@@ -281,6 +281,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.conversation = ConversationView(self.db, self.engine, self.tree, self.config, self._compose_from,
                                              self._email_action, avatars=self.avatars, assistant=self.assistant)
         self.conversation.on_remove_label = lambda mid: self._label_toggle(self.tree.get(mid), False)
+        self.conversation.on_add_label = lambda mid: self._label_toggle(self.tree.get(mid), True)
         self.conversation.screener_check = self._screener_pending
         self.conversation.on_screener_decision = self.screener_decide
         self.conversation.on_cancel_scheduled = self.cancel_scheduled

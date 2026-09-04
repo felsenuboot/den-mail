@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..classify import bayes
+from ..classify import bayes, labels
 from ..classify.rules import (
     CLASSIFY_HEADERS,
     H_LIST_UNSUBSCRIBE,
@@ -74,6 +74,8 @@ CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT, json TEXT N
 CREATE TABLE IF NOT EXISTS contact_emails (email TEXT PRIMARY KEY, contact_id TEXT, name TEXT);
 CREATE TABLE IF NOT EXISTS structured (email_id TEXT PRIMARY KEY, kind TEXT NOT NULL, text TEXT NOT NULL, copy TEXT);
 CREATE TABLE IF NOT EXISTS summaries (key TEXT PRIMARY KEY, text TEXT NOT NULL, fingerprint TEXT NOT NULL, model TEXT, ts REAL);
+CREATE TABLE IF NOT EXISTS label_docs (label_id TEXT PRIMARY KEY, yes INTEGER NOT NULL, no INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS label_tokens (label_id TEXT, token TEXT, yes INTEGER NOT NULL, no INTEGER NOT NULL, PRIMARY KEY (label_id, token));
 CREATE TABLE IF NOT EXISTS bayes_docs (category TEXT PRIMARY KEY, docs INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS bayes_tokens (category TEXT, token TEXT, count INTEGER NOT NULL, PRIMARY KEY (category, token));
 """
@@ -152,6 +154,7 @@ class Database:
         self._load_identity_cache()
         self._load_sent_mailbox()
         self._bayes: bayes.BayesModel = self._load_bayes()
+        self._labels: labels.LabelModel = self._load_labels()
 
     @staticmethod
     def _add_view_columns(c: sqlite3.Connection) -> None:
@@ -194,7 +197,7 @@ class Database:
             for table in ("mailboxes", "emails", "email_mailboxes", "threads", "identities", "masked_emails",
                           "query_cache", "addresses", "classification", "correspondents", "sender_deletions",
                           "screener", "bayes_docs", "bayes_tokens", "submissions", "contacts", "contact_emails",
-                          "outbox", "structured", "summaries"):
+                          "outbox", "structured", "summaries", "label_docs", "label_tokens"):
                 # table names come from the literal tuple above (Bandit B608)
                 c.execute(f"DELETE FROM {table}")  # nosec B608
             c.execute("DELETE FROM meta WHERE key LIKE 'state:%'")
@@ -406,6 +409,57 @@ class Database:
     @property
     def bayes_ready(self) -> bool:
         return self._bayes.ready
+
+    # ------------------------------------------------------ label models
+
+    def _load_labels(self) -> labels.LabelModel:
+        c = self.conn()
+        docs = [(r["label_id"], int(r["yes"]), int(r["no"])) for r in c.execute("SELECT label_id, yes, no FROM label_docs")]
+        toks = [(r["label_id"], r["token"], int(r["yes"]), int(r["no"]))
+                for r in c.execute("SELECT label_id, token, yes, no FROM label_tokens")]
+        return labels.LabelModel.from_rows(docs, toks)
+
+    def retrain_labels(self, limit: int = 4000) -> dict[str, int]:
+        """Rebuild the per-label models (#60) from the newest cached mail outside Trash and
+        Spam: every label (a mailbox without a role) with enough messages gets one.
+        Returns {label id: labelled messages} for the labels that got a model."""
+        with self._write_lock:
+            c = self.conn()
+            boxes = {m["id"]: m for m in self.get_mailboxes()}
+            label_ids = [mid for mid, m in boxes.items() if not m.get("role")]
+            skip = {mid for mid, m in boxes.items() if m.get("role") in ("trash", "junk")}
+            examples = []
+            for r in c.execute("SELECT json FROM emails ORDER BY received_at DESC LIMIT ?", (limit,)):
+                e = json.loads(r["json"])
+                present = {mid for mid, on in (e.get("mailboxIds") or {}).items() if on}
+                if present & skip:
+                    continue
+                examples.append((bayes.tokens(e, self.sender_behaviour(sender_of(e), c)), present & set(label_ids)))
+            model = labels.LabelModel.train(examples, label_ids)
+            c.execute("BEGIN")
+            try:
+                c.execute("DELETE FROM label_docs")
+                c.execute("DELETE FROM label_tokens")
+                c.executemany("INSERT INTO label_docs(label_id, yes, no) VALUES (?,?,?)", model.doc_rows())
+                c.executemany("INSERT INTO label_tokens(label_id, token, yes, no) VALUES (?,?,?,?)", model.token_rows())
+                c.execute("COMMIT")
+            except Exception:
+                c.execute("ROLLBACK")
+                raise
+            self._labels = model
+            return {label: model.docs[label]["yes"] for label in model.labels}
+
+    @property
+    def labels_ready(self) -> bool:
+        return self._labels.ready
+
+    def label_suggestions(self, email: dict | None) -> list[labels.Suggestion]:
+        """The labels the learned models would add to this message, surest first (#60)."""
+        if not email or not self._labels.ready:
+            return []
+        present = {mid for mid, on in (email.get("mailboxIds") or {}).items() if on}
+        toks = bayes.tokens(email, self.sender_behaviour(sender_of(email)))
+        return self._labels.suggest(toks, present)
 
     def unsure_ids(self, limit: int = 2000) -> list[str]:
         """Messages the rules were unsure about and the user has not decided: the ones

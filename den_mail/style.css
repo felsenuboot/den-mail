@@ -175,6 +175,10 @@ listview.thread-list.grouped > row:hover:not(:selected) .sender-header {
   border-radius: 12px;
   background: alpha(@accent_bg_color, 0.12);
 }
+.chip-suggestion {
+  border: 1px dashed alpha(currentColor, 0.5);
+  background: transparent;
+}
 .summary-bar {
   padding: 10px 12px;
   border-radius: 12px;

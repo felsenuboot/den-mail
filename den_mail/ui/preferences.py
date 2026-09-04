@@ -183,6 +183,9 @@ class PreferencesDialog(Adw.PreferencesDialog):
                         "without a notification, until you let them through or screen them out. Only mail that "
                         "arrives while Den Mail is open is screened.")
         screener.add(_switch(config, "screener", False, "Screen first-time senders", "", on_screener))
+        screener.add(_switch(config, "label_suggestions", True, "Suggest labels",
+                             "Learned from the mail you have labelled: a \"Work?\" chip on a conversation that "
+                             "lacks the label, applied with one click; folders are never suggested"))
         page.add(screener)
         return page
 
