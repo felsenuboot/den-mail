@@ -7,6 +7,7 @@ Unreleased changes gather at the top until they are tagged.
 ## [Unreleased]
 
 ### Features
+- Offline outbox: archive, label, delete and send while the connection is down; the changes stay applied locally, queue in the cache and go out with the next sync, and the sidebar counts what is waiting (#8)
 - Send later: a clock next to Send schedules the message for a preset or any time; it waits in Scheduled and can be cancelled from the conversation (#6)
 - The Fastmail address book, with a token that has the Contacts scope: contacts complete recipients first, and a contact's photo replaces the sender domain's logo (#4, #14)
 - CI runs the UI headlessly once per autopilot script and keeps the screenshots as an artifact (#11)
