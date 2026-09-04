@@ -40,7 +40,7 @@ class ThreadRow(Gtk.Box):
         self.participants = Gtk.Label(xalign=0, ellipsize=3, hexpand=True)
         self.participants.add_css_class("participants")
         line1.append(self.participants)
-        self.count = Gtk.Label()
+        self.count = Gtk.Label(valign=Gtk.Align.CENTER)
         self.count.add_css_class("count-chip")
         line1.append(self.count)
         self.date = Gtk.Label(xalign=1)
@@ -60,7 +60,7 @@ class ThreadRow(Gtk.Box):
         self.flag = Gtk.Image(icon_name="fm-star-symbolic", pixel_size=14)
         self.flag.add_css_class("flag-icon")
         line2.append(self.flag)
-        self.count2 = Gtk.Label(visible=False)
+        self.count2 = Gtk.Label(visible=False, valign=Gtk.Align.CENTER)
         self.count2.add_css_class("count-chip")
         line2.append(self.count2)
         self.date2 = Gtk.Label(xalign=1, visible=False)
@@ -197,7 +197,8 @@ class SenderHeader(Gtk.Box):
         self.address.add_css_class("dim-label")
         self.address.add_css_class("caption")
         self.append(self.address)
-        self.count = Gtk.Label()
+        # Centred, or the chip would stretch to the header's height and lose its shape.
+        self.count = Gtk.Label(valign=Gtk.Align.CENTER)
         self.count.add_css_class("count-chip")
         self.append(self.count)
         # The fold arrow sits at the trailing edge, like the arrow of an expander row.
@@ -233,10 +234,11 @@ class SenderHeader(Gtk.Box):
         self.address.set_label(g.detail or "")
         self.address.set_visible(bool(g.detail) and g.detail.lower() != g.name.lower())
         self.count.set_label(f"{g.unread} / {g.count}" if g.unread else str(g.count))
-        if g.unread:
-            self.name.add_css_class("unread")
-        else:
-            self.name.remove_css_class("unread")
+        for w in (self.name, self.count):  # an unread group's chip is the sidebar's blue badge
+            if g.unread:
+                w.add_css_class("unread")
+            else:
+                w.remove_css_class("unread")
         self.expander.set_icon_name("pan-end-symbolic" if g.collapsed else "pan-down-symbolic")
         self.expander.set_tooltip_text("Unfold this sender" if g.collapsed else "Fold this sender")
         # A folded group is a card of its own; an open one is the top of its card.
