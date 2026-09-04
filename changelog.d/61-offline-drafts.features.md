@@ -1,0 +1,1 @@
+Offline drafts: saving a draft while the server is unreachable keeps it locally, lists it in Drafts, and creates it on the server with the next sync; later saves and Send while still offline update that one queued draft instead of chaining, and an open compose window learns the server's id when it arrives
