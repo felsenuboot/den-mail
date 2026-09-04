@@ -42,6 +42,11 @@
     <color type="primary" scheme_preference="dark">#1c3a5c</color>
   </branding>
   <releases>
+    <release version="0.6.1" date="2026-09-05">
+      <description>
+        <p>A click on a new-mail notification opens that message; PINs work again and the keyring choice can be backed out of; shorter preference texts.</p>
+      </description>
+    </release>
     <release version="0.6.0" date="2026-09-04">
       <description>
         <p>Drafts saved offline are kept and created with the next sync; a third way to unlock, through a Den Mail keyring; sender logos with a choice of where they come from; label suggestions learned from labelled mail; the app can keep running in the background for notifications; the hints above the list can be closed; the rules say plainly that they run in the app.</p>

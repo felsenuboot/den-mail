@@ -1,1 +1,0 @@
-Preferences: every group has a one-line description again; the Lock page explains the chosen unlock method under the choice, the Assistant page keeps the defaults as tooltips, and nothing refers to the README

@@ -9,6 +9,16 @@ Unreleased changes gather at the top until they are tagged.
 Changes waiting for the next release are one file each in `changelog.d/`;
 `python tools/changelog.py preview` shows the section they will make.
 
+## [0.6.1] - 2026-09-05
+
+Fixes for what the first day of use turned up: notifications, PINs, the keyring choice, thinking models, and shorter preference texts.
+
+### Fixes
+- Assistant: a thinking model (Qwen3 on llama.cpp or Ollama, DeepSeek-R1) no longer leaves a summary hanging and empty; local servers are asked to skip the thinking, answers are capped, the wait can be up to five minutes, and an answer that is reasoning only is reported as such (#98)
+- Preferences: every group has a one-line description again; the Lock page explains the chosen unlock method under the choice, the Assistant page keeps the defaults as tooltips, and nothing refers to the README (#96)
+- Lock: a PIN can be set and used again (the dialog and Unlock failed silently for PINs), the dialog says what is wrong instead of reopening, switching between passphrase and PIN clears the old secret, and cancelling the keyring's password prompt puts the unlock method back to what it was (#95)
+- Clicking a new-mail notification brings the window up and opens that message's conversation, in the list when it is there and in a thread window otherwise; it used to only present the window (#93)
+
 ## [0.6.0] - 2026-09-04
 
 Everything the Standalone milestone held after 0.5.0: offline drafts, the keyring unlock, logo sources, label suggestions, background running, two conversations side by side, closable hints, rules explained, and changelog fragments for the process.
