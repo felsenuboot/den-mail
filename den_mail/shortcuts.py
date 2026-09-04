@@ -36,6 +36,7 @@ ACCELS: dict[str, list[str]] = {
     "win.open": ["Return", "o"],
     "win.back": ["Escape"],
     "win.preferences": ["<Control>comma"],
+    "win.lock": ["<Control><Shift>l"],
     "win.shortcuts": ["<Control>question"],
     "app.quit": ["<Control>q"],
 }
@@ -59,7 +60,7 @@ DIALOG: tuple[tuple[str, tuple[tuple[str, ...], ...]], ...] = (
                        ("Labels", "win.labels"), ("Move to…", "win.move"), ("Select all", "win.select-all"))),
     ("Compose", (("New message", "win.compose"), ("Reply", "win.reply"), ("Reply all", "win.reply-all"),
                  ("Forward", "win.forward"), ("Send", "<Control>Return"), ("Save draft", "<Control>s"))),
-    ("Application", (("Preferences", "win.preferences"), ("Keyboard shortcuts", "win.shortcuts"),
+    ("Application", (("Lock", "win.lock"), ("Preferences", "win.preferences"), ("Keyboard shortcuts", "win.shortcuts"),
                      ("Quit", "app.quit"))),
 )
 

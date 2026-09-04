@@ -35,4 +35,8 @@ cp "$HERE/data/$APP.svg" "$HERE/den_mail/icons/hicolor/scalable/apps/$APP.svg"
 gtk4-update-icon-cache -q -t -f "$ICONS" 2>/dev/null || gtk-update-icon-cache -q -t -f "$ICONS" 2>/dev/null || true
 update-desktop-database -q "$APPS" 2>/dev/null || true
 echo "Installed. Run 'den-mail' or launch Den Mail from your app launcher."
+if [ ! -e /usr/share/polkit-1/actions/$APP.policy ]; then
+  echo "For the lock screen to use the system's authentication prompt (optional, needs root):"
+  echo "  sudo install -Dm644 '$HERE/data/$APP.policy' /usr/share/polkit-1/actions/$APP.policy"
+fi
 echo "To make it the default mail client: xdg-settings set default-url-scheme-handler mailto $APP.desktop"
