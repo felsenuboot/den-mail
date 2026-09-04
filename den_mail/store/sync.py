@@ -39,6 +39,8 @@ from ..jmap.client import (
 )
 from ..jmap.push import PushListener
 from ..jmap.types import (
+    CAP_CONTACTS,
+    CAP_CORE,
     CAP_MASKED_EMAIL,
     EMAIL_BODY_PROPERTIES,
     EMAIL_LIST_PROPERTIES,
@@ -318,6 +320,7 @@ class SyncEngine(GObject.Object):
         "auth-failed": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "cache-reset": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "rules-applied": (GObject.SignalFlags.RUN_FIRST, None, (object,)),   # {rule id: hits} (#22)
+        "contacts-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
 
     def __init__(self, client: JMAPClient, db: Database, config: Config):
@@ -532,6 +535,48 @@ class SyncEngine(GObject.Object):
         self._emit("mailboxes-changed")
         self._emit("identities-changed")
         self._emit("masked-changed")
+        self._sync_contacts(full=True)
+
+    # -------------------------------------------------------------- contacts
+
+    def _sync_contacts(self, full: bool = False) -> None:
+        """The address book (RFC 9610 ContactCard, #4): everything once, then changes.
+        Silently nothing when the token lacks the contacts scope."""
+        session = self.client.session
+        if not session or not session.has_contacts:
+            return
+        acc = session.contacts_account_id
+        using = [CAP_CORE, CAP_CONTACTS]
+        since = None if full else self.db.get_state("Contact")
+        if since:
+            req = Request()
+            c_ch = req.add("ContactCard/changes", {"accountId": acc, "sinceState": since, "maxChanges": 500})
+            c_new = req.add("ContactCard/get", {"accountId": acc, "#ids": Request.ref(c_ch, "ContactCard/changes", "/created")})
+            c_upd = req.add("ContactCard/get", {"accountId": acc, "#ids": Request.ref(c_ch, "ContactCard/changes", "/updated")})
+            try:
+                resp = self.client.send(req, using)
+                ch = resp.get(c_ch)
+                cards = resp.get(c_new)["list"] + resp.get(c_upd)["list"]
+                if cards:
+                    self.db.upsert_contacts(cards)
+                if ch.get("destroyed"):
+                    self.db.delete_contacts(ch["destroyed"])
+                self.db.set_state("Contact", ch["newState"])
+                if cards or ch.get("destroyed"):
+                    self._emit("contacts-changed")
+                return
+            except MethodError as e:
+                if e.type != "cannotCalculateChanges":
+                    log.warning("ContactCard/changes failed: %s", e)
+                    return
+        try:
+            res = self.client.call("ContactCard/get", {"accountId": acc, "ids": None}, using)
+        except MethodError as e:
+            log.warning("ContactCard/get failed: %s", e)
+            return
+        self.db.set_contacts(res["list"])
+        self.db.set_state("Contact", res["state"])
+        self._emit("contacts-changed")
 
     def reset_cache(self) -> None:
         self.db.clear_all()
@@ -671,6 +716,8 @@ class SyncEngine(GObject.Object):
             if e.type != "cannotCalculateChanges":
                 raise
             self.db.set_state("Thread", self.client.call("Thread/get", {"accountId": acc, "ids": []})["state"])
+        # --- contacts
+        self._sync_contacts()
         # --- keep visible queries current
         for key in list(self._active_queries):
             q = self.db.get_query(key)

@@ -10,6 +10,7 @@ CAP_CORE = "urn:ietf:params:jmap:core"
 CAP_MAIL = "urn:ietf:params:jmap:mail"
 CAP_SUBMISSION = "urn:ietf:params:jmap:submission"
 CAP_MASKED_EMAIL = "https://www.fastmail.com/dev/maskedemail"
+CAP_CONTACTS = "urn:ietf:params:jmap:contacts"   # RFC 9610 ContactCard (#4)
 
 # Mailbox roles (RFC 8621 §2 + IANA registry). Fastmail uses all of these.
 ROLE_INBOX = "inbox"
@@ -108,6 +109,7 @@ class Session:
     account_id: str
     submission_account_id: str | None
     masked_account_id: str | None
+    contacts_account_id: str | None = None
     accounts: dict = field(default_factory=dict)
     capabilities: dict = field(default_factory=dict)
     raw: dict = field(default_factory=dict)
@@ -134,6 +136,7 @@ class Session:
             account_id=mail_account,
             submission_account_id=primary.get(CAP_SUBMISSION, mail_account),
             masked_account_id=primary.get(CAP_MASKED_EMAIL),
+            contacts_account_id=primary.get(CAP_CONTACTS),
             accounts=data.get("accounts", {}),
             capabilities=data.get("capabilities", {}),
             raw=data,
@@ -142,6 +145,11 @@ class Session:
     @property
     def has_masked_email(self) -> bool:
         return self.masked_account_id is not None
+
+    @property
+    def has_contacts(self) -> bool:
+        """The token has the contacts scope and the server speaks RFC 9610."""
+        return self.contacts_account_id is not None and CAP_CONTACTS in self.capabilities
 
     @property
     def account_name(self) -> str:
@@ -166,6 +174,34 @@ def delivered_to(email: dict) -> str | None:
         value = (email.get(key) or "").strip()
         if value:
             return value
+    return None
+
+
+def contact_name(card: dict) -> str:
+    """The display name of a ContactCard: its full name, else the name components in order."""
+    name = card.get("name") or {}
+    full = (name.get("full") or "").strip()
+    if full:
+        return full
+    parts = [c.get("value", "").strip() for c in name.get("components") or [] if c.get("kind") != "separator"]
+    return " ".join(p for p in parts if p)
+
+
+def contact_emails(card: dict) -> list[str]:
+    """The addresses of a ContactCard, lowercased, in the card's order."""
+    out = []
+    for entry in (card.get("emails") or {}).values():
+        addr = (entry.get("address") or "").strip().lower()
+        if addr and "@" in addr and addr not in out:
+            out.append(addr)
+    return out
+
+
+def contact_photo(card: dict) -> tuple[str, str] | None:
+    """(blobId, mediaType) of the card's photo, if it has one."""
+    for entry in (card.get("media") or {}).values():
+        if entry.get("kind") == "photo" and entry.get("blobId"):
+            return entry["blobId"], entry.get("mediaType") or "image/*"
     return None
 
 

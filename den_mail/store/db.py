@@ -21,7 +21,15 @@ from ..classify.rules import (
     SOURCE_USER,
     classify,
 )
-from ..jmap.types import KW_DRAFT, KW_FLAGGED, KW_SEEN, address_display
+from ..jmap.types import (
+    KW_DRAFT,
+    KW_FLAGGED,
+    KW_SEEN,
+    address_display,
+    contact_emails,
+    contact_name,
+    contact_photo,
+)
 
 SCHEMA_VERSION = 1
 
@@ -56,6 +64,8 @@ CREATE TABLE IF NOT EXISTS correspondents (email TEXT PRIMARY KEY, last_written 
 CREATE TABLE IF NOT EXISTS sender_deletions (
     email TEXT PRIMARY KEY, deleted INTEGER DEFAULT 0, deleted_unread INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS screener (email TEXT PRIMARY KEY, decision TEXT NOT NULL, ts REAL);
+CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT, json TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS contact_emails (email TEXT PRIMARY KEY, contact_id TEXT, name TEXT);
 """
 
 # Columns the sidebar views (#19) filter and sort on, added to caches from before
@@ -168,7 +178,7 @@ class Database:
             c = self.conn()
             for table in ("mailboxes", "emails", "email_mailboxes", "threads", "identities", "masked_emails",
                           "query_cache", "addresses", "classification", "correspondents", "sender_deletions",
-                          "screener"):
+                          "screener", "contacts", "contact_emails"):
                 # table names come from the literal tuple above (Bandit B608)
                 c.execute(f"DELETE FROM {table}")  # nosec B608
             c.execute("DELETE FROM meta WHERE key LIKE 'state:%'")
@@ -712,13 +722,75 @@ class Database:
         with self._write_lock:
             self.conn().execute("DELETE FROM query_cache")
 
+    # -------------------------------------------------------------- contacts
+
+    def set_contacts(self, cards: list[dict]) -> None:
+        """Replace the address book (a full ContactCard/get, #4)."""
+        with self._write_lock:
+            c = self.conn()
+            c.execute("DELETE FROM contacts")
+            c.execute("DELETE FROM contact_emails")
+            self._insert_contacts(c, cards)
+
+    def upsert_contacts(self, cards: list[dict]) -> None:
+        with self._write_lock:
+            c = self.conn()
+            for card in cards:
+                c.execute("DELETE FROM contact_emails WHERE contact_id=?", (card["id"],))
+            self._insert_contacts(c, cards)
+
+    @staticmethod
+    def _insert_contacts(c: sqlite3.Connection, cards: list[dict]) -> None:
+        for card in cards:
+            name = contact_name(card)
+            c.execute("INSERT OR REPLACE INTO contacts(id, name, json) VALUES (?,?,?)", (card["id"], name, json.dumps(card)))
+            c.executemany("INSERT OR REPLACE INTO contact_emails(email, contact_id, name) VALUES (?,?,?)",
+                          [(addr, card["id"], name) for addr in contact_emails(card)])
+
+    def delete_contacts(self, ids: list[str]) -> None:
+        with self._write_lock:
+            c = self.conn()
+            c.executemany("DELETE FROM contacts WHERE id=?", [(i,) for i in ids])
+            c.executemany("DELETE FROM contact_emails WHERE contact_id=?", [(i,) for i in ids])
+
+    def contact_count(self) -> int:
+        return int(self.conn().execute("SELECT COUNT(*) AS n FROM contacts").fetchone()["n"] or 0)
+
+    def contact_for(self, email: str | None) -> dict | None:
+        """The ContactCard of an address, if the address book has it."""
+        addr = (email or "").strip().lower()
+        if not addr:
+            return None
+        row = self.conn().execute("SELECT c.json FROM contact_emails ce JOIN contacts c ON c.id = ce.contact_id"
+                                  " WHERE ce.email=?", (addr,)).fetchone()
+        return json.loads(row["json"]) if row else None
+
+    def contact_photo_for(self, email: str | None) -> tuple[str, str, str] | None:
+        """(contact id, blobId, mediaType) of the photo of the contact behind an address."""
+        card = self.contact_for(email)
+        if not card:
+            return None
+        photo = contact_photo(card)
+        return (card["id"], photo[0], photo[1]) if photo else None
+
     # ------------------------------------------------------------- addresses
 
     def search_addresses(self, prefix: str, limit: int = 8) -> list[dict]:
+        """Completion candidates: the address book first, then addresses seen in cached mail."""
         like = f"%{prefix.lower()}%"
-        rows = self.conn().execute(
+        c = self.conn()
+        out: list[dict] = []
+        seen: set[str] = set()
+        for r in c.execute("SELECT email, name FROM contact_emails WHERE email LIKE ? OR LOWER(name) LIKE ?"
+                           " ORDER BY name, email LIMIT ?", (like, like, limit)):
+            out.append({"email": r["email"], "name": r["name"] or None})
+            seen.add(r["email"])
+        rows = c.execute(
             "SELECT email, name FROM addresses WHERE email LIKE ? OR LOWER(name) LIKE ?"
             " ORDER BY count DESC, last_seen DESC LIMIT ?",
             (like, like, limit),
         ).fetchall()
-        return [{"email": r["email"], "name": r["name"] or None} for r in rows]
+        for r in rows:
+            if r["email"] not in seen and len(out) < limit:
+                out.append({"email": r["email"], "name": r["name"] or None})
+        return out

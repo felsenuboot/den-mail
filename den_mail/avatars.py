@@ -70,6 +70,10 @@ class AvatarService(GObject.Object):
         self._pending: set[str] = set()
         self._lock = threading.Lock()
         self._pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="avatar")
+        # Contact photos (#14): the window provides a lookup from an address to the
+        # contact's photo blob and a way to download it; a photo beats the domain's logo.
+        self.contact_photo = lambda email: None   # -> (contact id, blob id, media type) | None
+        self.download_blob = None                  # (blob id, name, type, on_done(path), on_error(msg))
 
     @property
     def enabled(self) -> bool:
@@ -80,13 +84,28 @@ class AvatarService(GObject.Object):
 
     # ------------------------------------------------------------ public
 
+    def key_for(self, email: str | None) -> str | None:
+        """What an address's avatar is keyed by: the contact when it has a photo, else the domain."""
+        photo = self.contact_photo(email) if email else None
+        if photo:
+            return f"contact-{photo[0]}"
+        return sender_key(email)
+
+    def forget_contacts(self) -> None:
+        """The address book changed: photos looked up again on the next request."""
+        for key in [k for k in self._mem if k.startswith("contact-")]:
+            self._mem.pop(key, None)
+
     def get(self, email: str | None) -> Gdk.Texture | None:
-        """Cached texture for the sender's domain, or None (and start a fetch)."""
+        """Cached texture for the sender (the contact's photo, else the domain's logo),
+        or None (and start a fetch)."""
         if not self.enabled:
             return None
-        key = sender_key(email)
+        key = self.key_for(email)
         if key is None:
             return None
+        if key.startswith("contact-"):
+            return self._get_contact(key, email)
         if key in self._mem:
             return self._pick(self._mem[key])
         with self._lock:
@@ -94,6 +113,36 @@ class AvatarService(GObject.Object):
                 return None
             self._pending.add(key)
         self._pool.submit(self._fetch, key)
+        return None
+
+    def _get_contact(self, key: str, email: str) -> Gdk.Texture | None:
+        if key in self._mem:
+            return self._pick(self._mem[key])
+        with self._lock:
+            if key in self._pending:
+                return None
+            self._pending.add(key)
+        pixbuf = self._load_cached(key)
+        if pixbuf is not None:
+            self._done(key, (Gdk.Texture.new_for_pixbuf(pixbuf), None))
+            return self._pick(self._mem[key])
+        photo = self.contact_photo(email)
+        if photo is None or self.download_blob is None:
+            self._done(key, None)
+            return None
+
+        def got(path: Path) -> None:
+            try:
+                pixbuf = self._decode(path.read_bytes())
+            except OSError:
+                pixbuf = None
+            if pixbuf is not None:
+                self._store(key, pixbuf)
+                self._done(key, (Gdk.Texture.new_for_pixbuf(pixbuf), None))
+            else:
+                self._done(key, None)
+
+        self.download_blob(photo[1], "photo", photo[2], got, lambda _m: self._done(key, None))
         return None
 
     @staticmethod
@@ -106,10 +155,10 @@ class AvatarService(GObject.Object):
         return plain
 
     def cached_path(self, email: str | None) -> Path | None:
-        """Path of the cached logo file for the sender's domain, if any."""
+        """Path of the cached photo or logo file for the sender, if any."""
         if not self.enabled:
             return None
-        key = sender_key(email)
+        key = self.key_for(email)
         if key is None:
             return None
         path = self.dir / f"{key}.png"
@@ -120,10 +169,10 @@ class AvatarService(GObject.Object):
         at most timeout_ms.  Used for notifications, which cannot be
         updated after the fact."""
         path = self.cached_path(email)
-        if path is not None or not self.enabled or sender_key(email) is None:
+        if path is not None or not self.enabled or self.key_for(email) is None:
             done(path)
             return
-        key = sender_key(email)
+        key = self.key_for(email)
         state = {"fired": False}
 
         def finish(*_):
