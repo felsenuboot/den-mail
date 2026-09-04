@@ -79,7 +79,10 @@ and a few Japanese and Chinese tokens); they were checked against a real
 account with `tools/categoriser_report.py`, which runs them over an account's
 SQLite cache and prints counts, the rule that fired for each category, and
 random samples. After changing a rule, or on a new account, run it and read the
-samples of the categories you doubt; nothing leaves the machine.
+samples of the categories you doubt; nothing leaves the machine. What the
+rules cannot tell apart (notifications from friendly mailboxes with list
+headers, wording in other languages, a person's mail that mentions an invoice)
+is listed in #40, the brief for the learning layers.
 
 ## Environment variables
 
