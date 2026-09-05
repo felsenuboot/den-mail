@@ -601,10 +601,10 @@ class RemoteContentBar(Gtk.Revealer):
         super().__init__(reveal_child=False, transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
         box = Gtk.Box(spacing=8)
         box.add_css_class("remote-bar")
-        self.label = Gtk.Label(label="This message loads content from remote servers", xalign=0, hexpand=True,
-                               ellipsize=3)
+        self.label = Gtk.Label(label="Remote content is blocked", xalign=0, hexpand=True, wrap=True)
+        self.label.set_tooltip_text("Loading it would tell the sender you opened the message")
         box.append(self.label)
-        self.trust_label = Gtk.Label(label="Always from sender", ellipsize=3)
+        self.trust_label = Gtk.Label(label="Always from sender", ellipsize=3, max_width_chars=26)
         self.trust_button = Gtk.Button(child=self.trust_label)
         self.trust_button.add_css_class("flat")
         self.trust_button.connect("clicked", on_trust)
