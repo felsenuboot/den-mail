@@ -9,6 +9,17 @@ Unreleased changes gather at the top until they are tagged.
 Changes waiting for the next release are one file each in `changelog.d/`;
 `python tools/changelog.py preview` shows the section they will make.
 
+## [0.6.4] - 2026-09-05
+
+A patch between milestones: three reports from a morning's use on a wide screen.
+
+### Features
+- Selection: with several conversations selected the reading pane lists them, and a selection from one sender with List-Unsubscribe gets an Unsubscribe button (#151)
+
+### Fixes
+- Message body: the first click on a link no longer jumps the conversation to the top and gets lost; the link opens at once (#149)
+- Reading pane: the archive, delete, flag, move and label buttons stay in the header bar in a wide window instead of scrolling away with the subject or vanishing when several conversations are selected (#148)
+
 ## [0.6.3] - 2026-09-05
 
 Later the same night: preferences that read in order, summaries on request for opened or new mail, a guide with a page per topic, and what the first bug hunt against a real account turned up.

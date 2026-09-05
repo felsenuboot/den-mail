@@ -42,6 +42,11 @@
     <color type="primary" scheme_preference="dark">#1c3a5c</color>
   </branding>
   <releases>
+    <release version="0.6.4" date="2026-09-05">
+      <description>
+        <p>The action buttons stay in the header bar of a wide window; the first click on a link in a message opens it; the reading pane lists the selected conversations, with Unsubscribe for one sender.</p>
+      </description>
+    </release>
     <release version="0.6.3" date="2026-09-05">
       <description>
         <p>Preferences in the order they are needed, with search; summaries on request for opened or new mail; a short tour and a guide with a page per topic; fewer requests to the server; quieter message views; a remote-content notice that fits.</p>

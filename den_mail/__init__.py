@@ -1,6 +1,6 @@
 APP_ID = "io.github.felsenuboot.DenMail"
 APP_NAME = "Den Mail"
-VERSION = "0.6.3"
+VERSION = "0.6.4"
 
 
 def build() -> str:
