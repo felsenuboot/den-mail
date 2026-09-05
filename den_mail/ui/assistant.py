@@ -11,6 +11,7 @@ from ..llm.http import host_of
 from .preferences import advanced_row
 
 LIMIT_RANGE = (1, 5000, 10)
+AUTO_MODES = ["off", "opened", "new"]   # the "Summarise automatically" choice (#115)
 
 
 def assistant_page(dialog: Adw.PreferencesDialog, config, assistant: llm.Assistant) -> Adw.PreferencesPage:
@@ -36,6 +37,13 @@ def assistant_page(dialog: Adw.PreferencesDialog, config, assistant: llm.Assista
     group.add(model)
     key = Adw.PasswordEntryRow(title="API key", show_apply_button=True)
     group.add(key)
+
+    auto = Adw.ComboRow(title="Summarise automatically", model=Gtk.StringList.new(
+        ["Never", "The conversations I open", "Also new mail as it arrives"]))
+    auto.set_subtitle("Short threads are skipped; the daily limit applies; the cache is never summarised as a whole")
+    auto.set_selected(AUTO_MODES.index(config.get("auto_summarise", "off")) if config.get("auto_summarise") in AUTO_MODES else 0)
+    auto.connect("notify::selected", lambda r, _p: config.set("auto_summarise", AUTO_MODES[r.get_selected()]))
+    group.add(auto)
 
     limit = Adw.SpinRow.new_with_range(*LIMIT_RANGE)
     limit.set_title("Requests per day")

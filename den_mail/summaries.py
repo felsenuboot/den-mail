@@ -94,6 +94,19 @@ def fingerprint(ids: list[str]) -> str:
     return ",".join(ids)
 
 
+AUTO_MIN_MESSAGES = 2      # a thread this long is worth an automatic summary (#115) ...
+AUTO_MIN_SIZE = 6000       # ... or a single message this big (bytes on the server, roughly the text)
+AUTO_NEW_MAIL_CAP = 10     # new messages per sync batch that may start a summary
+
+
+def worth_summarising(emails: list[dict]) -> bool:
+    """Whether an automatic summary is worth a request: more than one message, or one long one.
+    A two-line reply does not need a model to read it."""
+    if not emails:
+        return False
+    return len(emails) >= AUTO_MIN_MESSAGES or int(emails[-1].get("size") or 0) >= AUTO_MIN_SIZE
+
+
 # ------------------------------------------------------------- the requests
 
 class Summariser:
