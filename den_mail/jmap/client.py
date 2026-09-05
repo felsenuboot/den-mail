@@ -210,16 +210,16 @@ class JMAPClient:
         log.debug("JMAP %s -> %d bytes in %.0fms", [c.name for c in request.calls], len(body),
                   (time.monotonic() - t0) * 1000)
         response = Response(data)
-        if response.session_state and response.session_state != session.state:
-            # Fastmail's sessionState carries a segment that changes with nearly every response,
-            # so a refresh per change would double the traffic; at most one every few minutes.
-            if time.monotonic() - self._session_refreshed >= SESSION_REFRESH_SECONDS:
-                log.debug("session state changed; refreshing session")
-                self._session_refreshed = time.monotonic()
-                try:
-                    self.fetch_session()
-                except JMAPError as e:  # keep working with the old session
-                    log.warning("session refresh failed: %s", e)
+        # Fastmail's sessionState carries a segment that changes with nearly every response, so
+        # a refresh per change would double the traffic; at most one every few minutes.
+        if (response.session_state and response.session_state != session.state
+                and time.monotonic() - self._session_refreshed >= SESSION_REFRESH_SECONDS):
+            log.debug("session state changed; refreshing session")
+            self._session_refreshed = time.monotonic()
+            try:
+                self.fetch_session()
+            except JMAPError as e:  # keep working with the old session
+                log.warning("session refresh failed: %s", e)
         return response
 
     def call(self, name: str, args: dict, using: list[str] | None = None) -> dict:
