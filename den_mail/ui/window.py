@@ -1031,7 +1031,7 @@ class MainWindow(Adw.ApplicationWindow):
                 if unread:
                     self.engine.perform(actions.mark_read(unread, True))
         elif threads:
-            self.conversation.show_multi(len(threads))
+            self.conversation.show_multi(threads)
         else:
             self.conversation.clear()
 

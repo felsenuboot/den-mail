@@ -17,6 +17,7 @@ from ..summaries import Summariser, worth_summarising
 from ..unsubscribe import identity_for, parse_list_unsubscribe
 from .a11y import watch as _a11y_watch
 from .message_body import MessageBody, warm_up_renderer
+from .selection import SelectionPage
 from .widgets import avatar, confirm, copy_text, human_size, open_uri, toast
 
 COLUMN_WIDTH = 980  # the message column's maximum width
@@ -698,8 +699,10 @@ class ConversationView(Adw.NavigationPage):
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
         self.placeholder = kanji_placeholder(config)
         self.stack.add_named(self.placeholder, "empty")
-        self.multi = Adw.StatusPage(icon_name="edit-select-all-symbolic", title="Multiple conversations selected")
-        self.stack.add_named(self.multi, "multi")
+        # Several conversations selected (#151): a stack of them, and Unsubscribe for one sender.
+        self.multi = SelectionPage(db, engine, config, self.confirm_unsubscribe)
+        self.stack.add_named(Gtk.ScrolledWindow(child=StartClamp(self.multi, COLUMN_WIDTH),
+                                                hscrollbar_policy=Gtk.PolicyType.NEVER), "multi")
         self.scrolled = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
         self.content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.content.set_margin_start(16)
@@ -858,22 +861,25 @@ class ConversationView(Adw.NavigationPage):
         self._confirm_unsubscribe(card)
 
     def _confirm_unsubscribe(self, card: MessageCard) -> None:
-        plan = card.unsubscribe_plan
-        sender = address_display((card.email.get("from") or [{}])[0]) or card.sender_email or "this sender"
+        self.confirm_unsubscribe(card.email, card.unsubscribe_plan, card.unsubscribe_btn, card.sender_email or "")
+
+    def confirm_unsubscribe(self, email: dict, plan, button: Gtk.Button, sender_email: str) -> None:
+        """Ask, then carry out `plan` for the sender of `email`; `button` waits meanwhile
+        (a message card's button, or the selection page's)."""
+        sender = address_display((email.get("from") or [{}])[0]) or sender_email or "this sender"
         body = {"one-click": f"Sends an unsubscribe request to {plan.target}.",
                 "browser": f"Opens the sender's unsubscribe page at {plan.target} in your browser.",
                 "mailto": f"Sends an unsubscribe message to {plan.target}."}[plan.kind]
         if plan.kind == "mailto":
-            ident = self.identity_for(card.email)
+            ident = self.identity_for(email)
             if ident:
                 body += f" It goes out from {ident.get('email')}."
         confirm(self, f"Unsubscribe from {sender}?", body, "Unsubscribe", False,
-                lambda: self._run_unsubscribe(card, plan))
+                lambda: self._run_unsubscribe(email, plan, button, sender_email))
 
-    def _run_unsubscribe(self, card: MessageCard, plan) -> None:
+    def _run_unsubscribe(self, email: dict, plan, button: Gtk.Button, sender_email: str) -> None:
         from .newsletters import done_text, run_unsubscribe
-        sender_email = (card.sender_email or "").lower()
-        button = card.unsubscribe_btn
+        sender_email = sender_email.lower()
         button.set_sensitive(False)
 
         def done(used) -> None:
@@ -882,13 +888,14 @@ class ConversationView(Adw.NavigationPage):
             for c in self.cards.values():
                 if (c.sender_email or "").lower() == sender_email:
                     c.refresh_unsubscribe()
+            self.multi.refresh()
             toast(self, done_text(used), 4)
 
         def failed(message: str) -> None:
             button.set_sensitive(True)
             toast(self, message, 6)
 
-        run_unsubscribe(self.engine, self.db, card.email, plan, self.get_root(), done, failed,
+        run_unsubscribe(self.engine, self.db, email, plan, self.get_root(), done, failed,
                         lambda note: toast(self, note, 6))
 
     def identity_for(self, email: dict) -> dict | None:
@@ -927,10 +934,9 @@ class ConversationView(Adw.NavigationPage):
         self.summary_bar.set_visible(False)
         self.stack.set_visible_child_name("empty")
 
-    def show_multi(self, count: int) -> None:
+    def show_multi(self, threads: list[ThreadObject]) -> None:
         self.thread_id = None
-        self.multi.set_title(f"{count} conversations selected")
-        self.multi.set_description("Archive, delete, flag or label them with the buttons in the header bar.\nCtrl-click or Shift-click adds to the selection; the Select button shows checkboxes.")
+        self.multi.show(threads)
         self.stack.set_visible_child_name("multi")
 
     def show_thread(self, thread: ThreadObject, mailbox_id: str | None) -> None:
