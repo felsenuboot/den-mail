@@ -23,6 +23,7 @@ from .types import CAP_CORE, CAP_MAIL, CAP_MASKED_EMAIL, CAP_SUBMISSION, DEFAULT
 log = logging.getLogger(__name__)
 
 USER_AGENT = f"{APP_NAME}/{VERSION} (+https://github.com/felsenuboot/den-mail)"
+SESSION_REFRESH_SECONDS = 300   # how often a changed sessionState may refetch the session
 DEFAULT_TIMEOUT = 60
 
 
@@ -135,6 +136,7 @@ class JMAPClient:
     """Thread-safe (no shared mutable state beyond the session) JMAP transport."""
 
     def __init__(self, token: str, session_url: str = DEFAULT_SESSION_URL, timeout: int = DEFAULT_TIMEOUT):
+        self._session_refreshed = 0.0
         self.token = token
         self.session_url = session_url
         self.timeout = timeout
@@ -209,11 +211,15 @@ class JMAPClient:
                   (time.monotonic() - t0) * 1000)
         response = Response(data)
         if response.session_state and response.session_state != session.state:
-            log.info("session state changed; refreshing session")
-            try:
-                self.fetch_session()
-            except JMAPError as e:  # keep working with the old session
-                log.warning("session refresh failed: %s", e)
+            # Fastmail's sessionState carries a segment that changes with nearly every response,
+            # so a refresh per change would double the traffic; at most one every few minutes.
+            if time.monotonic() - self._session_refreshed >= SESSION_REFRESH_SECONDS:
+                log.debug("session state changed; refreshing session")
+                self._session_refreshed = time.monotonic()
+                try:
+                    self.fetch_session()
+                except JMAPError as e:  # keep working with the old session
+                    log.warning("session refresh failed: %s", e)
         return response
 
     def call(self, name: str, args: dict, using: list[str] | None = None) -> dict:
