@@ -674,8 +674,8 @@ class ConversationView(Adw.NavigationPage):
         more_menu.append("Mark as spam", "win.junk")
         more_menu.append("Not spam", "win.not-junk")
         more_menu.append("Delete permanently", "win.delete-permanently")
-        # The thread actions travel: in the header bar normally, and next to the
-        # message column when the pane is much wider than it (see `wide`).
+        # The thread actions travel within the header bar: at its end normally, at
+        # its start when the pane is much wider than the column (see `wide`, #148).
         self.actions = Gtk.Box(spacing=6)
         archive = Gtk.Button(icon_name="fm-archive-symbolic", tooltip_text="Archive (E)")
         archive.set_action_name("win.archive")
@@ -795,15 +795,19 @@ class ConversationView(Adw.NavigationPage):
         return False
 
     def _place_actions(self) -> None:
-        """Move the thread actions between the header bar and the subject row."""
-        parent = self.actions.get_parent()
-        if self.wide and parent is not self.subject_row:
-            if parent is not None:
-                self.header.remove(self.actions)
-            self.actions.set_valign(Gtk.Align.START)
-            self.subject_row.append(self.actions)
-        elif not self.wide and parent is self.subject_row:
-            self.subject_row.remove(self.actions)
+        """Move the thread actions between the two ends of the header bar (#148).
+
+        They stay in the bar, where the guidelines put actions on the view's
+        content and where they neither scroll away with a long message nor
+        vanish on the selection page. In a wide pane they sit at the start,
+        beside reply, right above the column; otherwise at the end as usual."""
+        if self.actions.get_parent() is not None:
+            self.header.remove(self.actions)
+        if self.wide:
+            self.actions.set_margin_start(18)
+            self.header.pack_start(self.actions)
+        else:
+            self.actions.set_margin_start(0)
             self.header.pack_end(self.actions)
 
     def _install_actions(self) -> None:
@@ -923,7 +927,7 @@ class ConversationView(Adw.NavigationPage):
     def show_multi(self, count: int) -> None:
         self.thread_id = None
         self.multi.set_title(f"{count} conversations selected")
-        self.multi.set_description("Archive, delete, flag or label them with the toolbar buttons.\nCtrl-click or Shift-click adds to the selection; the Select button shows checkboxes.")
+        self.multi.set_description("Archive, delete, flag or label them with the buttons in the header bar.\nCtrl-click or Shift-click adds to the selection; the Select button shows checkboxes.")
         self.stack.set_visible_child_name("multi")
 
     def show_thread(self, thread: ThreadObject, mailbox_id: str | None) -> None:
