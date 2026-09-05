@@ -108,7 +108,7 @@ class PreferencesDialog(Adw.PreferencesDialog):
                  assistant=None):
         """`on_open(action)` activates a window action such as "cleanup" or "rules";
         `assistant` is the window's `den_mail.llm.Assistant` (None: no Assistant page)."""
-        super().__init__(title="Preferences")
+        super().__init__(title="Preferences", search_enabled=True)   # find a setting by name (#107)
         self.config = config
         self.add(self._general_page(config, on_manage_identities))
         self.add(self._inbox_page(config, on_sidebar_views, on_screener, on_open, rules_count))
@@ -211,21 +211,19 @@ class PreferencesDialog(Adw.PreferencesDialog):
                           opener("newsletters")))
         page.add(cleanup)
 
-        sidebar = Adw.PreferencesGroup(title="Sidebar")
-        sidebar.add(_switch(config, "sidebar_views", True, "Views",
-                            "Newsletters, Transactions, Security, Updates, Never read and Big attachments, "
-                            "listed from the local cache", on_sidebar_views))
-        page.add(sidebar)
 
         screener = Adw.PreferencesGroup(
             title="First-time senders",
             description="Mail from senders you have never seen waits in a Screener view until you decide.")
         screener.add(_switch(config, "screener", False, "Screen first-time senders", "", on_screener))
         page.add(screener)
-        learning = Adw.PreferencesGroup(title="Learning", description="What the app picks up from your own decisions.")
-        learning.add(_switch(config, "label_suggestions", True, "Suggest labels",
-                             "A chip offers a label learned from the mail you have labelled"))
-        page.add(learning)
+        sidebar = Adw.PreferencesGroup(title="Sorting")
+        sidebar.add(_switch(config, "sidebar_views", True, "Views",
+                            "Newsletters, Transactions, Security, Updates, Never read and Big attachments, "
+                            "listed from the local cache", on_sidebar_views))
+        sidebar.add(_switch(config, "label_suggestions", True, "Suggest labels",
+                            "A chip offers a label learned from the mail you have labelled"))
+        page.add(sidebar)
         return page
 
     # ------------------------------------------------------------- Privacy
@@ -407,20 +405,7 @@ class PreferencesDialog(Adw.PreferencesDialog):
     def _account_page(self, config, session, on_sign_out, on_clear_cache, contact_count: int = 0,
                       on_lock_changed=None) -> Adw.PreferencesPage:
         page = Adw.PreferencesPage(title="Account", icon_name="avatar-default-symbolic", name="account")
-        page.add(self._privacy_group(config, on_lock_changed))
-
-        sync = Adw.PreferencesGroup(title="Sync and notifications")
-        sync.add(_switch(config, "notify_new_mail", True, "Notify about new mail"))
-        sync.add(_switch(config, "run_in_background", False, "Keep running when the window is closed",
-                         "Syncing and notifications go on; Quit (Ctrl+Q) ends it"))
-        poll = Adw.SpinRow.new_with_range(30, 3600, 30)
-        poll.set_title("Fallback poll interval (seconds)")
-        poll.set_subtitle("Used when the push connection is unavailable")
-        poll.set_value(config.get("poll_interval_seconds", 300))
-        poll.connect("notify::value", lambda r, _p: config.set("poll_interval_seconds", int(r.get_value())))
-        sync.add(advanced_row(poll))
-        page.add(sync)
-
+        # In the order they are needed (#107): the account, sync, the lock, then the rare rows.
         account = Adw.PreferencesGroup(title="Account")
         if session:
             account.add(Adw.ActionRow(title="Signed in as", subtitle=session.username))
@@ -430,14 +415,6 @@ class PreferencesDialog(Adw.PreferencesDialog):
                 subtitle=(f"{contact_count} contact{'s' if contact_count != 1 else ''} from Fastmail Contacts, for "
                           "completion and photos" if contacts else
                           "The token has no Contacts scope; completion uses the addresses in cached mail")))
-            caps = Adw.ExpanderRow(title="Server capabilities", subtitle="What this token's session advertises")
-            for uri in sorted(session.capabilities):
-                caps.add_row(Adw.ActionRow(title=uri))
-            acc_caps = session.accounts.get(session.account_id, {}).get("accountCapabilities", {})
-            for uri in sorted(acc_caps):
-                if uri not in session.capabilities:
-                    caps.add_row(Adw.ActionRow(title=uri, subtitle="account capability"))
-            account.add(caps)
         account.add(Adw.ActionRow(title="Version", subtitle=version_string()))   # with the commit from a checkout (#112)
         clear = Adw.ButtonRow(title="Clear local cache and resync")
         clear.connect("activated", lambda *_: on_clear_cache())
@@ -447,4 +424,30 @@ class PreferencesDialog(Adw.PreferencesDialog):
         signout.connect("activated", lambda *_: on_sign_out())
         account.add(signout)
         page.add(account)
+
+        sync = Adw.PreferencesGroup(title="Sync and notifications")
+        sync.add(_switch(config, "notify_new_mail", True, "Notify about new mail"))
+        sync.add(_switch(config, "run_in_background", False, "Keep running when the window is closed",
+                         "Syncing and notifications go on; Quit (Ctrl+Q) ends it"))
+        page.add(sync)
+
+        page.add(self._privacy_group(config, on_lock_changed))
+
+        advanced = Adw.PreferencesGroup(title="Advanced", description="Rarely needed.")
+        poll = Adw.SpinRow.new_with_range(30, 3600, 30)
+        poll.set_title("Fallback poll interval (seconds)")
+        poll.set_subtitle("Used when the push connection is unavailable")
+        poll.set_value(config.get("poll_interval_seconds", 300))
+        poll.connect("notify::value", lambda r, _p: config.set("poll_interval_seconds", int(r.get_value())))
+        advanced.add(poll)
+        if session:
+            caps = Adw.ExpanderRow(title="Server capabilities", subtitle="What this token's session advertises")
+            for uri in sorted(session.capabilities):
+                caps.add_row(Adw.ActionRow(title=uri))
+            acc_caps = session.accounts.get(session.account_id, {}).get("accountCapabilities", {})
+            for uri in sorted(acc_caps):
+                if uri not in session.capabilities:
+                    caps.add_row(Adw.ActionRow(title=uri, subtitle="account capability"))
+            advanced.add(caps)
+        page.add(advanced)
         return page
