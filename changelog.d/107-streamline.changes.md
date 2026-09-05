@@ -1,0 +1,1 @@
+Preferences read in the order they are needed: the Account page starts with the account, then sync and notifications, then the lock, with the poll interval and server capabilities in an Advanced group at the end; the Inbox page's Views and Suggest labels share one Sorting group; and the dialog has a search field for finding a setting by name
