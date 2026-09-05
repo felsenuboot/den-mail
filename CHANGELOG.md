@@ -9,6 +9,22 @@ Unreleased changes gather at the top until they are tagged.
 Changes waiting for the next release are one file each in `changelog.d/`;
 `python tools/changelog.py preview` shows the section they will make.
 
+## [0.6.3] - 2026-09-05
+
+Later the same night: preferences that read in order, summaries on request for opened or new mail, a guide with a page per topic, and what the first bug hunt against a real account turned up.
+
+### Features
+- Summarise automatically (Assistant page, off by default): the conversations you open, or also new mail as it arrives, get their summary without pressing the sparkle; short one-message threads are skipped, the daily limit still applies, and the cache is never summarised wholesale (#115)
+
+### Fixes
+- The remote-content notice says "Remote content is blocked" and is never cut off next to a long sender name (#145)
+- A changed session state no longer refetches the JMAP session after nearly every request; at most once every five minutes (#142)
+- Opening a message no longer logs two WebKit criticals about the web context and network session (#141)
+
+### Changes
+- The tour is the short version now; a guide with one page per topic (docs/guide/) holds the detail, so neither page overwhelms (#117)
+- Preferences read in the order they are needed: the Account page starts with the account, then sync and notifications, then the lock, with the poll interval and server capabilities in an Advanced group at the end; the Inbox page's Views and Suggest labels share one Sorting group; and the dialog has a search field for finding a setting by name (#107)
+
 ## [0.6.2] - 2026-09-05
 
 The first evening of polish: colours back, cards you can see in the dark, GNOME-style cards and buttons, the version in the app, accessible names, one-line texts, an Advanced row in Preferences, and a tour that covers everything.

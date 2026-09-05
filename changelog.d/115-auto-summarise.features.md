@@ -1,1 +1,0 @@
-Summarise automatically (Assistant page, off by default): the conversations you open, or also new mail as it arrives, get their summary without pressing the sparkle; short one-message threads are skipped, the daily limit still applies, and the cache is never summarised wholesale

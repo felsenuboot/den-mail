@@ -42,6 +42,11 @@
     <color type="primary" scheme_preference="dark">#1c3a5c</color>
   </branding>
   <releases>
+    <release version="0.6.3" date="2026-09-05">
+      <description>
+        <p>Preferences in the order they are needed, with search; summaries on request for opened or new mail; a short tour and a guide with a page per topic; fewer requests to the server; quieter message views; a remote-content notice that fits.</p>
+      </description>
+    </release>
     <release version="0.6.2" date="2026-09-05">
       <description>
         <p>Label and category colours are back, with a switch; cards are visible in dark mode; the tip, the summary and the quick links follow the GNOME guidelines; the version shows in the app; icon buttons have accessible names; shorter texts throughout; an Advanced row in Preferences; a refreshed tour.</p>
