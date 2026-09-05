@@ -104,7 +104,9 @@ if HAVE_WEBKIT:
         """A WebView that grows to its content height (no inner scrolling)."""
 
         def __init__(self):
-            super().__init__(web_context=_get_context(), network_session=_session, related_view=_related_view())
+            # A related view shares the primary view's web context and ephemeral network session;
+            # passing them again is ignored with a WebKit critical per message (bug hunt).
+            super().__init__(related_view=_related_view())
             settings = self.get_settings()
             settings.set_enable_javascript(True)  # needed for evaluate_javascript()
             settings.set_enable_javascript_markup(False)  # ...but pages may not run their own
