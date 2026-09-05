@@ -48,6 +48,7 @@ DEFAULTS: dict[str, Any] = {
     "assistant_url": "",  # blank = the provider's default server
     "assistant_model": "",  # blank = the provider's default model
     "assistant_daily_limit": 200,  # requests per day, all features together
+    "auto_summarise": "off",  # "off" | "opened" | "new": summarise what is opened, or also new mail (#115)
     "assistant_usage": {},  # {"date": ISO day, "count": n}: today's requests
     "window": {"width": 1400, "height": 900, "maximized": False},
     "signature_position": "below",

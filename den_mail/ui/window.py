@@ -29,6 +29,7 @@ from ..store.sync import (
     search_mailboxes,
     search_query_spec,
 )
+from ..summaries import AUTO_NEW_MAIL_CAP, worth_summarising
 from .a11y import watch as _a11y_watch
 from .beside import MIN_WINDOW_WIDTH, BesideColumn
 from .cleanup import CleanupDialog
@@ -725,12 +726,34 @@ class MainWindow(Adw.ApplicationWindow):
         self.sidebar.set_status(f"{text} · {assistant}" if assistant else text)
 
     def _on_new_mail(self, _engine, emails: list[dict]) -> None:
+        self._summarise_new(emails)
         if not self.config.get("notify_new_mail", True) or self.is_active():
             return
         for e in emails[:5]:
             sender = (e.get("from") or [{}])[0]
             # Wait briefly for the sender's logo so the notification can carry it.
             self.avatars.when_ready(sender.get("email"), lambda path, e=e, s=sender: self._notify(e, s, path))
+
+    def _summarise_new(self, emails: list[dict]) -> None:
+        """With "Summarise automatically: also new mail" on, the threads of new messages get
+        their summary in the background, so opening them shows it at once (#115). Never the
+        cache: only what just arrived, a handful per batch, and only threads worth it."""
+        if self.config.get("auto_summarise", "off") != "new" or not self.db or not self.assistant.enabled:
+            return
+        summariser = self.conversation.summariser
+        if summariser is None:
+            return
+        started = 0
+        for e in emails:
+            thread_id = e.get("threadId") or self.db.thread_of_email(e["id"])
+            if not thread_id or summariser.cached_thread(thread_id) is not None:
+                continue
+            if not worth_summarising(self.db.thread_emails(thread_id)):
+                continue
+            summariser.thread(thread_id, lambda _s: None, lambda m: log.info("auto summary skipped: %s", m))
+            started += 1
+            if started >= AUTO_NEW_MAIL_CAP:
+                break
 
     def _notify(self, e: dict, sender: dict, icon_path) -> None:
         app = self.get_application()

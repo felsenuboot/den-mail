@@ -13,7 +13,7 @@ from ..classify.rules import CATEGORY_NAMES
 from ..html.body import assemble_body
 from ..jmap.types import KW_DRAFT, KW_SEEN, address_display, address_full, delivered_to
 from ..models.thread import ThreadObject, format_date_long
-from ..summaries import Summariser
+from ..summaries import Summariser, worth_summarising
 from ..unsubscribe import identity_for, parse_list_unsubscribe
 from .a11y import watch as _a11y_watch
 from .message_body import MessageBody, warm_up_renderer
@@ -987,6 +987,10 @@ class ConversationView(Adw.NavigationPage):
             self._show_summary(hit.text)
         elif not same_thread or not available:
             self.summary_bar.set_visible(False)
+        if (hit is None and not same_thread and available
+                and self.config.get("auto_summarise", "off") in ("opened", "new")
+                and worth_summarising(self.db.thread_emails(self.thread_id))):
+            self.summarise()   # automatic for the conversations one opens (#115)
 
     def _show_summary(self, text: str, error: bool = False) -> None:
         self.summary_label.set_label(text)

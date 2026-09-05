@@ -152,6 +152,13 @@ def test_summaries_are_cleared_with_the_cache(db):  # noqa: F811
     assert db.get_summary("thread:T1") is None
 
 
+def test_worth_summarising_skips_short_single_messages():
+    assert not summaries.worth_summarising([])
+    assert not summaries.worth_summarising([email("a", "Hi", "x@example.net", size=800)])
+    assert summaries.worth_summarising([email("a", "Hi", "x@example.net", size=summaries.AUTO_MIN_SIZE)])
+    assert summaries.worth_summarising([email("a", "Hi", "x@example.net"), email("b", "Re", "y@example.net", thread="T-a")])
+
+
 @pytest.mark.parametrize("ids", [["a"], ["a", "b"]])
 def test_fingerprint_is_the_id_list(ids):
     assert summaries.fingerprint(ids) == ",".join(ids)
