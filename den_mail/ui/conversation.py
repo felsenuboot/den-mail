@@ -769,6 +769,9 @@ class ConversationView(Adw.NavigationPage):
         # The message column keeps a readable width and stays at the start of the pane,
         # next to the list, rather than drifting to the middle of an ultrawide screen.
         self.scrolled.set_child(StartClamp(self.content, COLUMN_WIDTH))
+        # A click in a message body focuses its WebView, and the viewport would scroll to
+        # the top of that (tall) widget: the page jumped and the click's link was lost (#149).
+        self.scrolled.get_child().set_scroll_to_focus(False)
         self.stack.add_named(self.scrolled, "thread")
         # The bin decouples the pane's minimum width from the cards' natural layout: below
         # the breakpoint the cards switch to their compact form, which fits the bin's request.
