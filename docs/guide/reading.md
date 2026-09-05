@@ -31,6 +31,10 @@ sender, archive. Undo is in the toast.
 
 The **Select** button turns on checkboxes and a bar with the bulk actions.
 Outside that mode, Ctrl-click and Shift-click extend the selection as usual.
+While several conversations are selected, the reading pane lists them, and
+the archive, delete, flag, move and label buttons in its header bar act on
+all of them. A selection from one sender whose mail carries an unsubscribe
+header (a sender group, say) gets an **Unsubscribe** button on that page.
 
 ![Selection mode with three conversations checked](../../data/screenshots/selection.png)
 

@@ -16,6 +16,22 @@ LIST_MAIL_PROPERTIES = ["id", "threadId", "from", "to", "cc", "receivedAt", "key
 GET_BATCH = 500
 
 
+def cached_plan(db, email_ids: list[str]) -> tuple[dict, UnsubscribePlan] | None:
+    """The first of `email_ids` whose cached body carries a List-Unsubscribe header, with its
+    plan: the message (list row plus headers) and the plan, or None when no cached body has one.
+    A body without the header is skipped, and a body from before the headers were cached is too."""
+    for email_id in email_ids:
+        body = db.get_email_body(email_id)
+        if not body or HEADER_UNSUBSCRIBE not in body:
+            continue
+        plan = parse_list_unsubscribe(body.get(HEADER_UNSUBSCRIBE), body.get(HEADER_POST))
+        if plan is not None:
+            email = dict(db.get_email(email_id) or {"id": email_id})
+            email.update({k: body[k] for k in (HEADER_UNSUBSCRIBE, HEADER_POST) if k in body})
+            return email, plan
+    return None
+
+
 def fetch_list_mail(client: JMAPClient, trash_junk: list[str], limit: int = 2000) -> list[dict]:
     """The newest `limit` messages outside Trash and Spam that carry a List-Unsubscribe header."""
     acc = client.session.account_id
