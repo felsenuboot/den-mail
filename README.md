@@ -51,7 +51,7 @@ offline and follows changes as they happen.
 - 🔔 **Desktop.** Notifications with the sender's logo, `mailto:` links, keyboard
   shortcuts.
 
-The [tour](docs/TOUR.md) shows each of these with screenshots, and
+The [tour](docs/TOUR.md) is the short version and the [guide](docs/guide/README.md) has a page per topic with screenshots, and
 [docs/BENCHMARK.md](docs/BENCHMARK.md) compares speed and memory with
 Fastmail's desktop app and web client.
 
