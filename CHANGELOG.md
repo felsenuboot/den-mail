@@ -9,6 +9,13 @@ Unreleased changes gather at the top until they are tagged.
 Changes waiting for the next release are one file each in `changelog.d/`;
 `python tools/changelog.py preview` shows the section they will make.
 
+## [0.6.5] - 2026-09-14
+
+A patch between milestones: the API token is asked for again after every reboot on a desktop whose default keyring is not the login keyring.
+
+### Fixes
+- API token: no longer asked for again after every reboot; the token is kept in the login keyring, which is unlocked at login, instead of a default keyring that stays locked (#160)
+
 ## [0.6.4] - 2026-09-05
 
 A patch between milestones: three reports from a morning's use on a wide screen.
