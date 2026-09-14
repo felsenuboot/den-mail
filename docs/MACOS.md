@@ -169,3 +169,59 @@ following as milestones against the same issue conventions.
 5. Then feature milestones in the order the Linux app grew: actions and undo,
    compose and send-later, notifications, categories and views, cleanup and
    rules, screener, masked email, lock, summaries.
+
+## Keeping the two apps in step
+
+Two native codebases means every feature is written twice; that is the price
+of the plan. It stays affordable in three ways, and there is one escape
+hatch.
+
+- **Mirror issues, not memory.** A feature or fix that lands in den-mail gets
+  an issue in den-mail-mac labelled `port`, linking the Linux pull request.
+  That PR is the specification: design, wording, edge cases and tests are
+  already decided, so the Mac side translates rather than designs. Den-mail
+  is public, so a small workflow that opens the mirror issue when a PR with
+  the `feature` or `bug` label merges costs nothing. A parity table in the
+  Mac repository's README shows what is missing. Features can start on the
+  Mac and flow the other way too.
+- **Engine behaviour as shared data.** The UI is two implementations by
+  nature. The engine need not be, and it is where drift would go unnoticed:
+  categoriser rules, views, the sanitiser's allow-list, unsubscribe parsing.
+  Shared test fixtures (categoriser cases, sanitiser input and expected
+  output, unsubscribe headers) live in den-mail as JSON and both suites load
+  them, so a rule added on Linux fails the Mac tests until it is ported. Where
+  behaviour is declarative, share the data itself: the category rules as a
+  rule file both apps read, the views as one SQL file over the shared schema.
+  The fake JMAP server covers sync the same way.
+- **Port finished designs.** What keeps the UI port cheap is that it is always
+  a translation of a merged PR, never a design from scratch.
+
+The escape hatch is the shared Rust core from the options above. If engine
+drift still hurts after a few months, extract the engine into Rust once, used
+by the GTK app through PyO3 and by the Mac app through UniFFI. Do it then and
+not first: by then the engine's behaviour is stable and pinned by tests on
+both sides, so the rewrite is mechanical.
+
+## Handoff for a session on the Mac
+
+Paste this into Claude Code in a terminal on the MacBook:
+
+> Read `docs/MACOS.md` and `CLAUDE.md` in `~/ghq/github.com/felsenuboot/den-mail`
+> (clone it with `ghq get felsenuboot/den-mail` if it is not there). We are
+> starting the macOS port it describes. Create the private repository
+> `felsenuboot/den-mail-mac` under `~/ghq` with the same conventions as
+> den-mail (issues, milestones, branches per issue, squash merges, changelog
+> fragments, a CLAUDE.md that says so, no CI). Check that Xcode 26 and Swift
+> 6.3 are installed, and `swiftly` if the core is also to be built on Linux.
+> Then do the first steps from the document in order: the `DenMailCore`
+> package with a JMAP client and a test that fetches the session and lists
+> mailboxes from den-mail's fake server (`python -m tests.fake_server 18081`
+> in the den-mail checkout; #165 there makes it run without the package),
+> then the store and sync engine with `test_engine.py` and `test_offline.py`
+> translated to Swift Testing, then the Xcode app target with login to the
+> Keychain, the three-column window and the WebKit body. Use silent
+> subagents for reading and research; keep the main model for decisions.
+
+Before the first UI work, put the shared fixtures in place (the section
+above), so the categoriser and sanitiser ports are tested against the same
+cases as the Python code from the start.
