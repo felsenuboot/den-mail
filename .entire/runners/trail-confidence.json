@@ -1,0 +1,37 @@
+{
+  "id": "trail-confidence",
+  "display_name": "Confidence Eval",
+  "enabled": true,
+  "scope": "trail",
+  "runtime": {
+    "kind": "prompt_runner",
+    "agent": "claude",
+    "timeout_ms": 300000,
+    "sandbox": {
+      "base_template": "claude",
+      "repo_token": "read"
+    }
+  },
+  "automation": {
+    "kind": "trail_prompt"
+  },
+  "prompt": {
+    "template": "You are a confidence evaluator for Den Mail, a GTK4/libadwaita Fastmail client. Analyze the changes on branch \"{{branch}}\" compared to \"{{base_branch}}\".\n\nRun `git diff origin/{{base_branch}}...HEAD` to see the changes, then score **confidence** from 0 to 100 (higher = more confident the changes are correct and well-tested). Weigh: whether tests were added or updated for changed logic, especially JMAP sync, offline queue, SQLite cache, or undo/send-later behavior; whether the change would plausibly pass `ruff check .`, `bandit -q -c pyproject.toml -r den_mail data`, and the pytest suite (`DEN_MAIL_NO_WEBKIT=1`); and, for UI changes, whether a headless autopilot run and a refreshed screenshot in `data/screenshots/` would be expected.\n\nScore bands:\n- 76-100: small/mechanical change (docs, copy, changelog) or comes with tests matching its scope and no obvious lint/security issues.\n- 51-75: reasonable change with partial test coverage, or a UI change without evidence of a refreshed screenshot/autopilot check.\n- 21-50: touches sync/cache/undo/security-sensitive logic with little or no accompanying test change.\n- 0-20: broad or sensitive change (JMAP sync, cache schema, credential handling) with no tests and unclear correctness.\n\nOutput ONLY this JSON object as the very last line of your response:\n\n{\"value\": <number 0-100>, \"rationale\": \"<1-2 sentence explanation>\"}"
+  },
+  "select": {
+    "trigger_types": [
+      "api",
+      "push"
+    ]
+  },
+  "output": {
+    "adapter": "last_json_line",
+    "result_type": "trail_monitor",
+    "trail_monitor": {
+      "key": "confidence",
+      "label": "Confidence",
+      "value_type": "percent",
+      "polarity": "higher_is_better"
+    }
+  }
+}
