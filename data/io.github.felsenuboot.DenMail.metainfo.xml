@@ -42,6 +42,11 @@
     <color type="primary" scheme_preference="dark">#1c3a5c</color>
   </branding>
   <releases>
+    <release version="0.6.5" date="2026-09-14">
+      <description>
+        <p>The API token is kept in the login keyring, which is unlocked at login, so it is no longer asked for again after every reboot.</p>
+      </description>
+    </release>
     <release version="0.6.4" date="2026-09-05">
       <description>
         <p>The action buttons stay in the header bar of a wide window; the first click on a link in a message opens it; the reading pane lists the selected conversations, with Unsubscribe for one sender.</p>
