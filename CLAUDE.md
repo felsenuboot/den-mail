@@ -36,6 +36,12 @@ Read this before changing anything. The full development notes are in
   `Closes #<issue>`. CI must be green.
 - Merge with **squash** (`gh pr merge --squash --delete-branch`), so master has
   one commit per issue whose message is the PR title and body.
+- Every branch that becomes a PR gets an Entire trail as soon as it exists:
+  `entire trail create --title "<the PR title>" --type <bug|feature|task>`
+  (it pushes the branch). Entire's runners in `.entire/runners/` then review,
+  score and summarise every push in the cloud. Before merging, read
+  `entire trail show` and resolve or dismiss each finding with
+  `entire trail finding`; open findings block the trail.
 - Add the changelog line in the same PR as a fragment file
   `changelog.d/<issue>-<slug>.<features|fixes|changes>.md` (the line without
   the dash and the issue number; `changelog.d/README.md` says more). Nobody
